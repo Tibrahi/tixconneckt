@@ -18,10 +18,12 @@ export default function Header() {
 
   // Auto-collapse the mobile menu once the viewport grows to desktop.
   useEffect(() => {
-    if (screen.ready && screen.isDesktop) {
-      setOpen(false);
-    }
-  }, [screen.ready, screen.isDesktop]);
+    const closeOnDesktop = () => {
+      if (window.innerWidth >= 1024) setOpen(false);
+    };
+    window.addEventListener("resize", closeOnDesktop);
+    return () => window.removeEventListener("resize", closeOnDesktop);
+  }, []);
 
   return (
     <header

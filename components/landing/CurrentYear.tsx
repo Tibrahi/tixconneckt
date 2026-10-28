@@ -1,14 +1,21 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
-/** Prerender-safe current year: static fallback, corrected on mount. */
+function subscribe() {
+  return () => {};
+}
+
+function getClientYear() {
+  return new Date().getFullYear();
+}
+
+function getServerYear() {
+  return 2026;
+}
+
+/** Prerender-safe current year: static on the server, live on the client. */
 export default function CurrentYear() {
-  const [year, setYear] = useState(2026);
-
-  useEffect(() => {
-    setYear(new Date().getFullYear());
-  }, []);
-
+  const year = useSyncExternalStore(subscribe, getClientYear, getServerYear);
   return <>{year}</>;
 }
