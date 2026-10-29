@@ -22,7 +22,9 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const audio = form.get("audio");
     if (!(audio instanceof Blob)) return apiError("No audio provided.", 400);
-    const file = audio instanceof File ? audio : new File([audio], "profile.webm", { type: audio.type || "audio/webm" });
+    const file = new File([audio], (audio as File).name || "profile.webm", {
+      type: audio.type || "audio/webm",
+    });
     const retained = await retainVoiceAudio(session.user.id, "profile", file);
     const result = await transcribeWithMuseVoice(file, file.name);
     if (!result.configured) {

@@ -34,6 +34,7 @@ export function VoiceRecorder({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
+  const [hasRecording, setHasRecording] = useState(false);
   const mediaRef = useRef<MediaRecorder | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const lastBlobRef = useRef<Blob | null>(null);
@@ -64,6 +65,16 @@ export function VoiceRecorder({
         return;
       }
       if (body.data.pending) {
+        // Some endpoints transcribe first and then find the next AI step
+        // unconfigured — the transcript is still usable.
+        if (body.data.transcript) {
+          onTranscript(body.data.transcript, {
+            audioRetained: body.data.audioRetained,
+            audioNote: body.data.audioNote,
+            pendingReason: body.data.pendingReason,
+          });
+          return;
+        }
         setError(body.data.pendingReason ?? "Voice transcription is not configured.");
         return;
       }
@@ -103,6 +114,7 @@ export function VoiceRecorder({
         if (blob.size === 0) return;
         lastBlobRef.current = blob;
         setRecordedUrl(URL.createObjectURL(blob));
+        setHasRecording(true);
         await submitBlob(blob);
       };
       mediaRef.current = recorder;
@@ -142,14 +154,18 @@ export function VoiceRecorder({
               if (file) {
                 lastBlobRef.current = file;
                 setRecordedUrl(URL.createObjectURL(file));
+                setHasRecording(true);
                 submitBlob(file);
               }
               e.target.value = "";
             }}
           />
         </label>
-        {lastBlobRef.current && !busy ? (
-          <Button size="sm" variant="ghost" icon="refresh" disabled={disabled} onClick={() => lastBlobRef.current && submitBlob(lastBlobRef.current)}>
+        {hasRecording && !busy ? (
+          <Button size="sm" variant="ghost" icon="refresh" disabled={disabled} onClick={() => {
+            const blob = lastBlobRef.current;
+            if (blob) submitBlob(blob);
+          }}>
             Retry transcription
           </Button>
         ) : null}

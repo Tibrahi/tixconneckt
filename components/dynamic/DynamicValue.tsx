@@ -223,9 +223,8 @@ export function DynamicValue({
     return <LeafValue pathKey={path} value={value} />;
   }
 
-  try {
+  if (typeof doc === "object" && doc !== null) {
     return <div className="flex flex-col gap-2">{renderNode(doc, "", 0)}</div>;
-  } catch {
-    return <p className="text-sm text-red-700">This data couldn't be displayed safely.</p>;
   }
+  return <p className="text-sm text-red-700">This data couldn&rsquo;t be displayed safely.</p>;
 }

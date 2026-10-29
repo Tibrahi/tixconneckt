@@ -13,7 +13,7 @@ export const ROUTES = {
   legalPrivacy: "/legal/privacy",
   legalTerms: "/legal/terms",
   legalAgreement: "/legal/agreement",
-  landing: "/welcome",
+  landing: "/",
   dashboard: "/dashboard",
   profile: "/dashboard/profile",
   profileById: (shortId: string) => `/dashboard/profile/${shortId}`,

@@ -29,7 +29,9 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const audio = form.get("audio");
     if (!(audio instanceof Blob)) return apiError("No audio provided.", 400);
-    const file = audio instanceof File ? audio : new File([audio], "instruction.webm", { type: audio.type || "audio/webm" });
+    const file = new File([audio], (audio as File).name || "instruction.webm", {
+      type: audio.type || "audio/webm",
+    });
     const retained = await retainVoiceAudio(session.user.id, "chat", file);
     audioRetained = retained.retained;
     audioNote = retained.problem;

@@ -120,6 +120,35 @@ export const conversationCreateSchema = z.object({
   providerLinkId: z.string().min(1).optional(),
 });
 
+export const callCreateSchema = z.object({
+  conversationId: z.string().min(1).max(128),
+  kind: z.enum(["audio", "video"]),
+});
+
+export type CallCreateInput = z.infer<typeof callCreateSchema>;
+
+/** WebRTC signaling payloads relayed between the two call parties. */
+export const callSignalSchema = z.discriminatedUnion("kind", [
+  z.object({ kind: z.literal("offer"), sdp: z.string().min(1).max(32768) }).strict(),
+  z.object({ kind: z.literal("answer"), sdp: z.string().min(1).max(32768) }).strict(),
+  z
+    .object({
+      kind: z.literal("candidate"),
+      candidate: z.string().min(1).max(4096),
+      sdpMid: z.string().max(64).nullable().optional(),
+      sdpMLineIndex: z.number().int().min(0).max(64).nullable().optional(),
+    })
+    .strict(),
+]);
+
+export type CallSignalInput = z.infer<typeof callSignalSchema>;
+
+export const callDecisionSchema = z.object({
+  decision: z.enum(["accepted", "declined", "ended"]),
+});
+
+export type CallDecisionInput = z.infer<typeof callDecisionSchema>;
+
 export const projectSubmitSchema = z.object({
   title: z.string().trim().min(4, "Title is required").max(200),
   summary: z.string().trim().min(20, "Summary needs detail (20+ chars)").max(5000),

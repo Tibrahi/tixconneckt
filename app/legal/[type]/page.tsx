@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { LEGAL_DOCUMENTS } from "@/lib/legal-content";
@@ -7,7 +8,22 @@ export function generateStaticParams() {
   return [{ type: "privacy" }, { type: "terms" }, { type: "agreement" }];
 }
 
-export default async function LegalPage({ params }: { params: Promise<{ type: string }> }) {
+export default function LegalPage({ params }: { params: Promise<{ type: string }> }) {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto w-full max-w-3xl px-4 py-10" aria-busy="true">
+          <p className="text-sm font-bold text-black">TIXCONNECKT</p>
+          <p className="mt-6 text-sm text-neutral-600">Loading document...</p>
+        </main>
+      }
+    >
+      <LegalDocument params={params} />
+    </Suspense>
+  );
+}
+
+async function LegalDocument({ params }: { params: Promise<{ type: string }> }) {
   const { type } = await params;
   const doc = LEGAL_DOCUMENTS.find((d) => d.type === type);
   if (!doc) notFound();

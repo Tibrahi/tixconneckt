@@ -36,6 +36,10 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
    npm run db:seed
    ```
 
+   For an existing database, apply `db/migrations/0001_flexible_records.sql` and
+   `db/migrations/0002_calls.sql` in order (both idempotent) or run
+   `npm run db:push`. No existing data is altered.
+
 4. Run the app:
 
    ```bash
@@ -44,7 +48,9 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
    npm run dev:all      # both at once
    ```
 
-   Open [http://localhost:3000](http://localhost:3000) — it renders sign-in first.
+   Open [http://localhost:3000](http://localhost:3000) — visitors see the landing
+   page, with sign-in and registration behind its buttons. Authenticated users
+   go straight to `/dashboard`. (`/welcome` redirects to `/`.)
 
 5. Schedule the action worker (example, every minute):
 

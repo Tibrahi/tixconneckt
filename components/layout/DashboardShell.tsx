@@ -31,6 +31,7 @@ function NavList({
             <Link
               href={item.href}
               onClick={onNavigate}
+              data-tour-nav={item.href}
               title={collapsed ? item.label : undefined}
               aria-current={active ? "page" : undefined}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -150,7 +151,7 @@ export function DashboardShell({
               <Icon name={collapsed ? "chevron-right" : "chevron-left"} />
             </button>
           </div>
-          <nav className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
+          <nav id="tour-sidebar" className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
             <NavList items={DASHBOARD_NAV} counts={counts} collapsed={collapsed} />
             {isAdmin ? (
               <>
@@ -232,7 +233,7 @@ export function DashboardShell({
         ) : null}
 
         {/* Right content area */}
-        <main className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <main id="tour-main" className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       </div>

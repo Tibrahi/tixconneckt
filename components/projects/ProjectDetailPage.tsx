@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
+import { AiTaskRunner } from "@/components/ai/AiTaskRunner";
 
 interface Detail {
   project: {
@@ -228,6 +229,21 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
             </ul>
           )}
         </Card>
+
+        <div className="lg:col-span-2">
+          <Card title="Ask the assistant">
+            <AiTaskRunner
+              taskId="project_analysis"
+              recordType="project_question"
+              projectId={detail.project.id}
+              available={{
+                context: `${detail.project.title}\n\n${detail.project.summary}${detail.project.details ? `\n\n${detail.project.details}` : ""}`,
+              }}
+              title="Project questions"
+              description="The project summary is already attached — add only your focus question, or extra context."
+            />
+          </Card>
+        </div>
 
         <Card title={`Contributions (${detail.contributions.length})`} className="lg:col-span-2">
           <div className="mb-3 flex flex-col gap-2">

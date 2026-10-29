@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   validateFormDefinition,
   validateSubmission,
+  type FormDefinition,
 } from "@/lib/ai-form-definition";
 
 describe("validateFormDefinition", () => {
@@ -61,13 +62,13 @@ describe("validateFormDefinition", () => {
 });
 
 describe("validateSubmission", () => {
-  const definition = {
+  const definition: FormDefinition = {
     fields: [
       { key: "goal", label: "Goal", type: "text", required: true },
-      { key: "budget", label: "Budget", type: "number", constraints: { min: 0 } },
-      { key: "contact", label: "Contact", type: "enum", options: ["email", "phone"] },
+      { key: "budget", label: "Budget", type: "number", required: false, constraints: { min: 0 } },
+      { key: "contact", label: "Contact", type: "enum", required: false, options: ["email", "phone"] },
     ],
-  } as const;
+  };
 
   it("coerces and validates submitted values", () => {
     const result = validateSubmission(definition, {

@@ -145,7 +145,10 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   }
 
   const stored = job.proposedJson as Record<string, unknown>;
-  const { extra: _storedExtra, ...storedTx } = stored;
+  const storedTx: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(stored)) {
+    if (key !== "extra") storedTx[key] = value;
+  }
   const tx = parsed.data.corrected ?? transactionProposalSchema.parse(storedTx);
   const finalData = { ...tx, extra: parsed.data.extra ?? stored.extra ?? {} };
   await db

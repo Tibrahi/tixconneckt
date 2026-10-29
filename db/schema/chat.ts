@@ -109,3 +109,38 @@ export const messageReads = pgTable(
     index("message_read_user_idx").on(t.userId, t.messageId),
   ],
 );
+
+/** 1:1 call records — lifecycle persisted, media peer-to-peer via WebRTC. */
+export const calls = pgTable(
+  "calls",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    conversationId: text("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    callerId: text("caller_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    calleeId: text("callee_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** audio | video */
+    kind: text("kind").notNull(),
+    /** ringing | accepted | declined | ended | missed */
+    status: text("status").notNull().default("ringing"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    answeredAt: timestamp("answered_at", { withTimezone: true }),
+    endedAt: timestamp("ended_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("call_conversation_idx").on(t.conversationId, t.createdAt),
+    index("call_participant_idx").on(t.calleeId, t.status, t.createdAt),
+    index("call_caller_idx").on(t.callerId, t.status, t.createdAt),
+  ],
+);
+
+export type Call = typeof calls.$inferSelect;

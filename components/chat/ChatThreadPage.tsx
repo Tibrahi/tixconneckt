@@ -6,6 +6,7 @@ import { LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { useSocket } from "@/components/realtime/SocketProvider";
+import { useCall } from "@/components/calls/CallProvider";
 
 interface ChatMessage {
   id: string;
@@ -17,9 +18,20 @@ interface ChatMessage {
   createdAt: string;
 }
 
+interface CallHistoryRow {
+  id: string;
+  kind: string;
+  status: string;
+  callerId: string;
+  callerName: string;
+  createdAt: string;
+}
+
 export function ChatThreadPage({ conversationId, myUserId }: { conversationId: string; myUserId: string }) {
   const [messages, setMessages] = useState<ChatMessage[] | null>(null);
   const [title, setTitle] = useState("Conversation");
+  const [convType, setConvType] = useState("direct");
+  const [peerName, setPeerName] = useState("Conversation");
   const [hasMore, setHasMore] = useState(false);
   const [before, setBefore] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
@@ -27,8 +39,10 @@ export function ChatThreadPage({ conversationId, myUserId }: { conversationId: s
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [live, setLive] = useState(false);
+  const [callHistory, setCallHistory] = useState<CallHistoryRow[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const { joinRoom, leaveRoom, onEvent } = useSocket();
+  const { startCall, inCall } = useCall();
 
   const loadPage = useCallback(
     async (cursor?: string | null, append = false) => {
@@ -48,6 +62,8 @@ export function ChatThreadPage({ conversationId, myUserId }: { conversationId: s
       if (!body.ok || !body.data) throw new Error();
       const others = body.data.members.filter((m) => m.userId !== myUserId).map((m) => m.name);
       setTitle(body.data.conversation.title ?? (others.length ? others.join(", ") : "Conversation"));
+      setConvType(body.data.conversation.type);
+      setPeerName(others.length === 1 ? others[0] : "Conversation");
       setHasMore(body.data.hasMore);
       setBefore(body.data.nextBefore);
       setMessages((prev) => {
@@ -71,9 +87,26 @@ export function ChatThreadPage({ conversationId, myUserId }: { conversationId: s
     }
   }, [loadPage, conversationId]);
 
+  const loadCalls = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/calls?conversationId=${encodeURIComponent(conversationId)}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const body = (await res.json()) as { ok: boolean; data?: { calls: CallHistoryRow[] } };
+      if (body.ok && body.data) setCallHistory(body.data.calls);
+    } catch {
+      /* call history is secondary; messages still render */
+    }
+  }, [conversationId]);
+
   useEffect(() => {
     initialLoad();
-  }, [initialLoad]);
+    loadCalls();
+    const onCallsChanged = () => loadCalls();
+    window.addEventListener("tix:calls", onCallsChanged);
+    return () => window.removeEventListener("tix:calls", onCallsChanged);
+  }, [initialLoad, loadCalls]);
 
   // Realtime join + polling fallback for failure recovery.
   useEffect(() => {
@@ -167,8 +200,55 @@ export function ChatThreadPage({ conversationId, myUserId }: { conversationId: s
       <PageHeader
         title={title}
         description={live ? "Live — new messages appear automatically." : "Updating every few seconds."}
+        actions={
+          convType === "direct" ? (
+            <>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="phone"
+                disabled={inCall}
+                title="Voice call — uses your microphone"
+                onClick={() => startCall(conversationId, "audio", peerName)}
+              >
+                Call
+              </Button>
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="camera"
+                disabled={inCall}
+                title="Video call — uses your camera and microphone"
+                onClick={() => startCall(conversationId, "video", peerName)}
+              >
+                Video
+              </Button>
+            </>
+          ) : (
+            <span
+              title="Calls work one-to-one. Group calls aren't supported yet."
+              className="inline-flex cursor-not-allowed items-center gap-2 rounded-md border border-neutral-200 px-3 py-1.5 text-sm text-neutral-500"
+            >
+              1:1 calls only
+            </span>
+          )
+        }
       />
       <div className="flex flex-col gap-3">
+        {callHistory.filter((c) => c.status === "missed" || c.status === "declined").length > 0 ? (
+          <ul className="flex flex-col gap-1" aria-label="Recent calls">
+            {callHistory
+              .filter((c) => c.status === "missed" || c.status === "declined")
+              .slice(0, 3)
+              .map((c) => (
+                <li key={c.id} className="text-xs text-neutral-600">
+                  {c.status === "missed" ? "Missed" : "Declined"} {c.kind} call
+                  {c.callerId === myUserId ? " (you called)" : ` from ${c.callerName}`} ·{" "}
+                  <span className="font-mono">{new Date(c.createdAt).toLocaleString()}</span>
+                </li>
+              ))}
+          </ul>
+        ) : null}
         {hasMore ? (
           <div className="flex justify-center">
             <Button variant="secondary" size="sm" onClick={() => loadPage(before, true).catch(() => setError("We couldn't load older messages. Please try again."))}>

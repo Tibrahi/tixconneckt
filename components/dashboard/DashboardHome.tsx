@@ -2,7 +2,6 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
-import "driver.js/dist/driver.css";
 import { ROUTES } from "@/lib/routes";
 import { formatDateTime, formatMoney } from "@/lib/currency";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,7 +9,7 @@ import { Badge } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Icon } from "@/components/ui/Icon";
-import { Button } from "@/components/ui/Button";
+import { TourButton } from "@/components/tour/TourButton";
 import { useSocket } from "@/components/realtime/SocketProvider";
 
 interface Summary {
@@ -99,18 +98,6 @@ export function DashboardHome() {
     return () => offs.forEach((off) => off());
   }, [onEvent, load]);
 
-  async function startTour() {
-    const { driver } = await import("driver.js");
-    driver({
-      showProgress: true,
-      steps: [
-        { element: "#dash-stats", popover: { title: "Your overview", description: "Unread messages, requests, and opportunities update live from your data." } },
-        { element: "#dash-profile", popover: { title: "Profile strength", description: "Complete your profile to unlock better matching." } },
-        { element: "#dash-actions", popover: { title: "Upcoming actions", description: "Scheduled automations run on the server, even when you are offline." } },
-      ],
-    }).drive();
-  }
-
   if (failed) {
     return (
       <>
@@ -141,11 +128,7 @@ export function DashboardHome() {
             </>
           ) : undefined
         }
-        actions={
-          <Button variant="secondary" size="sm" icon="circle-question" onClick={startTour}>
-            Take the tour
-          </Button>
-        }
+        actions={<TourButton />}
       />
 
       <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

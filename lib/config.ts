@@ -21,6 +21,9 @@ const envSchema = z.object({
   S3_ACCESS_KEY: z.string().default(""),
   S3_SECRET_KEY: z.string().default(""),
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
+  NEXT_PUBLIC_REALTIME_URL: z.string().default(""),
+  REALTIME_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
+  INTERNAL_RELAY_SECRET: z.string().default(""),
   CRON_SECRET: z.string().default(""),
   NODE_ENV: z.string().default("development"),
 });

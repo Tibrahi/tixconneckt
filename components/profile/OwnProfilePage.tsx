@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
+import { DynamicValue } from "@/components/dynamic/DynamicValue";
+import { VoiceRecorder } from "@/components/ai/VoiceRecorder";
 
 interface OwnProfile {
   shortId: string;
@@ -49,6 +51,7 @@ export function OwnProfilePage() {
   const [assistText, setAssistText] = useState("");
   const [assistLoading, setAssistLoading] = useState(false);
   const [assistPending, setAssistPending] = useState<string | null>(null);
+  const [audioNote, setAudioNote] = useState<string | null>(null);
   const [proposal, setProposal] = useState<Record<string, unknown> | null>(null);
 
   const load = useCallback(async () => {
@@ -321,6 +324,19 @@ export function OwnProfilePage() {
             onChange={(e) => setAssistText(e.target.value)}
             placeholder="I am a software developer from Kigali skilled in React and data analysis…"
           />
+          <div className="mt-3">
+            <VoiceRecorder
+              endpoint="/api/profile/voice-assist"
+              docModule="profile"
+              onTranscript={(transcript, meta) => {
+                setAssistText(transcript);
+                setAudioNote(meta.audioNote ?? meta.pendingReason ?? null);
+              }}
+            />
+            {audioNote ? (
+              <p className="mt-2 text-xs text-neutral-600">{audioNote}</p>
+            ) : null}
+          </div>
           <div className="mt-3 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setAssistOpen(false)}>
               Close
@@ -337,7 +353,9 @@ export function OwnProfilePage() {
           {proposal ? (
             <div className="mt-3 rounded-md border border-neutral-200 p-3">
               <p className="mb-2 text-sm font-medium">Proposed values — review before applying:</p>
-              <pre className="max-h-60 overflow-auto font-mono text-xs">{JSON.stringify(proposal, null, 2)}</pre>
+              <div className="max-h-60 overflow-auto">
+                <DynamicValue doc={proposal} />
+              </div>
               <div className="mt-3 flex justify-end gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setProposal(null)}>
                   Discard
