@@ -3,6 +3,7 @@ import { callMuseSpark, transcribeWithMuseVoice } from "@/lib/ai";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import { profileUpdateSchema } from "@/lib/validation";
+import { retainVoiceAudio } from "@/lib/voice-capture";
 
 const textProposalSchema = z.object({ text: z.string().min(1).max(8000) });
 
@@ -21,9 +22,16 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const audio = form.get("audio");
     if (!(audio instanceof Blob)) return apiError("No audio provided.", 400);
-    const result = await transcribeWithMuseVoice(audio);
+    const file = audio instanceof File ? audio : new File([audio], "profile.webm", { type: audio.type || "audio/webm" });
+    const retained = await retainVoiceAudio(session.user.id, "profile", file);
+    const result = await transcribeWithMuseVoice(file, file.name);
     if (!result.configured) {
-      return apiOk({ pending: true, pendingReason: result.pendingReason });
+      return apiOk({
+        pending: true,
+        pendingReason: result.pendingReason,
+        audioRetained: retained.retained,
+        audioNote: retained.problem,
+      });
     }
     if (!result.transcript) {
       return apiError(result.error ?? "Transcription failed.", 502);

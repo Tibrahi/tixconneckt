@@ -3,15 +3,40 @@ import { Redis } from "@upstash/redis";
 import { redisConfigured } from "./config";
 
 let redis: Redis | null = null;
+let redisInitializationFailed = false;
 const limiters = new Map<string, Ratelimit>();
 
 function getRedis(): Redis | null {
-  if (!redisConfigured()) return null;
+  if (!redisConfigured() || redisInitializationFailed) return null;
   if (!redis) {
-    redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL!,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN!,
-    });
+    let url = process.env.UPSTASH_REDIS_REST_URL!.trim();
+    let removedWrappingQuotes = false;
+    while (
+      url.length >= 2 &&
+      ((url.startsWith('"') && url.endsWith('"')) ||
+        (url.startsWith("'") && url.endsWith("'")))
+    ) {
+      url = url.slice(1, -1).trim();
+      removedWrappingQuotes = true;
+    }
+    try {
+      const parsedUrl = new URL(url);
+      if (parsedUrl.protocol !== "https:" || /[\"']/.test(url)) {
+        throw new Error("Invalid Upstash URL format");
+      }
+      redis = new Redis({ url, token: process.env.UPSTASH_REDIS_REST_TOKEN! });
+    } catch {
+      redisInitializationFailed = true;
+      console.error(
+        "[rate-limit] Invalid UPSTASH_REDIS_REST_URL; use an unquoted https:// URL. Redis rate limiting is disabled.",
+      );
+      return null;
+    }
+    if (removedWrappingQuotes) {
+      console.warn(
+        "[rate-limit] Removed extra wrapping quotes from UPSTASH_REDIS_REST_URL; correct the deployment variable to an unquoted https:// URL.",
+      );
+    }
   }
   return redis;
 }

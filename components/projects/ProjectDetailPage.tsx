@@ -5,8 +5,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, PendingIntegration, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
-import { TextAreaField } from "@/components/ui/Fields";
+import { TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
+import { DynamicValue } from "@/components/dynamic/DynamicValue";
 
 interface Detail {
   project: {
@@ -16,6 +17,7 @@ interface Detail {
     details: string | null;
     visibility: string;
     stage: string;
+    attributes: Record<string, unknown>;
   };
   owner: { name: string; shortId: string } | null;
   contributions: Array<{
@@ -41,6 +43,9 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   const [replyText, setReplyText] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [aiPending, setAiPending] = useState<string | null>(null);
+  const [newAttrKey, setNewAttrKey] = useState("");
+  const [newAttrValue, setNewAttrValue] = useState("");
+  const [savingAttr, setSavingAttr] = useState(false);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -156,7 +161,53 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
           ) : null}
         </Card>
 
-        <Card title={`Analysis versions (${detail.analyses.length})`}>
+        <Card title="Custom fields">
+          {Object.keys(detail.project.attributes ?? {}).length === 0 && !detail.canEdit ? (
+            <p className="text-sm text-neutral-600">No custom fields yet.</p>
+          ) : (
+            <DynamicValue
+              doc={detail.project.attributes ?? {}}
+              editable={detail.canEdit}
+              onSave={(path, value) => act("update_attributes", { set: { [path]: value } })}
+              onRemove={(path) => act("update_attributes", { remove: [path] })}
+            />
+          )}
+          {detail.canEdit ? (
+            <div className="mt-3 grid gap-2 border-t border-neutral-200 pt-3 sm:grid-cols-[1fr_1fr_auto]">
+              <TextField
+                label="New field name"
+                placeholder="e.g. preferredFramework"
+                value={newAttrKey}
+                onChange={(e) => setNewAttrKey(e.target.value)}
+              />
+              <TextField
+                label="Value"
+                placeholder="e.g. Next.js"
+                value={newAttrValue}
+                onChange={(e) => setNewAttrValue(e.target.value)}
+              />
+              <div className="flex items-end">
+                <Button
+                  size="sm"
+                  icon="plus"
+                  loading={savingAttr}
+                  disabled={!newAttrKey.trim()}
+                  onClick={async () => {
+                    setSavingAttr(true);
+                    await act("update_attributes", { set: { [newAttrKey.trim()]: newAttrValue } });
+                    setNewAttrKey("");
+                    setNewAttrValue("");
+                    setSavingAttr(false);
+                  }}
+                >
+                  Add
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </Card>
+
+        <Card title={`Analysis versions (${detail.analyses.length})`} className="lg:col-span-2">
           {detail.analyses.length === 0 ? (
             <EmptyState icon="file-lines" title="No analysis yet" message="The owner can request an AI-assisted structured analysis. Previous versions are always kept." />
           ) : (
@@ -169,9 +220,9 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
                       Evidence: {a.evidence}
                     </Badge>
                   </div>
-                  <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap font-mono text-xs">
-                    {JSON.stringify(a.document, null, 2)}
-                  </pre>
+                  <div className="mt-2 max-h-96 overflow-auto">
+                    <DynamicValue doc={a.document} />
+                  </div>
                 </li>
               ))}
             </ul>

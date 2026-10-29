@@ -2,6 +2,7 @@ import { z } from "zod";
 import { callMuseSpark, transcribeWithMuseVoice } from "@/lib/ai";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
+import { retainVoiceAudio } from "@/lib/voice-capture";
 
 const proposalSchema = z.object({
   kind: z.enum(["message", "profile_update", "reminder", "workflow"]),
@@ -21,14 +22,20 @@ export async function POST(req: Request) {
 
   const contentType = req.headers.get("content-type") ?? "";
   let instruction = "";
+  let audioRetained: boolean | undefined;
+  let audioNote: string | undefined;
 
   if (contentType.includes("multipart/form-data")) {
     const form = await req.formData();
     const audio = form.get("audio");
     if (!(audio instanceof Blob)) return apiError("No audio provided.", 400);
-    const result = await transcribeWithMuseVoice(audio);
+    const file = audio instanceof File ? audio : new File([audio], "instruction.webm", { type: audio.type || "audio/webm" });
+    const retained = await retainVoiceAudio(session.user.id, "chat", file);
+    audioRetained = retained.retained;
+    audioNote = retained.problem;
+    const result = await transcribeWithMuseVoice(file, file.name);
     if (!result.configured) {
-      return apiOk({ pending: true, pendingReason: result.pendingReason });
+      return apiOk({ pending: true, pendingReason: result.pendingReason, audioRetained, audioNote });
     }
     if (!result.transcript) {
       return apiError(result.error ?? "Transcription failed.", 502);
@@ -53,7 +60,7 @@ export async function POST(req: Request) {
       "{ kind: message|profile_update|reminder|workflow, title, payload, scheduledFor?: ISO datetime, timezone?: IANA name }",
   });
   if (!spark.configured) {
-    return apiOk({ pending: true, pendingReason: spark.pendingReason, transcript: instruction });
+    return apiOk({ pending: true, pendingReason: spark.pendingReason, transcript: instruction, audioRetained, audioNote });
   }
   if (spark.error || !spark.data) {
     return apiError(spark.error ?? "Interpretation failed.", 502);
@@ -62,5 +69,5 @@ export async function POST(req: Request) {
   if (!proposal.success) {
     return apiError("The assistant returned an unusable proposal. Fill the form manually.", 502);
   }
-  return apiOk({ pending: false, transcript: instruction, proposal: proposal.data });
+  return apiOk({ pending: false, transcript: instruction, proposal: proposal.data, audioRetained, audioNote });
 }

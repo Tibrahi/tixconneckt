@@ -3,6 +3,11 @@ import { getDb } from "@/db";
 import { groupMembers, projects, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { hasSuperAccess } from "@/lib/entitlements";
+import {
+  validateDocSize,
+  validateFieldName,
+  validateFieldValue,
+} from "@/lib/flexible-records";
 import { getSession } from "@/lib/session";
 import { projectSubmitSchema } from "@/lib/validation";
 
@@ -78,6 +83,15 @@ export async function POST(req: Request) {
   const parsed = projectSubmitSchema.safeParse(body);
   if (!parsed.success) return apiError("Give your idea a title and a detailed summary.", 400);
 
+  for (const [key, value] of Object.entries(parsed.data.attributes)) {
+    const nameProblem = validateFieldName(key);
+    if (nameProblem) return apiError(`Invalid field "${key}": ${nameProblem}`, 400);
+    const valueProblem = validateFieldValue(value, 0);
+    if (valueProblem) return apiError(`Invalid value for "${key}": ${valueProblem}`, 400);
+  }
+  const attrSizeProblem = validateDocSize(parsed.data.attributes);
+  if (attrSizeProblem) return apiError(attrSizeProblem, 400);
+
   if (parsed.data.visibility === "private") {
     const allowed = session.user.role === "admin" || (await hasSuperAccess(session.user.id));
     if (!allowed) {
@@ -110,6 +124,7 @@ export async function POST(req: Request) {
       summary: parsed.data.summary,
       details: parsed.data.details,
       visibility: parsed.data.visibility,
+      attributes: parsed.data.attributes,
     })
     .returning({ id: projects.id });
   return apiOk({ projectId: created.id }, 201);

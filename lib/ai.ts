@@ -1,4 +1,5 @@
 import { aiSparkConfigured, aiVoiceConfigured } from "./config";
+import { validateFieldValue } from "./flexible-records";
 
 /**
  * Muse Spark (structured AI processing) and Muse Voice (transcription).
@@ -6,10 +7,16 @@ import { aiSparkConfigured, aiVoiceConfigured } from "./config";
  * These clients call the configured service endpoints only. When credentials
  * are missing they report `configured: false` and callers must surface a
  * "pending integration" state — never a fabricated AI result.
+ *
+ * Task inputs are dynamic (see lib/ai-tasks.ts): each request carries the
+ * task id plus the actually-collected input. Outputs are validated as
+ * generic JSON and persisted to JSONB by the caller — no hardcoded output
+ * schema is assumed here.
  */
 
 export interface SparkRequest {
-  task: "profile_interpret" | "match_score" | "project_analysis" | "parse_document" | "interpret_action";
+  /** Dynamic task id (see AI_TASKS) or a legacy fixed task name. */
+  task: string;
   input: unknown;
   schemaHint?: string;
 }
@@ -47,6 +54,20 @@ export async function callMuseSpark(request: SparkRequest): Promise<SparkRespons
   }
 }
 
+/**
+ * Validate an AI-produced JSON payload before persistence: plain object,
+ * bounded size/depth, no prototype-pollution keys. The structure itself is
+ * preserved as returned — unknown fields are kept, not discarded.
+ */
+export function validateSparkJson(data: unknown): { ok: true; doc: Record<string, unknown> } | { ok: false; error: string } {
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    return { ok: false, error: "The assistant returned an unusable result." };
+  }
+  const problem = validateFieldValue(data, 0);
+  if (problem) return { ok: false, error: `The assistant returned an unusable result: ${problem}` };
+  return { ok: true, doc: data as Record<string, unknown> };
+}
+
 export interface VoiceResponse {
   configured: boolean;
   pendingReason?: string;
@@ -54,13 +75,21 @@ export interface VoiceResponse {
   error?: string;
 }
 
-export async function transcribeWithMuseVoice(audio: Blob): Promise<VoiceResponse> {
+/** Voice tasks the configured service can actually perform. */
+export function voiceTaskSupported(task: string): boolean {
+  return task === "transcribe";
+}
+
+export async function transcribeWithMuseVoice(
+  audio: Blob,
+  filename = "instruction.webm",
+): Promise<VoiceResponse> {
   if (!aiVoiceConfigured()) {
     return { configured: false, pendingReason: "Muse Voice is not configured" };
   }
   try {
     const form = new FormData();
-    form.append("audio", audio, "instruction.webm");
+    form.append("audio", audio, filename);
     const res = await fetch(`${process.env.MUSE_VOICE_API_URL}/v1/transcribe`, {
       method: "POST",
       headers: { Authorization: `Bearer ${process.env.MUSE_VOICE_API_KEY}` },

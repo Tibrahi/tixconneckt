@@ -126,6 +126,8 @@ export const projectSubmitSchema = z.object({
   details: z.string().trim().max(20000).optional(),
   visibility: z.enum(["public", "private"]).default("public"),
   groupId: z.string().min(1).optional(),
+  /** Optional dynamic attributes, validated as flexible fields. */
+  attributes: z.record(z.string(), z.unknown()).default({}),
 });
 
 export type ProjectSubmitInput = z.infer<typeof projectSubmitSchema>;

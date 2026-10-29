@@ -29,11 +29,19 @@ function bucket(): string {
 }
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
+export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export const ALLOWED_MIME_TYPES = new Set([
   "application/pdf",
   "image/png",
   "image/jpeg",
   "text/plain",
+]);
+export const ALLOWED_AUDIO_MIME_TYPES = new Set([
+  "audio/webm",
+  "audio/mpeg",
+  "audio/mp4",
+  "audio/wav",
+  "audio/ogg",
 ]);
 
 export function validateUpload(mimeType: string, sizeBytes: number): string | null {
@@ -45,6 +53,21 @@ export function validateUpload(mimeType: string, sizeBytes: number): string | nu
   }
   if (sizeBytes <= 0) {
     return "File is empty.";
+  }
+  return null;
+}
+
+/** Voice uploads: supported audio capture formats up to 25 MB. */
+export function validateAudioUpload(mimeType: string, sizeBytes: number): string | null {
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_AUDIO_MIME_TYPES.has(base)) {
+    return "Audio type is not supported. Use WebM, MP3, M4A, WAV, or OGG.";
+  }
+  if (sizeBytes > MAX_AUDIO_BYTES) {
+    return "Audio is larger than the 25 MB limit.";
+  }
+  if (sizeBytes <= 0) {
+    return "Audio is empty.";
   }
   return null;
 }

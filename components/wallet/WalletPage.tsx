@@ -10,6 +10,7 @@ import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { FileUpload } from "@/components/ui/FileUpload";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
+import { DynamicValue } from "@/components/dynamic/DynamicValue";
 
 interface WalletRow {
   id: string;
@@ -97,7 +98,7 @@ export function WalletPage() {
   const [pasted, setPasted] = useState("");
   const [jobId, setJobId] = useState<string | null>(null);
   const [documentId, setDocumentId] = useState<string | null>(null);
-  const [proposed, setProposed] = useState<{ amountMinor: number; currency: string; direction: string; description?: string } | null>(null);
+  const [proposed, setProposed] = useState<{ amountMinor: number; currency: string; direction: string; description?: string; extra?: Record<string, unknown> } | null>(null);
   const [aiPending, setAiPending] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -216,7 +217,7 @@ export function WalletPage() {
     const res = await fetch(`/api/documents/jobs/${encodeURIComponent(id)}`, { method: "POST" });
     const body = (await res.json()) as {
       ok: boolean;
-      data?: { pending?: boolean; pendingReason?: string; proposed?: { amountMinor: number; currency: string; direction: string; description?: string } };
+      data?: { pending?: boolean; pendingReason?: string; proposed?: { amountMinor: number; currency: string; direction: string; description?: string; extra?: Record<string, unknown> } };
       error?: string;
     };
     if (!res.ok || !body.ok) {
@@ -461,12 +462,22 @@ export function WalletPage() {
                     </div>
                     {aiPending ? <PendingIntegration name="AI document parsing" detail={aiPending} /> : null}
                     {proposed ? (
-                      <p className="rounded-md border border-brand-200 bg-brand-50 p-3 text-sm">
-                        Proposed by document parsing — review before confirming:{" "}
-                        <span className="font-mono font-semibold">
-                          {formatMoney(proposed.amountMinor, proposed.currency)}
-                        </span>
-                      </p>
+                      <div className="rounded-md border border-brand-200 bg-brand-50 p-3 text-sm">
+                        <p>
+                          Proposed by document parsing — review before confirming:{" "}
+                          <span className="font-mono font-semibold">
+                            {formatMoney(proposed.amountMinor, proposed.currency)}
+                          </span>
+                        </p>
+                        {proposed.extra && Object.keys(proposed.extra).length > 0 ? (
+                          <div className="mt-2">
+                            <p className="mb-1 text-xs font-semibold tracking-wide text-neutral-600 uppercase">
+                              Other details found in the document
+                            </p>
+                            <DynamicValue doc={proposed.extra} />
+                          </div>
+                        ) : null}
+                      </div>
                     ) : null}
                     <div className="grid gap-3 sm:grid-cols-3">
                       <TextField label="Amount" inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} placeholder="50.00" />

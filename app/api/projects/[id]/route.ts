@@ -10,9 +10,15 @@ import {
   projects,
   users,
 } from "@/db/schema";
-import { callMuseSpark } from "@/lib/ai";
+import { callMuseSpark, validateSparkJson } from "@/lib/ai";
 import { apiError, apiOk } from "@/lib/api-response";
 import { hasSuperAccess } from "@/lib/entitlements";
+import {
+  applyDocUpdate,
+  validateDocSize,
+  validateFieldPath,
+  validateFieldValue,
+} from "@/lib/flexible-records";
 import { notify } from "@/lib/notify";
 import { getSession } from "@/lib/session";
 import { sanitizeHtml } from "@/lib/sanitize";
@@ -165,10 +171,12 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 const actionSchema = z.object({
-  action: z.enum(["reply", "react", "analyze", "restage"]),
+  action: z.enum(["reply", "react", "analyze", "restage", "update_attributes"]),
   contributionId: z.string().min(1).optional(),
   body: z.string().trim().max(4000).optional(),
   stage: z.enum(["idea", "developing", "funded", "completed", "archived"]).optional(),
+  set: z.record(z.string(), z.unknown()).optional(),
+  remove: z.array(z.string().min(1).max(256)).max(100).optional(),
 });
 
 /** Reply, like/unlike, request AI analysis (versioned), or change stage. */
@@ -224,6 +232,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     return apiOk({ stage: parsed.data.stage });
   }
 
+  // update_attributes — dynamic project fields merged into JSONB (correction §2).
+  // Unrelated/unknown fields are preserved; no migration needed for new fields.
+  if (parsed.data.action === "update_attributes") {
+    if (project.ownerId !== session.user.id && session.user.role !== "admin") {
+      return apiError("Only the owner can change custom fields.", 403);
+    }
+    const set = parsed.data.set ?? {};
+    const remove = parsed.data.remove ?? [];
+    for (const path of Object.keys(set)) {
+      const pathProblem = validateFieldPath(path);
+      if (pathProblem) return apiError(`Invalid field "${path}": ${pathProblem}`, 400);
+      const valueProblem = validateFieldValue(set[path], 0);
+      if (valueProblem) return apiError(`Invalid value for "${path}": ${valueProblem}`, 400);
+    }
+    for (const path of remove) {
+      const pathProblem = validateFieldPath(path);
+      if (pathProblem) return apiError(`Invalid field "${path}": ${pathProblem}`, 400);
+    }
+    const next = applyDocUpdate(project.attributes ?? {}, { set, remove });
+    const sizeProblem = validateDocSize(next);
+    if (sizeProblem) return apiError(sizeProblem, 400);
+    await db.update(projects).set({ attributes: next }).where(eq(projects.id, id));
+    return apiOk({ attributes: next });
+  }
+
   // analyze — versioned, evidence-labeled, never overwriting history.
   if (project.ownerId !== session.user.id && session.user.role !== "admin") {
     return apiError("Only the owner can request analysis.", 403);
@@ -247,11 +280,14 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (!spark.configured) {
     return apiOk({ pending: true, pendingReason: spark.pendingReason });
   }
-  if (spark.error || !spark.data || typeof spark.data !== "object") {
+  if (spark.error || spark.data === undefined) {
     return apiError(spark.error ?? "Analysis failed. You can retry safely.", 502);
   }
-
-  const document = spark.data as Record<string, unknown>;
+  const checked = validateSparkJson(spark.data);
+  if (!checked.ok) {
+    return apiError(`${checked.error} You can retry safely.`, 502);
+  }
+  const document = checked.doc;
   const evidence =
     typeof document.evidence === "string" && ["researched", "assumption", "mixed"].includes(document.evidence)
       ? (document.evidence as string)

@@ -25,6 +25,8 @@ export const projects = pgTable(
     title: text("title").notNull(),
     summary: text("summary").notNull(),
     details: text("details"),
+    /** Dynamic project-specific attributes (JSON-first, correction §2). */
+    attributes: jsonb("attributes").$type<Record<string, unknown>>().notNull().default({}),
     /** public | private */
     visibility: text("visibility").notNull().default("public"),
     /** idea | developing | funded | completed | archived */

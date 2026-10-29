@@ -9,6 +9,7 @@ import { EmptyState, LoadError, PendingIntegration, SkeletonList } from "@/compo
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
+import { DynamicValue } from "@/components/dynamic/DynamicValue";
 
 interface ActionItem {
   id: string;
@@ -292,6 +293,10 @@ export function ActionsPage() {
               {recording ? "Stop recording" : "Record voice"}
             </Button>
           </div>
+          <p className="mt-2 text-xs text-neutral-600">
+            Recording asks for microphone access only to capture your instruction for transcription.
+            The audio is kept privately with your account when storage is configured.
+          </p>
           {transcript ? (
             <p className="mt-3 rounded-md border border-neutral-200 bg-white p-2 text-sm">
               Heard: {transcript}
@@ -305,7 +310,9 @@ export function ActionsPage() {
           {proposal ? (
             <div className="mt-3 rounded-md border border-brand-200 bg-brand-50 p-3">
               <p className="mb-1 text-sm font-medium">Proposed action — review before applying:</p>
-              <pre className="max-h-48 overflow-auto font-mono text-xs">{JSON.stringify(proposal, null, 2)}</pre>
+              <div className="max-h-64 overflow-auto">
+                <DynamicValue doc={proposal as unknown as Record<string, unknown>} />
+              </div>
               <div className="mt-2 flex gap-2">
                 <Button size="sm" onClick={applyProposal}>
                   Apply to form
