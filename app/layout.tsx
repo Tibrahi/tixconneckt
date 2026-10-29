@@ -1,6 +1,11 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, Inter } from "next/font/google";
+import { config as faConfig } from "@fortawesome/fontawesome-svg-core";
+import "@fortawesome/fontawesome-svg-core/styles.css";
 import "./globals.css";
+import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+
+faConfig.autoAddCss = false;
 
 const inter = Inter({
   subsets: ["latin"],
@@ -17,11 +22,12 @@ const ibmPlexMono = IBM_Plex_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "TixConneckt — Every learner. One network. Big things.",
-    template: "%s | TixConneckt",
+    default: "TIXCONNECKT",
+    template: "%s | TIXCONNECKT",
   },
   description:
-    "TixConneckt connects graduates, undergraduates, and learners from higher and lower education to collaborate, launch projects, and request loans or support.",
+    "Connect through compatible skills, career objectives, collaborative projects, and funding.",
+  manifest: "/manifest.webmanifest",
   icons: {
     icon: "/favicon.ico",
     shortcut: "/favicon.ico",
@@ -40,7 +46,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={`${inter.variable} ${ibmPlexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <ServiceWorkerRegister />
+        {children}
+      </body>
     </html>
   );
 }
