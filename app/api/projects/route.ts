@@ -115,29 +115,34 @@ export async function POST(req: Request) {
     if (!member) return apiError("You are not a member of this group.", 403);
   }
 
-  const [created] = await db
-    .insert(projects)
-    .values({
-      ownerId: session.user.id,
-      groupId: parsed.data.groupId,
-      title: parsed.data.title,
-      summary: parsed.data.summary,
-      details: parsed.data.details,
-      visibility: parsed.data.visibility,
-      attributes: parsed.data.attributes,
-    })
-    .returning({ id: projects.id });
-
-  // Workspace bootstrap: root folder named for the project + invited members.
+  // Keep the project and its required root folder atomic. Otherwise a folder
+  // insert failure leaves a project the workspace cannot open correctly.
   const { projectFolders, projectMembers } = await import("@/db/schema");
+  const created = await db.transaction(async (tx) => {
+    const [project] = await tx
+      .insert(projects)
+      .values({
+        ownerId: session.user.id,
+        groupId: parsed.data.groupId,
+        title: parsed.data.title,
+        summary: parsed.data.summary,
+        details: parsed.data.details,
+        visibility: parsed.data.visibility,
+        attributes: parsed.data.attributes,
+      })
+      .returning({ id: projects.id });
+    await tx.insert(projectFolders).values({
+      projectId: project.id,
+      parentFolderId: null,
+      name: parsed.data.title,
+      createdBy: session.user.id,
+    });
+    return project;
+  });
+
+  // Invite collaborators and emit notifications after the project is durable.
   const { logActivity } = await import("@/lib/project-access");
   const { notify } = await import("@/lib/notify");
-  await db.insert(projectFolders).values({
-    projectId: created.id,
-    parentFolderId: null,
-    name: parsed.data.title,
-    createdBy: session.user.id,
-  });
   const invited: string[] = [];
   for (const c of parsed.data.collaborators) {
     const [user] = await db

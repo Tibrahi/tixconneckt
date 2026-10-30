@@ -10,6 +10,7 @@ import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
 import { VoiceRecorder } from "@/components/ai/VoiceRecorder";
+import { ProfilePhotos } from "@/components/profile/ProfilePhotos";
 
 interface OwnProfile {
   shortId: string;
@@ -17,6 +18,7 @@ interface OwnProfile {
   email: string;
   phone: string | null;
   country: string | null;
+  countryCode: string | null;
   category: string;
   educationLevel: string | null;
   objectives: string | null;
@@ -28,6 +30,9 @@ interface OwnProfile {
   location: string | null;
   contactVisibility: string;
   financialVisibility: string;
+  profileVisibility: string;
+  avatarUrl: string;
+  coverPhotoUrl: string;
   role: string;
   providerKind: string | null;
   groupCount: number;
@@ -68,6 +73,7 @@ export function OwnProfilePage() {
         name: body.data.name,
         phone: body.data.phone ?? "",
         country: body.data.country ?? "",
+        countryCode: body.data.countryCode ?? "",
         educationLevel: body.data.educationLevel ?? "",
         objectives: body.data.objectives ?? "",
         major: body.data.major ?? "",
@@ -78,6 +84,7 @@ export function OwnProfilePage() {
         location: body.data.location ?? "",
         contactVisibility: body.data.contactVisibility,
         financialVisibility: body.data.financialVisibility,
+        profileVisibility: body.data.profileVisibility,
         providerKind: body.data.providerKind ?? "",
       });
     } catch {
@@ -101,16 +108,18 @@ export function OwnProfilePage() {
           name: draft.name || undefined,
           phone: draft.phone || undefined,
           country: draft.country || undefined,
-          educationLevel: draft.educationLevel || undefined,
-          objectives: draft.objectives || undefined,
-          major: draft.major || undefined,
+          countryCode: draft.countryCode ?? "",
+          educationLevel: draft.educationLevel ?? "",
+          objectives: draft.objectives ?? "",
+          major: draft.major ?? "",
           skills: splitList(draft.skills ?? ""),
           strengths: splitList(draft.strengths ?? ""),
           fields: splitList(draft.fields ?? ""),
-          bio: draft.bio || undefined,
-          location: draft.location || undefined,
+          bio: draft.bio ?? "",
+          location: draft.location ?? "",
           contactVisibility: draft.contactVisibility || undefined,
           financialVisibility: draft.financialVisibility || undefined,
+          profileVisibility: draft.profileVisibility || undefined,
           ...(draft.providerKind !== undefined ? { providerKind: draft.providerKind || null } : {}),
         }),
       });
@@ -225,6 +234,8 @@ export function OwnProfilePage() {
         }
       />
 
+      <ProfilePhotos shortId={profile.shortId} editable />
+
       {saved ? (
         <p role="status" className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
           Your profile was saved.
@@ -238,6 +249,7 @@ export function OwnProfilePage() {
               <TextField label="Full name" value={draft.name ?? ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
               <TextField label="Phone" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
               <TextField label="Country" value={draft.country ?? ""} onChange={(e) => setDraft({ ...draft, country: e.target.value })} />
+              <TextField label="Country code" value={draft.countryCode ?? ""} onChange={(e) => setDraft({ ...draft, countryCode: e.target.value.toUpperCase().slice(0, 3) })} placeholder="e.g. RW" />
               <TextField label="Location" value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
               {profile.role === "provider" ? (
                 <SelectField
@@ -253,6 +265,16 @@ export function OwnProfilePage() {
                 />
               ) : null}
               <SelectField
+                label="Who can view my profile"
+                value={draft.profileVisibility ?? "public"}
+                onChange={(e) => setDraft({ ...draft, profileVisibility: e.target.value })}
+                options={[
+                  { value: "public", label: "Everyone" },
+                  { value: "connections", label: "My connections" },
+                  { value: "private", label: "Only my name and photos" },
+                ]}
+              />
+              <SelectField
                 label="Who can see my contact details"
                 value={draft.contactVisibility ?? "connections"}
                 onChange={(e) => setDraft({ ...draft, contactVisibility: e.target.value })}
@@ -262,14 +284,27 @@ export function OwnProfilePage() {
                   { value: "private", label: "Only me" },
                 ]}
               />
+              <SelectField
+                label="Who can see my financial profile"
+                value={draft.financialVisibility ?? "private"}
+                onChange={(e) => setDraft({ ...draft, financialVisibility: e.target.value })}
+                options={[
+                  { value: "private", label: "Only me" },
+                  { value: "connections", label: "My connections" },
+                ]}
+              />
             </div>
           ) : (
             <dl className="flex flex-col gap-2 text-sm">
               <div><dt className="text-neutral-600">Name</dt><dd className="font-medium">{profile.name}</dd></div>
               <div><dt className="text-neutral-600">Phone</dt><dd className="font-mono">{profile.phone ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Country</dt><dd>{profile.country ?? "—"}</dd></div>
+              <div><dt className="text-neutral-600">Country code</dt><dd className="font-mono">{profile.countryCode ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Location</dt><dd>{profile.location ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Category</dt><dd className="capitalize">{profile.category}</dd></div>
+              <div><dt className="text-neutral-600">Contact visibility</dt><dd className="capitalize">{profile.contactVisibility}</dd></div>
+              <div><dt className="text-neutral-600">Financial visibility</dt><dd className="capitalize">{profile.financialVisibility}</dd></div>
+              <div><dt className="text-neutral-600">Profile visibility</dt><dd className="capitalize">{profile.profileVisibility}</dd></div>
               {profile.role === "provider" ? (
                 <div><dt className="text-neutral-600">Provider category</dt><dd className="capitalize">{profile.providerKind ?? "Not set"}</dd></div>
               ) : null}
@@ -297,6 +332,18 @@ export function OwnProfilePage() {
                 <dt className="text-neutral-600">Skills</dt>
                 <dd className="mt-1 flex flex-wrap gap-1">
                   {profile.skills.length ? profile.skills.map((s) => <Badge key={s}>{s}</Badge>) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-neutral-600">Strengths</dt>
+                <dd className="mt-1 flex flex-wrap gap-1">
+                  {profile.strengths.length ? profile.strengths.map((s) => <Badge key={s}>{s}</Badge>) : "—"}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-neutral-600">Fields / sectors</dt>
+                <dd className="mt-1 flex flex-wrap gap-1">
+                  {profile.fields.length ? profile.fields.map((s) => <Badge key={s}>{s}</Badge>) : "—"}
                 </dd>
               </div>
               <div className="sm:col-span-2"><dt className="text-neutral-600">Bio</dt><dd>{profile.bio ?? "—"}</dd></div>

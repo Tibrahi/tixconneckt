@@ -53,14 +53,14 @@ function StatCard({ label, value, href, icon }: { label: string; value: number; 
   return (
     <Link
       href={href}
-      className="flex items-center gap-3 rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-black"
+      className="group flex min-h-24 items-center gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
     >
-      <span className="text-xl" aria-hidden="true">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-lg text-brand-700 transition-colors group-hover:bg-brand-100" aria-hidden="true">
         <Icon name={icon} />
       </span>
       <span>
-        <span className="block font-mono text-2xl font-semibold text-black">{value}</span>
-        <span className="block text-sm text-neutral-600">{label}</span>
+        <span className="block font-mono text-2xl font-semibold leading-tight text-black">{value}</span>
+        <span className="mt-1 block text-sm text-neutral-600">{label}</span>
       </span>
     </Link>
   );
@@ -161,7 +161,7 @@ export function DashboardHome() {
         />
       </div>
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-2">
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
         <Card
           title="Profile"
           actions={

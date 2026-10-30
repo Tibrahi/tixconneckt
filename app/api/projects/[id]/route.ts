@@ -278,11 +278,22 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       const pathProblem = validateFieldPath(path);
       if (pathProblem) return apiError(`Invalid field "${path}": ${pathProblem}`, 400);
     }
-    const next = applyDocUpdate(project.attributes ?? {}, { set, remove });
-    const sizeProblem = validateDocSize(next);
-    if (sizeProblem) return apiError(sizeProblem, 400);
-    await db.update(projects).set({ attributes: next }).where(eq(projects.id, id));
-    return apiOk({ attributes: next });
+    const next = await db.transaction(async (tx) => {
+      const [locked] = await tx
+        .select({ attributes: projects.attributes })
+        .from(projects)
+        .where(eq(projects.id, id))
+        .for("update");
+      if (!locked) return { attributes: null, sizeProblem: null };
+      const updated = applyDocUpdate(locked.attributes ?? {}, { set, remove });
+      const sizeProblem = validateDocSize(updated);
+      if (sizeProblem) return { attributes: null, sizeProblem };
+      await tx.update(projects).set({ attributes: updated }).where(eq(projects.id, id));
+      return { attributes: updated, sizeProblem: null };
+    });
+    if (next.sizeProblem) return apiError(next.sizeProblem, 400);
+    if (!next.attributes) return apiError("Project not found.", 404);
+    return apiOk({ attributes: next.attributes });
   }
 
   // analyze — versioned, evidence-labeled, never overwriting history.

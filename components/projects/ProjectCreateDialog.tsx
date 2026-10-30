@@ -26,6 +26,9 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
   const [details, setDetails] = useState("");
+  const [attributes, setAttributes] = useState<Array<{ key: string; value: string }>>([]);
+  const [attributeKey, setAttributeKey] = useState("");
+  const [attributeValue, setAttributeValue] = useState("");
   const [visibility, setVisibility] = useState("public");
   const [kind, setKind] = useState<"individual" | "group">("individual");
   const [groups, setGroups] = useState<Group[]>([]);
@@ -64,6 +67,7 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
           title: title.trim(),
           summary: summary.trim(),
           details: details.trim() || undefined,
+          attributes: Object.fromEntries(attributes.map(({ key, value }) => [key, value])),
           visibility,
           groupId: kind === "group" ? groupId : undefined,
           collaborators,
@@ -83,6 +87,25 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
           <TextField label="What is the project name?" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Digital Agriculture Platform" />
           <TextAreaField label="Describe it (20+ characters)" value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="What problem does it solve, and for whom?" />
           <TextAreaField label="Extra details (optional)" value={details} onChange={(e) => setDetails(e.target.value)} />
+          <section className="rounded-md border border-neutral-200 p-3" aria-label="Project custom fields">
+            <h2 className="text-sm font-semibold">Additional project details</h2>
+            <p className="mt-1 text-xs text-neutral-600">Add useful facts such as location, beneficiaries, budget, timeline, or required resources.</p>
+            {attributes.length ? (
+              <ul className="my-2 flex flex-wrap gap-2">
+                {attributes.map((field) => (
+                  <li key={field.key} className="rounded bg-neutral-100 px-2 py-1 text-xs">
+                    <strong>{field.key}:</strong> {field.value}
+                    <button type="button" className="ml-2 text-red-700 underline" aria-label={`Remove ${field.key}`} onClick={() => setAttributes((items) => items.filter((item) => item.key !== field.key))}>Remove</button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="mt-2 grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+              <TextField label="Field key (letters, numbers, underscore)" value={attributeKey} onChange={(e) => setAttributeKey(e.target.value.replace(/[^A-Za-z0-9_]/g, ""))} placeholder="e.g. projectLocation" />
+              <TextField label="Value" value={attributeValue} onChange={(e) => setAttributeValue(e.target.value)} placeholder="e.g. Huye District" />
+              <div className="flex items-end"><Button type="button" variant="secondary" size="sm" disabled={!attributeKey.trim() || attributes.some((item) => item.key.toLowerCase() === attributeKey.trim().toLowerCase())} onClick={() => { setAttributes((items) => [...items, { key: attributeKey.trim(), value: attributeValue.trim() }]); setAttributeKey(""); setAttributeValue(""); }}>Add field</Button></div>
+            </div>
+          </section>
           <SelectField
             label="Should the project be private or public?"
             value={visibility}

@@ -405,8 +405,21 @@ export async function getOrCreateMemberAccount(userId: string): Promise<MemberAc
     .where(eq(memberAccounts.userId, userId))
     .limit(1);
   if (existing) return existing;
-  const [created] = await db.insert(memberAccounts).values({ userId }).returning();
-  return created;
+  // Two dashboard/API requests can race after both observe no row. Let the
+  // primary key arbitrate atomically, then read the winner's row.
+  const [created] = await db
+    .insert(memberAccounts)
+    .values({ userId })
+    .onConflictDoNothing({ target: memberAccounts.userId })
+    .returning();
+  if (created) return created;
+  const [winner] = await db
+    .select()
+    .from(memberAccounts)
+    .where(eq(memberAccounts.userId, userId))
+    .limit(1);
+  if (!winner) throw new Error("Could not initialize the member account.");
+  return winner;
 }
 
 /** Check whether a savings goal reached its target after a contribution. */

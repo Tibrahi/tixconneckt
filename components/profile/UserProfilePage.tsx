@@ -8,6 +8,7 @@ import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { ErrorDialog } from "@/components/ui/Modal";
+import { ProfilePhotos } from "@/components/profile/ProfilePhotos";
 
 interface ViewableProfile {
   shortId: string;
@@ -29,6 +30,10 @@ interface ViewableProfile {
   projectCount: number;
   badges: Array<{ type: string; reason: string | null }>;
   connectionStatus: "none" | "pending_out" | "pending_in" | "accepted";
+  profileVisibility: string;
+  limitedProfile: boolean;
+  avatarUrl: string;
+  coverPhotoUrl: string;
 }
 
 export function UserProfilePage({ shortId }: { shortId: string }) {
@@ -120,7 +125,13 @@ export function UserProfilePage({ shortId }: { shortId: string }) {
           )
         }
       />
-      <div className="grid gap-4 lg:grid-cols-3">
+      <ProfilePhotos shortId={profile.shortId} />
+      {profile.limitedProfile ? (
+        <p className="mb-4 rounded-lg border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-700">
+          {profile.profileVisibility === "private" ? "This profile shares only its name, identifier, and photos." : "This profile's details are shared with connections only."}
+        </p>
+      ) : null}
+      {!profile.limitedProfile ? <div className="grid gap-4 lg:grid-cols-3">
         <Card title="About">
           <dl className="flex flex-col gap-2 text-sm">
             <div><dt className="text-neutral-600">Education</dt><dd>{profile.educationLevel ?? "—"}</dd></div>
@@ -155,7 +166,7 @@ export function UserProfilePage({ shortId }: { shortId: string }) {
             </ul>
           )}
         </Card>
-      </div>
+      </div> : null}
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} /> : null}
     </>
   );

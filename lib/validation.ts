@@ -74,8 +74,9 @@ export const passwordResetSchema = z
 
 export const profileUpdateSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
-  phone: z.string().trim().min(4).max(32).optional(),
-  country: z.string().trim().min(2).max(120).optional(),
+  phone: z.string().trim().max(32).refine((value) => value === "" || value.length >= 4, "Phone number is too short").optional(),
+  country: z.string().trim().max(120).refine((value) => value === "" || value.length >= 2, "Country is too short").optional(),
+  countryCode: z.string().trim().max(3).refine((value) => value === "" || /^[A-Za-z]{2,3}$/.test(value), "Enter a valid country code").optional(),
   educationLevel: z.string().trim().max(120).optional(),
   objectives: z.string().trim().max(2000).optional(),
   major: z.string().trim().max(200).optional(),
@@ -86,6 +87,7 @@ export const profileUpdateSchema = z.object({
   location: z.string().trim().max(200).optional(),
   contactVisibility: z.enum(["public", "connections", "private"]).optional(),
   financialVisibility: z.enum(["private", "connections"]).optional(),
+  profileVisibility: z.enum(["public", "connections", "private"]).optional(),
   providerKind: z.enum(["loan", "support"]).nullable().optional(),
 });
 

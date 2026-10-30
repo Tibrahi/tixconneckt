@@ -31,6 +31,9 @@ export interface OwnProfile {
   location: string | null;
   contactVisibility: string;
   financialVisibility: string;
+  profileVisibility: string;
+  avatarUrl: string;
+  coverPhotoUrl: string;
   groupCount: number;
   connectionCount: number;
   badges: Array<{ type: string; reason: string | null; awardedAt: Date }>;
@@ -106,6 +109,9 @@ export async function getOwnProfile(userId: string): Promise<OwnProfile | null> 
     location: profile?.location ?? null,
     contactVisibility: profile?.contactVisibility ?? "connections",
     financialVisibility: profile?.financialVisibility ?? "private",
+    profileVisibility: profile?.profileVisibility ?? "public",
+    avatarUrl: `/api/profile/media?shortId=${encodeURIComponent(user.shortId)}&kind=avatar`,
+    coverPhotoUrl: `/api/profile/media?shortId=${encodeURIComponent(user.shortId)}&kind=cover`,
     groupCount: groupCount?.n ?? 0,
     connectionCount: connectionCount?.n ?? 0,
     badges: userBadges,
@@ -137,6 +143,10 @@ export interface ViewableProfile {
   projectCount: number;
   badges: Array<{ type: string; reason: string | null }>;
   connectionStatus: "none" | "pending_out" | "pending_in" | "accepted";
+  profileVisibility: string;
+  limitedProfile: boolean;
+  avatarUrl: string;
+  coverPhotoUrl: string;
 }
 
 /**
@@ -176,6 +186,9 @@ export async function getViewableProfile(
   const isSelf = viewerId === user.id;
   const canSeeContact =
     isSelf || visibility === "public" || (visibility === "connections" && connectionStatus === "accepted");
+  const profileMode = profile?.profileVisibility ?? "public";
+  const canSeeDetails = isSelf || profileMode === "public" ||
+    (profileMode === "connections" && connectionStatus === "accepted");
 
   const [groupCount] = await db
     .select({ n: count() })
@@ -203,21 +216,25 @@ export async function getViewableProfile(
     shortId: user.shortId,
     name: user.name,
     category: user.category,
-    country: user.country,
-    location: profile?.location ?? null,
-    educationLevel: profile?.educationLevel ?? null,
-    objectives: profile?.objectives ?? null,
-    major: profile?.major ?? null,
-    skills: profile?.skills ?? [],
-    strengths: profile?.strengths ?? [],
-    fields: profile?.fields ?? [],
-    bio: profile?.bio ?? null,
+    country: canSeeDetails ? user.country : null,
+    location: canSeeDetails ? profile?.location ?? null : null,
+    educationLevel: canSeeDetails ? profile?.educationLevel ?? null : null,
+    objectives: canSeeDetails ? profile?.objectives ?? null : null,
+    major: canSeeDetails ? profile?.major ?? null : null,
+    skills: canSeeDetails ? profile?.skills ?? [] : [],
+    strengths: canSeeDetails ? profile?.strengths ?? [] : [],
+    fields: canSeeDetails ? profile?.fields ?? [] : [],
+    bio: canSeeDetails ? profile?.bio ?? null : null,
     email: canSeeContact ? user.email : null,
     phone: canSeeContact ? user.phone : null,
-    groupCount: groupCount?.n ?? 0,
-    connectionCount: connectionCount?.n ?? 0,
-    projectCount: projectCount?.n ?? 0,
-    badges: userBadges,
+    groupCount: canSeeDetails ? groupCount?.n ?? 0 : 0,
+    connectionCount: canSeeDetails ? connectionCount?.n ?? 0 : 0,
+    projectCount: canSeeDetails ? projectCount?.n ?? 0 : 0,
+    badges: canSeeDetails ? userBadges : [],
     connectionStatus,
+    profileVisibility: profileMode,
+    limitedProfile: !canSeeDetails,
+    avatarUrl: `/api/profile/media?shortId=${encodeURIComponent(user.shortId)}&kind=avatar`,
+    coverPhotoUrl: `/api/profile/media?shortId=${encodeURIComponent(user.shortId)}&kind=cover`,
   };
 }

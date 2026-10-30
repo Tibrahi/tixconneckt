@@ -36,21 +36,23 @@ export async function PATCH(req: Request) {
     return apiError("Only provider accounts set a provider category.", 403);
   }
 
-  if (input.name || input.phone || input.country || input.providerKind !== undefined) {
-    await db
-      .update(users)
-      .set({
-        ...(input.name ? { name: input.name } : {}),
-        ...(input.phone ? { phone: input.phone } : {}),
-        ...(input.country ? { country: input.country } : {}),
-        ...(input.providerKind !== undefined ? { providerKind: input.providerKind } : {}),
-      })
-      .where(eq(users.id, session.user.id));
-  }
+  await db.transaction(async (tx) => {
+    if (input.name || input.phone !== undefined || input.country !== undefined || input.countryCode !== undefined || input.providerKind !== undefined) {
+      await tx
+        .update(users)
+        .set({
+          ...(input.name ? { name: input.name } : {}),
+          ...(input.phone !== undefined ? { phone: input.phone || null } : {}),
+          ...(input.country !== undefined ? { country: input.country || null } : {}),
+          ...(input.countryCode !== undefined ? { countryCode: input.countryCode.toUpperCase() || null } : {}),
+          ...(input.providerKind !== undefined ? { providerKind: input.providerKind } : {}),
+        })
+        .where(eq(users.id, session.user.id));
+    }
 
-  await db
-    .insert(profiles)
-    .values({
+    await tx
+      .insert(profiles)
+      .values({
       userId: session.user.id,
       educationLevel: input.educationLevel,
       objectives: input.objectives,
@@ -60,10 +62,11 @@ export async function PATCH(req: Request) {
       fields: input.fields ?? [],
       bio: input.bio,
       location: input.location,
-      contactVisibility: input.contactVisibility ?? "connections",
-      financialVisibility: input.financialVisibility ?? "private",
-    })
-    .onConflictDoUpdate({
+        contactVisibility: input.contactVisibility ?? "connections",
+        financialVisibility: input.financialVisibility ?? "private",
+        profileVisibility: input.profileVisibility ?? "public",
+      })
+      .onConflictDoUpdate({
       target: profiles.userId,
       set: {
         ...(input.educationLevel !== undefined ? { educationLevel: input.educationLevel } : {}),
@@ -76,8 +79,10 @@ export async function PATCH(req: Request) {
         ...(input.location !== undefined ? { location: input.location } : {}),
         ...(input.contactVisibility ? { contactVisibility: input.contactVisibility } : {}),
         ...(input.financialVisibility ? { financialVisibility: input.financialVisibility } : {}),
+        ...(input.profileVisibility ? { profileVisibility: input.profileVisibility } : {}),
       },
-    });
+      });
+  });
 
   await audit({
     actorId: session.user.id,

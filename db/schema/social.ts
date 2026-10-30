@@ -1,4 +1,5 @@
 import {
+  customType,
   index,
   jsonb,
   pgTable,
@@ -24,11 +25,26 @@ export const profiles = pgTable("profiles", {
   /** public | connections | private */
   contactVisibility: text("contact_visibility").notNull().default("connections"),
   financialVisibility: text("financial_visibility").notNull().default("private"),
+  /** public | connections | private; private profiles retain only identity/photos for discovery. */
+  profileVisibility: text("profile_visibility").notNull().default("public"),
   updatedAt: timestamp("updated_at", { withTimezone: true })
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
 });
+
+const profileImageBytes = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType: () => "bytea",
+});
+
+/** Small, user-owned avatar and cover images stored as binary data. */
+export const profileMedia = pgTable("profile_media", {
+  userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  contentType: text("content_type").notNull(),
+  data: profileImageBytes("data").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("profile_media_user_kind_unique").on(t.userId, t.kind)]);
 
 export const badges = pgTable(
   "badges",

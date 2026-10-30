@@ -46,8 +46,9 @@ export function OtpForm({
     e?.preventDefault();
     const currentCode = submittedCode ?? digits.join("");
     if (!/^[0-9]{6}$/.test(currentCode) || submitLock.current) {
-      if (!/^[0-9]{6}$/.test(currentCode))
-      setFieldError("Enter the 6-digit code.");
+      if (!/^[0-9]{6}$/.test(currentCode)) {
+        setFieldError("Enter the 6-digit code.");
+      }
       return;
     }
     submitLock.current = true;
@@ -116,7 +117,7 @@ export function OtpForm({
   }
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6" aria-label="Verify code">
+    <section className="mx-auto w-full max-w-md rounded-lg border border-neutral-200 bg-white p-4 sm:p-5" aria-label="Verify code">
       <h1 className="text-lg font-semibold text-black">Check your email</h1>
       <p className="mb-4 mt-1 text-sm text-neutral-600">
         We sent a 6-digit code to <span className="font-mono">{email}</span>. It expires in 10
@@ -130,7 +131,7 @@ export function OtpForm({
       <form onSubmit={submit} className="flex flex-col gap-4" noValidate>
         <fieldset>
           <legend className="mb-2 text-sm font-medium">Verification code</legend>
-          <div className="flex gap-2" dir="ltr">
+          <div className="flex justify-center gap-1.5 sm:gap-2" dir="ltr">
             {Array.from({ length: 6 }, (_, index) => (
               <input
                 key={index}
@@ -146,7 +147,7 @@ export function OtpForm({
                   if (event.key === "ArrowLeft" && index > 0) inputRefs.current[index - 1]?.focus();
                   if (event.key === "ArrowRight" && index < 5) inputRefs.current[index + 1]?.focus();
                 }}
-                className="h-12 min-w-0 flex-1 rounded-md border border-neutral-300 text-center font-mono text-xl focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200"
+                className="h-10 w-10 shrink-0 rounded-md border border-neutral-300 text-center font-mono text-lg focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 sm:h-11 sm:w-11 sm:text-xl"
               />
             ))}
           </div>
