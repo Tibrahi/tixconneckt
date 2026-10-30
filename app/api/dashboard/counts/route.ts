@@ -26,26 +26,34 @@ export async function GET() {
     .select({ id: messageReads.messageId })
     .from(messageReads)
     .where(eq(messageReads.userId, userId));
-  const [unreadChat] = await db
-    .select({ n: count() })
-    .from(messages)
-    .where(
-      and(
-        sql`${messages.conversationId} IN (${myConversations})`,
-        ne(messages.senderId, userId),
-        notInArray(messages.id, readMessageIds),
-      ),
-    );
-
-  const [unreadNotifications] = await db
-    .select({ n: count() })
-    .from(notifications)
-    .where(and(eq(notifications.userId, userId), isNull(notifications.readAt)));
-
-  const [pendingConnections] = await db
-    .select({ n: count() })
-    .from(connections)
-    .where(and(eq(connections.addresseeId, userId), eq(connections.status, "pending")));
+  const [[unreadChat], [unreadNotifications], [pendingConnections]] =
+    await Promise.all([
+      db
+        .select({ n: count() })
+        .from(messages)
+        .where(
+          and(
+            sql`${messages.conversationId} IN (${myConversations})`,
+            ne(messages.senderId, userId),
+            notInArray(messages.id, readMessageIds),
+          ),
+        ),
+      db
+        .select({ n: count() })
+        .from(notifications)
+        .where(
+          and(eq(notifications.userId, userId), isNull(notifications.readAt)),
+        ),
+      db
+        .select({ n: count() })
+        .from(connections)
+        .where(
+          and(
+            eq(connections.addresseeId, userId),
+            eq(connections.status, "pending"),
+          ),
+        ),
+    ]);
 
   return apiOk({
     chat: unreadChat?.n ?? 0,

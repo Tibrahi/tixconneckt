@@ -146,9 +146,18 @@ export function ThreadView({
 
   useEffect(() => {
     load();
-    const id = setInterval(() => load({ silent: true }), 10000);
-    return () => clearInterval(id);
-  }, [load]);
+    const pollId = connected ? undefined : window.setInterval(() => {
+      if (document.visibilityState === "visible") void load({ silent: true });
+    }, 10000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void load({ silent: true });
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      if (pollId !== undefined) window.clearInterval(pollId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [load, connected]);
 
   useEffect(() => {
     const offs = [

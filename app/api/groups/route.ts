@@ -79,21 +79,21 @@ export async function POST(req: Request) {
 
   const db = getDb();
   const groupId = crypto.randomUUID();
-  await db.batch([
-    db.insert(groups).values({
+  await db.transaction(async (tx) => {
+    await tx.insert(groups).values({
       id: groupId,
       name: parsed.data.name,
       description: parsed.data.description,
       objective: parsed.data.objective,
       ownerId: session.user.id,
-    }),
-    db.insert(groupMembers).values({
+    });
+    await tx.insert(groupMembers).values({
       groupId,
       userId: session.user.id,
       role: "admin",
       status: "active",
-    }),
-  ]);
+    });
+  });
 
   const skipped: string[] = [];
   const inviteIds = new Set<string>();

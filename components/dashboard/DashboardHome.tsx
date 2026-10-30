@@ -89,13 +89,21 @@ export function DashboardHome() {
   }, [load]);
 
   useEffect(() => {
+    let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => void load(), 300);
+    };
     const offs = [
-      onEvent("notification:new", () => load()),
-      onEvent("message:new", () => load()),
-      onEvent("connection:updated", () => load()),
-      onEvent("wallet:updated", () => load()),
+      onEvent("notification:new", refresh),
+      onEvent("message:new", refresh),
+      onEvent("connection:updated", refresh),
+      onEvent("wallet:updated", refresh),
     ];
-    return () => offs.forEach((off) => off());
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      offs.forEach((off) => off());
+    };
   }, [onEvent, load]);
 
   if (failed) {

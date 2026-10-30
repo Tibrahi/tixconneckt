@@ -1,6 +1,6 @@
 import { hashPassword } from "better-auth/crypto";
 import { eq, inArray } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, isDatabaseUnavailable } from "@/db";
 import { accounts, legalConsents, legalDocuments, profiles, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { findCountry } from "@/lib/countries";
@@ -13,6 +13,15 @@ import { registerSchema } from "@/lib/validation";
 
 /** Registration: validate, create pending account, record consent, send OTP. */
 export async function POST(req: Request) {
+  try {
+    return await register(req);
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    return apiError("Service temporarily unavailable. Please try again shortly.", 503);
+  }
+}
+
+async function register(req: Request) {
   const rl = await rateLimit("register", clientIp(req) ?? "unknown", 10, "1 h");
   if (!rl.allowed) {
     return apiError("Too many registration attempts. Please try again later.", 429, undefined, rateLimitHeaders(rl, 10));

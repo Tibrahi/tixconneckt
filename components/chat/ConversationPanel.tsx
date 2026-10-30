@@ -133,7 +133,7 @@ export function ConversationPanel({
   const [links, setLinks] = useState<Array<{ id: string; label: string }>>([]);
   const [linkId, setLinkId] = useState("");
   const [creating, setCreating] = useState(false);
-  const { onEvent } = useSocket();
+  const { onEvent, connected } = useSocket();
   const searchTimer = useRef<number | null>(null);
 
   const load = useCallback(async () => {
@@ -148,16 +148,29 @@ export function ConversationPanel({
 
   useEffect(() => {
     load();
-    const id = setInterval(load, 15000);
+    let refreshTimer: number | undefined;
+    const refresh = () => {
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      refreshTimer = window.setTimeout(() => void load(), 250);
+    };
+    const pollId = connected ? undefined : window.setInterval(() => {
+      if (document.visibilityState === "visible") void load();
+    }, 15000);
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") void load();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
     const offs = [
-      onEvent("message:new", () => load()),
-      onEvent("conversation:updated", () => load()),
+      onEvent("message:new", refresh),
+      onEvent("conversation:updated", refresh),
     ];
     return () => {
-      clearInterval(id);
+      if (pollId !== undefined) window.clearInterval(pollId);
+      if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
       offs.forEach((off) => off());
     };
-  }, [load, onEvent]);
+  }, [load, onEvent, connected]);
 
   useEffect(() => {
     if (searchTimer.current) window.clearTimeout(searchTimer.current);

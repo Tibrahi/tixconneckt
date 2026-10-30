@@ -44,6 +44,7 @@ export async function GET(req: Request) {
     .where(inArray(conversations.id, ids))
     .orderBy(desc(conversations.updatedAt))
     .limit(100);
+  if (convs.length === 0) return apiOk({ individual: [], group: [] });
 
   const memberRows = await db
     .select({
@@ -95,25 +96,30 @@ export async function GET(req: Request) {
     .select({ id: messageReads.messageId })
     .from(messageReads)
     .where(eq(messageReads.userId, userId));
+  const conversationIds = convs.map((c) => c.id);
+  // Batch latest-message and unread summaries; avoid two queries per row.
+  const [latestRows, unreadRows] = await Promise.all([
+    db
+      .selectDistinctOn([messages.conversationId], {
+        conversationId: messages.conversationId,
+        body: messages.body,
+        createdAt: messages.createdAt,
+        deletedAt: messages.deletedAt,
+      })
+      .from(messages)
+      .where(inArray(messages.conversationId, conversationIds))
+      .orderBy(messages.conversationId, desc(messages.createdAt)),
+    db
+      .select({ conversationId: messages.conversationId, n: count() })
+      .from(messages)
+      .where(and(inArray(messages.conversationId, conversationIds), ne(messages.senderId, userId), notInArray(messages.id, readIds)))
+      .groupBy(messages.conversationId),
+  ]);
+  const latestByConversation = new Map(latestRows.map((row) => [row.conversationId, row]));
+  const unreadByConversation = new Map(unreadRows.map((row) => [row.conversationId, row.n]));
 
-  const shaped = await Promise.all(
-    convs.map(async (c) => {
-      const [last] = await db
-        .select({ body: messages.body, createdAt: messages.createdAt, senderId: messages.senderId, deletedAt: messages.deletedAt })
-        .from(messages)
-        .where(eq(messages.conversationId, c.id))
-        .orderBy(desc(messages.createdAt))
-        .limit(1);
-      const [unread] = await db
-        .select({ n: count() })
-        .from(messages)
-        .where(
-          and(
-            eq(messages.conversationId, c.id),
-            ne(messages.senderId, userId),
-            notInArray(messages.id, readIds),
-          ),
-        );
+  const shaped = convs.map((c) => {
+      const last = latestByConversation.get(c.id);
       const members = membersByConv.get(c.id) ?? [];
       const others = members.filter((m) => m.userId !== userId);
       const title =
@@ -131,7 +137,7 @@ export async function GET(req: Request) {
         title,
         groupId: c.groupId,
         updatedAt: c.updatedAt,
-        unread: unread?.n ?? 0,
+        unread: unreadByConversation.get(c.id) ?? 0,
         lastMessage: last
           ? {
               preview: last.deletedAt ? "This message was deleted." : last.body.slice(0, 120),
@@ -148,8 +154,7 @@ export async function GET(req: Request) {
         pinned: settings.pinned === true,
         archived: settings.archived === true,
       };
-    }),
-  );
+    });
 
   let filtered = shaped;
   if (filter === "archived") {
@@ -281,18 +286,18 @@ export async function POST(req: Request) {
         await db.insert(conversationMembers).values(memberRows).onConflictDoNothing();
       }
     } else {
-      await db.batch([
-        db.insert(conversations).values({
+      await db.transaction(async (tx) => {
+        await tx.insert(conversations).values({
           id: conversationId,
           type: "group",
           title: input.title,
           groupId: input.groupId,
           createdBy: userId,
-        }),
-        ...(memberRows.length > 0
-          ? [db.insert(conversationMembers).values(memberRows)]
-          : []),
-      ]);
+        });
+        if (memberRows.length > 0) {
+          await tx.insert(conversationMembers).values(memberRows);
+        }
+      });
     }
     return apiOk({ conversationId, reused: Boolean(existing) }, existing ? 200 : 201);
   }

@@ -1,27 +1,88 @@
-import { neon } from "@neondatabase/serverless";
-import { drizzle, type NeonHttpDatabase } from "drizzle-orm/neon-http";
+import { Pool } from "pg";
+import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
+import { resolveRuntimeDatabaseUrl } from "./neon-url.mjs";
 import * as schema from "./schema";
 
-export type Database = NeonHttpDatabase<typeof schema>;
+export type Database = NodePgDatabase<typeof schema>;
 
-let cached: Database | null = null;
+type DatabaseGlobal = typeof globalThis & {
+  __tixconnecktDatabase?: Database;
+  __tixconnecktPool?: Pool;
+};
+
+const databaseGlobal = globalThis as DatabaseGlobal;
+const DATABASE_NETWORK_ERROR_CODES = new Set([
+  "ECONNREFUSED",
+  "ECONNRESET",
+  "EHOSTUNREACH",
+  "ENETUNREACH",
+  "ETIMEDOUT",
+  "EAI_AGAIN",
+  "ENOTFOUND",
+  "57P01",
+  "57P02",
+  "57P03",
+  "53300",
+]);
+
+function positiveInteger(value: string | undefined, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
 
 /**
  * Lazy database client. Throws only when actually used without DATABASE_URL,
  * so the app can render degraded states instead of crashing at import time.
  */
 export function getDb(): Database {
-  if (cached) return cached;
-  const url = process.env.DATABASE_URL;
-  if (!url) {
-    throw new Error(
-      "DATABASE_URL is not configured. Set it in .env (see .env.example).",
-    );
+  if (databaseGlobal.__tixconnecktDatabase) {
+    return databaseGlobal.__tixconnecktDatabase;
   }
-  cached = drizzle(neon(url), { schema });
-  return cached;
+
+  const pool = new Pool({
+    connectionString: resolveRuntimeDatabaseUrl(),
+    max: positiveInteger(process.env.DB_POOL_MAX, 5),
+    idleTimeoutMillis: positiveInteger(process.env.DB_IDLE_TIMEOUT_MS, 30_000),
+    connectionTimeoutMillis: positiveInteger(process.env.DB_CONNECT_TIMEOUT_MS, 5_000),
+    statement_timeout: positiveInteger(process.env.DB_STATEMENT_TIMEOUT_MS, 30_000),
+  });
+  pool.on("error", (error: Error & { code?: string }) => {
+    console.error(`[db:pool] idle connection error (${error.code ?? error.name})`);
+  });
+
+  databaseGlobal.__tixconnecktPool = pool;
+  databaseGlobal.__tixconnecktDatabase = drizzle(pool, { schema });
+  return databaseGlobal.__tixconnecktDatabase;
 }
 
 export function dbAvailable(): boolean {
   return Boolean(process.env.DATABASE_URL);
+}
+
+/** Detect connection-level PostgreSQL failures without masking query errors. */
+export function isDatabaseUnavailable(error: unknown): boolean {
+  const pending: unknown[] = [error];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== "object" || visited.has(current)) continue;
+    visited.add(current);
+
+    const candidate = current as {
+      cause?: unknown;
+      code?: unknown;
+      message?: unknown;
+      name?: unknown;
+      sourceError?: unknown;
+    };
+    const code = typeof candidate.code === "string" ? candidate.code : "";
+
+    if (DATABASE_NETWORK_ERROR_CODES.has(code) || code.startsWith("08")) {
+      return true;
+    }
+
+    pending.push(candidate.cause, candidate.sourceError);
+  }
+
+  return false;
 }

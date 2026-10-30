@@ -29,6 +29,13 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
    # Fill in DATABASE_URL, BETTER_AUTH_SECRET, SMTP_*, CRON_SECRET, etc.
    ```
 
+   `DATABASE_URL` must be a PostgreSQL connection URL. For Neon, use the pooled
+   connection URL for application traffic; `DATABASE_URL_DIRECT` is optional
+   and is used by Drizzle Kit for schema changes. The runtime uses a shared
+   `pg` connection pool (`DB_POOL_MAX=5`, `DB_CONNECT_TIMEOUT_MS=5000`,
+   `DB_IDLE_TIMEOUT_MS=30000`, `DB_STATEMENT_TIMEOUT_MS=30000` by default).
+   Set these `DB_*` values only when the deployment needs different limits.
+
 3. Create the database schema and seed reference data (legal versions + plan catalog):
 
    ```bash

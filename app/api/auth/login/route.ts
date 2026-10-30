@@ -1,6 +1,6 @@
 import { verifyPassword } from "better-auth/crypto";
 import { and, eq } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, isDatabaseUnavailable } from "@/db";
 import { accounts, securityEvents, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { issueOtp } from "@/lib/otp";
@@ -12,6 +12,15 @@ import { loginSchema } from "@/lib/validation";
  * No session is granted until the OTP is verified.
  */
 export async function POST(req: Request) {
+  try {
+    return await login(req);
+  } catch (error) {
+    if (!isDatabaseUnavailable(error)) throw error;
+    return apiError("Service temporarily unavailable. Please try again shortly.", 503);
+  }
+}
+
+async function login(req: Request) {
   const rl = await rateLimit("login", clientIp(req) ?? "unknown", 10, "10 m");
   if (!rl.allowed) {
     return apiError("Too many login attempts. Please try again later.", 429, undefined, rateLimitHeaders(rl, 10));
