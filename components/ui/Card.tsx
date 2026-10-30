@@ -61,7 +61,7 @@ export function Badge({
 export function StatusBadge({ status }: { status: string }) {
   const normalized = status.toLowerCase().replace(/_/g, " ");
   const tone: BadgeTone =
-    /active|accepted|approved|completed|success|verified|sent|funded/i.test(status)
+    /active|accepted|approved|completed|credited|executed|success|verified|sent|funded/i.test(status)
       ? "success"
       : /pending|progress|review|scheduled|confirmed|processing/i.test(status)
         ? "info"

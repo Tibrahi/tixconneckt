@@ -106,6 +106,7 @@ export async function POST(req: Request) {
 const decideSchema = z.object({
   contributionId: z.string().min(1),
   decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().max(2000).optional(),
 });
 
 /** Group admin approves a contribution; threshold notifications fire on goals. */
@@ -120,6 +121,9 @@ export async function PATCH(req: Request) {
   }
   const parsed = decideSchema.safeParse(body);
   if (!parsed.success) return apiError("Invalid decision.", 400);
+  if (parsed.data.decision === "rejected" && !parsed.data.reason?.trim()) {
+    return apiError("A reason is required when rejecting a contribution.", 400);
+  }
 
   const db = getDb();
   const [contrib] = await db
@@ -150,7 +154,7 @@ export async function PATCH(req: Request) {
       entryId: contrib.ledgerEntryId!,
       decision: parsed.data.decision,
       actorId: session.user.id,
-      reason: `Contribution ${parsed.data.decision} by group admin`,
+      reason: parsed.data.reason?.trim() || `Contribution ${parsed.data.decision} by group admin`,
     });
     await db
       .update(contributions)
@@ -161,6 +165,8 @@ export async function PATCH(req: Request) {
       userId: contrib.contributorId,
       type: "wallet",
       title: `Contribution ${parsed.data.decision}`,
+      body:
+        parsed.data.decision === "rejected" ? parsed.data.reason?.trim() : undefined,
       resourceType: "wallet",
       resourceId: wallet.id,
     });

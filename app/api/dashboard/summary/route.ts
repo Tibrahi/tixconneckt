@@ -186,7 +186,7 @@ export async function GET() {
         and(
           eq(wallets.ownerType, "user"),
           eq(wallets.ownerId, userId),
-          eq(ledgerEntries.status, "approved"),
+          inArray(ledgerEntries.status, ["approved", "credited"]),
           eq(ledgerEntries.direction, "credit"),
         ),
       ),

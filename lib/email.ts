@@ -86,3 +86,59 @@ export function passwordChangedEmail(name: string): { subject: string; text: str
     text: `Hello ${name},\n\nYour password was changed successfully. Existing sessions on other devices were revoked.`,
   };
 }
+
+export interface WalletEventEmailInput {
+  memberName: string;
+  amountMinor: number;
+  currency: string;
+  status: string;
+  reference: string;
+  reason?: string;
+}
+
+function formatMajor(amountMinor: number, currency: string): string {
+  return `${(amountMinor / 100).toLocaleString("en-US")} ${currency}`;
+}
+
+/**
+ * Wallet notifications carry only member, amount, status, and reference
+ * (wallet.md §5) — never bank details or identity documents.
+ */
+export function depositDecisionEmail(input: WalletEventEmailInput): { subject: string; text: string } {
+  const approved = input.status === "approved" || input.status === "credited";
+  return {
+    subject: approved
+      ? `TIXCONNECKT deposit approved (${input.reference})`
+      : `TIXCONNECKT deposit ${input.status} (${input.reference})`,
+    text:
+      `Hello ${input.memberName},\n\n` +
+      `Your deposit of ${formatMajor(input.amountMinor, input.currency)} ` +
+      `(${input.reference}) was ${input.status}.` +
+      (input.reason ? `\n\nReason: ${input.reason}` : "") +
+      `\n\nSign in to TIXCONNECKT to view your transaction history.`,
+  };
+}
+
+export function evidenceRequestEmail(input: WalletEventEmailInput): { subject: string; text: string } {
+  return {
+    subject: `TIXCONNECKT needs more evidence (${input.reference})`,
+    text:
+      `Hello ${input.memberName},\n\n` +
+      `Your deposit of ${formatMajor(input.amountMinor, input.currency)} ` +
+      `(${input.reference}) needs additional evidence before it can be verified.` +
+      (input.reason ? `\n\nWhat is needed: ${input.reason}` : "") +
+      `\n\nSign in to TIXCONNECKT to provide it.`,
+  };
+}
+
+export function withdrawalEmail(input: WalletEventEmailInput): { subject: string; text: string } {
+  return {
+    subject: `TIXCONNECKT withdrawal ${input.status} (${input.reference})`,
+    text:
+      `Member: ${input.memberName}\n` +
+      `Amount: ${formatMajor(input.amountMinor, input.currency)}\n` +
+      `Status: ${input.status}\n` +
+      `Reference: ${input.reference}` +
+      (input.reason ? `\nNote: ${input.reason}` : ""),
+  };
+}

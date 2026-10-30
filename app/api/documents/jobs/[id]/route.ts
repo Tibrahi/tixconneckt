@@ -5,43 +5,9 @@ import { parsingJobs } from "@/db/schema";
 import { callMuseSpark } from "@/lib/ai";
 import { apiError, apiOk } from "@/lib/api-response";
 import { validateFieldName, validateFieldValue } from "@/lib/flexible-records";
+import { splitExtraction } from "@/lib/proof";
 import { getSession } from "@/lib/session";
 import { transactionProposalSchema } from "@/lib/validation";
-
-const KNOWN_TX_KEYS = new Set([
-  "amountMinor",
-  "currency",
-  "direction",
-  "reference",
-  "description",
-  "occurredAt",
-]);
-
-/**
- * Split an AI extraction into strictly-validated transaction fields plus
- * preserved extra fields (correction §5). Unknown information is kept for
- * review — never silently discarded, never trusted for money movement.
- */
-function splitExtraction(raw: unknown):
-  | { ok: true; tx: Record<string, unknown>; extra: Record<string, unknown> }
-  | { ok: false; error: string } {
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw)) {
-    return { ok: false, error: "The AI result did not match the required format." };
-  }
-  const validated = transactionProposalSchema.safeParse(raw);
-  if (!validated.success) {
-    return { ok: false, error: "The extracted data was invalid. Correct the values manually instead." };
-  }
-  const extra: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
-    if (KNOWN_TX_KEYS.has(key)) continue;
-    if (validateFieldName(key) !== null) continue;
-    if (validateFieldValue(value, 0) !== null) continue;
-    if (Object.keys(extra).length >= 50) break;
-    extra[key] = value;
-  }
-  return { ok: true, tx: { ...validated.data }, extra };
-}
 
 /**
  * Run AI extraction on a parsing job. The result is validated against a Zod
@@ -69,7 +35,8 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
       documentId: job.documentId,
       destination: job.destinationType,
     },
-    schemaHint: "transaction: { amountMinor: int, currency: 3-letter, direction: credit|debit, reference?, description?, occurredAt? }",
+    schemaHint:
+      "transaction: { amountMinor: int minor units, currency: 3-letter, direction: credit|debit, reference?: provider transaction ref, sender?, recipient?, provider?: payment provider name, paymentStatus?: e.g. completed/pending, description?, occurredAt?: ISO datetime, extractionConfidence?: 0..1 }. Extract only these fields.",
   });
 
   if (!spark.configured) {
@@ -89,7 +56,7 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     await db.update(parsingJobs).set({ status: "failed", error: split.error }).where(eq(parsingJobs.id, id));
     return apiError(split.error, 502);
   }
-  const proposed = { ...split.tx, extra: split.extra };
+  const proposed = { ...split.value.tx, extra: split.value.extra };
 
   await db
     .update(parsingJobs)

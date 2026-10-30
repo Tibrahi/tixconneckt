@@ -198,17 +198,105 @@ export const actionScheduleSchema = z.object({
 
 export type ActionScheduleInput = z.infer<typeof actionScheduleSchema>;
 
-/** AI-extracted transaction proposal — validated before any financial use. */
+/**
+ * AI-extracted transaction proposal — validated before any financial use.
+ * Only the required fields are extracted; everything else stays in `extra`
+ * for review. Members cannot edit these values directly (wallet.md FR-02).
+ */
 export const transactionProposalSchema = z.object({
   amountMinor: z.number().int().positive(),
   currency: z.string().trim().length(3),
   direction: z.enum(["credit", "debit"]),
   reference: z.string().trim().max(120).optional(),
+  sender: z.string().trim().max(200).optional(),
+  recipient: z.string().trim().max(200).optional(),
+  provider: z.string().trim().max(80).optional(),
+  paymentStatus: z.string().trim().max(60).optional(),
   description: z.string().trim().max(500).optional(),
   occurredAt: z.string().datetime({ offset: true }).optional(),
+  /** Extraction confidence 0..1; below threshold needs manual review. */
+  extractionConfidence: z.number().min(0).max(1).optional(),
 });
 
 export type TransactionProposal = z.infer<typeof transactionProposalSchema>;
+
+/** Confidence below this is flagged for manual review, never auto-trusted. */
+export const EXTRACTION_CONFIDENCE_THRESHOLD = 0.6;
+
+/** Per-member savings account configuration (wallet.md FR-06). */
+export const accountSettingsSchema = z
+  .object({
+    currency: z.string().trim().length(3).optional(),
+    savingsTargetMinor: z.number().int().positive().nullable().optional(),
+    minContributionMinor: z.number().int().positive().nullable().optional(),
+    maxContributionMinor: z.number().int().positive().nullable().optional(),
+    minWithdrawalMinor: z.number().int().positive().nullable().optional(),
+    startDate: z.string().datetime({ offset: true }).nullable().optional(),
+    targetDate: z.string().datetime({ offset: true }).nullable().optional(),
+    frequency: z.enum(["weekly", "biweekly", "monthly", "quarterly", "once"]).optional(),
+    withdrawalRules: z
+      .object({
+        cooldownDays: z.number().int().min(0).max(365).optional(),
+        requiresApproval: z.boolean().optional(),
+      })
+      .optional(),
+    notifyEmail: z.boolean().optional(),
+    notifyInApp: z.boolean().optional(),
+    visibility: z.enum(["private", "group_totals"]).optional(),
+  })
+  .refine(
+    (v) =>
+      v.minContributionMinor == null ||
+      v.maxContributionMinor == null ||
+      v.minContributionMinor <= v.maxContributionMinor,
+    { message: "Minimum contribution cannot exceed maximum contribution.", path: ["minContributionMinor"] },
+  )
+  .refine(
+    (v) =>
+      v.startDate == null ||
+      v.targetDate == null ||
+      new Date(v.startDate).getTime() <= new Date(v.targetDate).getTime(),
+    { message: "Start date cannot be after target date.", path: ["startDate"] },
+  );
+
+export type AccountSettingsInput = z.infer<typeof accountSettingsSchema>;
+
+/** Independent review decision (wallet.md FR-04). Rejection needs a reason. */
+export const reviewDecisionSchema = z
+  .object({
+    entryId: z.string().min(1),
+    decision: z.enum(["approved", "rejected", "needs_evidence"]),
+    reason: z.string().trim().max(2000).optional(),
+  })
+  .refine((v) => v.decision !== "rejected" || (v.reason?.length ?? 0) > 0, {
+    message: "A reason is required when rejecting a transaction.",
+    path: ["reason"],
+  })
+  .refine((v) => v.decision !== "needs_evidence" || (v.reason?.length ?? 0) > 0, {
+    message: "Describe what additional evidence is needed.",
+    path: ["reason"],
+  });
+
+export type ReviewDecisionInput = z.infer<typeof reviewDecisionSchema>;
+
+/** Reviewer-verified values for evidence the AI could not parse. */
+export const manualCreditSchema = z.object({
+  parsingJobId: z.string().min(1),
+  verified: transactionProposalSchema.omit({ extractionConfidence: true }),
+  reason: z.string().trim().min(3).max(2000),
+});
+
+export type ManualCreditInput = z.infer<typeof manualCreditSchema>;
+
+/** Member withdrawal request from their own wallet (wallet.md FR-08). */
+export const individualWithdrawalSchema = z.object({
+  amountMinor: z.number().int().positive(),
+  currency: z.string().trim().length(3),
+  /** Client idempotency key; the server generates one when omitted. */
+  idempotencyKey: z.string().trim().min(8).max(80).optional(),
+});
+
+export type IndividualWithdrawalInput = z.infer<typeof individualWithdrawalSchema>;
 
 export const selfFundingSchema = z.object({
   walletId: z.string().min(1).optional(),

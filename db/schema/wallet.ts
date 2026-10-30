@@ -1,4 +1,5 @@
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -34,7 +35,7 @@ export const wallets = pgTable(
   (t) => [uniqueIndex("wallet_owner_unique").on(t.ownerType, t.ownerId, t.currency)],
 );
 
-/** Auditable ledger. Balances derive from approved entries only. */
+/** Auditable ledger. Balances derive from approved/credited entries only. */
 export const ledgerEntries = pgTable(
   "ledger_entries",
   {
@@ -50,12 +51,14 @@ export const ledgerEntries = pgTable(
     currency: text("currency").notNull(),
     /** Unique human-readable reference, e.g. TX-2026-000123 */
     reference: text("reference").notNull(),
-    /** pending | approved | rejected | reversed */
+    /** pending | needs_evidence | approved | credited | rejected | cancelled | reversed */
     status: text("status").notNull().default("pending"),
     /** self_funding | contribution | provider_funding | withdrawal | transfer | fee */
     kind: text("kind").notNull(),
     relatedType: text("related_type"),
     relatedId: text("related_id"),
+    /** Provider/payment transaction reference for duplicate detection. Globally unique when present. */
+    providerRef: text("provider_ref"),
     metadata: jsonb("metadata").$type<Record<string, unknown>>().default({}),
     documentId: text("document_id"),
     createdBy: text("created_by").references(() => users.id, {
@@ -73,6 +76,7 @@ export const ledgerEntries = pgTable(
     uniqueIndex("ledger_reference_unique").on(t.reference),
     index("ledger_wallet_idx").on(t.walletId, t.status),
     index("ledger_related_idx").on(t.relatedType, t.relatedId),
+    index("ledger_provider_ref_idx").on(t.providerRef),
   ],
 );
 
@@ -174,15 +178,73 @@ export const withdrawals = pgTable(
     ledgerEntryId: text("ledger_entry_id").references(() => ledgerEntries.id, {
       onDelete: "set null",
     }),
-    /** pending | approved | rejected | executed */
+    /** pending | approved | rejected | executed | failed */
     status: text("status").notNull().default("pending"),
     decidedBy: text("decided_by").references(() => users.id, {
       onDelete: "set null",
     }),
+    /** Client-supplied idempotency key: duplicate submits return the same request. */
+    idempotencyKey: text("idempotency_key"),
+    /** Payout provider, e.g. tixlpay. */
+    provider: text("provider").notNull().default("tixlpay"),
+    /** Provider-side payout reference once submitted. */
+    providerReference: text("provider_reference"),
+    /** awaiting_review | submitted | completed | failed — provider leg of the payout. */
+    providerStatus: text("provider_status").notNull().default("awaiting_review"),
+    failureReason: text("failure_reason"),
+    submittedAt: timestamp("submitted_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),
     decidedAt: timestamp("decided_at", { withTimezone: true }),
   },
-  (t) => [index("withdrawal_wallet_idx").on(t.walletId, t.status)],
+  (t) => [
+    index("withdrawal_wallet_idx").on(t.walletId, t.status),
+    uniqueIndex("withdrawal_idempotency_unique").on(t.idempotencyKey),
+    index("withdrawal_provider_ref_idx").on(t.providerReference),
+  ],
 );
+
+/**
+ * Per-member savings account configuration (wallet.md FR-06).
+ *
+ * Minimum contribution, maximum contribution, and minimum withdrawal are
+ * independent rules — none of them is the savings target.
+ */
+export const memberAccounts = pgTable("member_accounts", {
+  userId: text("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  currency: text("currency").notNull().default("RWF"),
+  /** Savings target the member wants to reach (minor units, optional). */
+  savingsTargetMinor: integer("savings_target_minor"),
+  /** Lowest permitted contribution per transaction. */
+  minContributionMinor: integer("min_contribution_minor"),
+  /** Optional upper limit per contribution transaction. */
+  maxContributionMinor: integer("max_contribution_minor"),
+  /** Lowest permitted withdrawal amount. */
+  minWithdrawalMinor: integer("min_withdrawal_minor"),
+  startDate: timestamp("start_date", { withTimezone: true }),
+  targetDate: timestamp("target_date", { withTimezone: true }),
+  /** weekly | biweekly | monthly | quarterly | once */
+  frequency: text("frequency").notNull().default("monthly"),
+  /** { cooldownDays, requiresApproval } — withdrawal policy for this account. */
+  withdrawalRules: jsonb("withdrawal_rules")
+    .$type<{ cooldownDays?: number; requiresApproval?: boolean }>()
+    .notNull()
+    .default({}),
+  notifyEmail: boolean("notify_email").notNull().default(true),
+  notifyInApp: boolean("notify_in_app").notNull().default(true),
+  /** private | group_totals — whether this member's data feeds group totals. */
+  visibility: text("visibility").notNull().default("private"),
+  /** active | restricted | locked | closed — locked/closed is admin-only. */
+  status: text("status").notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true })
+    .notNull()
+    .defaultNow()
+    .$onUpdate(() => new Date()),
+});
+
+export type MemberAccount = typeof memberAccounts.$inferSelect;

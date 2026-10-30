@@ -6,6 +6,18 @@ export function formatMoney(amountMinor: number, currency = "USD", locale = "en-
   }).format(amountMinor / 100);
 }
 
+/** Currencies the wallet accepts for contributions and withdrawals. */
+export const SUPPORTED_CURRENCIES = ["RWF", "USD", "EUR", "GBP", "KES", "UGX", "TZS"] as const;
+export type SupportedCurrency = (typeof SUPPORTED_CURRENCIES)[number];
+
+export function normalizeCurrency(value: string): string {
+  return value.trim().toUpperCase();
+}
+
+export function isSupportedCurrency(value: string): boolean {
+  return (SUPPORTED_CURRENCIES as readonly string[]).includes(normalizeCurrency(value));
+}
+
 export function formatDateTime(date: Date | string, timeZone = "UTC", locale = "en-US"): string {
   return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
