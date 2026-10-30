@@ -319,5 +319,23 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     resourceType: "project",
     resourceId: id,
   });
+
+  // Stub post to the group's conversation: a pointer only, never the content.
+  if (project.groupId) {
+    const { conversations } = await import("@/db/schema");
+    const { postSystemMessage } = await import("@/lib/chat");
+    const [groupConv] = await db
+      .select({ id: conversations.id })
+      .from(conversations)
+      .where(and(eq(conversations.type, "group"), eq(conversations.groupId, project.groupId)))
+      .limit(1);
+    if (groupConv) {
+      await postSystemMessage(
+        groupConv.id,
+        `Analysis v${version} for "${project.title}" is ready for review.`,
+        { event: "project_analysis", projectId: id, version },
+      );
+    }
+  }
   return apiOk({ analysisId: created.id, version }, 201);
 }

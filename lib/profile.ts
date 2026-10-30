@@ -20,6 +20,7 @@ export interface OwnProfile {
   countryCode: string | null;
   category: string;
   role: string;
+  providerKind: string | null;
   educationLevel: string | null;
   objectives: string | null;
   major: string | null;
@@ -94,6 +95,7 @@ export async function getOwnProfile(userId: string): Promise<OwnProfile | null> 
     countryCode: user.countryCode,
     category: user.category,
     role: user.role,
+    providerKind: user.providerKind,
     educationLevel: profile?.educationLevel ?? null,
     objectives: profile?.objectives ?? null,
     major: profile?.major ?? null,

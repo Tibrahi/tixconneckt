@@ -32,13 +32,18 @@ export async function PATCH(req: Request) {
   const input = parsed.data;
   const db = getDb();
 
-  if (input.name || input.phone || input.country) {
+  if (input.providerKind && session.user.role !== "provider") {
+    return apiError("Only provider accounts set a provider category.", 403);
+  }
+
+  if (input.name || input.phone || input.country || input.providerKind !== undefined) {
     await db
       .update(users)
       .set({
         ...(input.name ? { name: input.name } : {}),
         ...(input.phone ? { phone: input.phone } : {}),
         ...(input.country ? { country: input.country } : {}),
+        ...(input.providerKind !== undefined ? { providerKind: input.providerKind } : {}),
       })
       .where(eq(users.id, session.user.id));
   }

@@ -36,8 +36,8 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
    npm run db:seed
    ```
 
-   For an existing database, apply `db/migrations/0001_flexible_records.sql` and
-   `db/migrations/0002_calls.sql` in order (both idempotent) or run
+   For an existing database, apply the files in `db/migrations/` in numeric
+   order (all idempotent) or run
    `npm run db:push`. No existing data is altered.
 
 4. Run the app:

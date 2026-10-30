@@ -15,12 +15,32 @@ export function callsSupported(): boolean {
 }
 
 export function iceServers(): RTCIceServer[] {
-  const configured = (process.env.NEXT_PUBLIC_STUN_URLS ?? "")
+  const stun = (process.env.NEXT_PUBLIC_STUN_URLS ?? "")
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean);
-  const urls = configured.length > 0 ? configured : ["stun:stun.l.google.com:19302"];
-  return [{ urls }];
+  const servers: RTCIceServer[] = [
+    { urls: stun.length > 0 ? stun : ["stun:stun.l.google.com:19302"] },
+  ];
+  // Optional TURN for restrictive networks (symmetric NAT). Without it,
+  // some networks cannot establish peer media — surfaced honestly in UI.
+  const turn = (process.env.NEXT_PUBLIC_TURN_URLS ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (turn.length > 0) {
+    servers.push({
+      urls: turn,
+      username: process.env.NEXT_PUBLIC_TURN_USERNAME || undefined,
+      credential: process.env.NEXT_PUBLIC_TURN_PASSWORD || undefined,
+    });
+  }
+  return servers;
+}
+
+/** True when a TURN relay is configured for restrictive networks. */
+export function turnConfigured(): boolean {
+  return (process.env.NEXT_PUBLIC_TURN_URLS ?? "").split(",").some((s) => s.trim().length > 0);
 }
 
 export async function getCallMedia(kind: "audio" | "video"): Promise<MediaStream> {

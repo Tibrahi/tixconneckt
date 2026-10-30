@@ -6,7 +6,9 @@ import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import {
   buildStorageKey,
+  MAX_UPLOAD_BYTES,
   uploadPrivateObject,
+  validateChatMediaUpload,
   validateUpload,
 } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
@@ -49,7 +51,21 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) return apiError("No file provided.", 400);
   if (!(MODULES as readonly string[]).includes(docModule)) return apiError("Unknown destination module.", 400);
 
-  const problem = validateUpload(file.type, file.size);
+  // Chat additionally accepts voice notes, video clips, and web images.
+  const chatExtra =
+    docModule === "chat" &&
+    /^(audio|video)\//.test(file.type.split(";")[0].trim().toLowerCase());
+  const chatImage =
+    docModule === "chat" && ["image/gif", "image/webp"].includes(file.type.split(";")[0].trim().toLowerCase());
+  const problem = chatExtra
+    ? validateChatMediaUpload(file.type, file.size)
+    : chatImage
+      ? file.size > MAX_UPLOAD_BYTES
+        ? "File is larger than the 10 MB limit."
+        : file.size <= 0
+          ? "File is empty."
+          : null
+      : validateUpload(file.type, file.size);
   if (problem) return apiError(problem, 400);
 
   const buffer = Buffer.from(await file.arrayBuffer());

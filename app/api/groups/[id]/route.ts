@@ -1,8 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { groupApprovals, groupMembers, groups, providerLinks, users } from "@/db/schema";
+import { conversationMembers, conversations, groupApprovals, groupMembers, groups, providerLinks, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import { postSystemMessage } from "@/lib/chat";
 import { notify } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
@@ -129,6 +130,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     emailTo: user.email,
   });
   await emitToRoom(`group:${id}`, "group:members", {});
+
+  // Sync the group's conversation: membership + a system message in history.
+  const [groupConv] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.type, "group"), eq(conversations.groupId, id)))
+    .limit(1);
+  if (groupConv) {
+    await db
+      .insert(conversationMembers)
+      .values({ conversationId: groupConv.id, userId: user.id, role: "member" })
+      .onConflictDoNothing();
+    await postSystemMessage(groupConv.id, `${user.name} joined the group.`, {
+      event: "member_joined",
+      userId: user.id,
+    });
+  }
   return apiOk({ added: true }, 201);
 }
 

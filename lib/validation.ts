@@ -86,6 +86,7 @@ export const profileUpdateSchema = z.object({
   location: z.string().trim().max(200).optional(),
   contactVisibility: z.enum(["public", "connections", "private"]).optional(),
   financialVisibility: z.enum(["private", "connections"]).optional(),
+  providerKind: z.enum(["loan", "support"]).nullable().optional(),
 });
 
 export type ProfileUpdateInput = z.infer<typeof profileUpdateSchema>;
@@ -118,6 +119,48 @@ export const conversationCreateSchema = z.object({
   memberShortIds: z.array(shortIdSchema).max(50).optional(),
   groupId: z.string().min(1).optional(),
   providerLinkId: z.string().min(1).optional(),
+});
+
+/** Shared reference attached to a chat message (project/profile/request). */
+export const chatReferenceSchema = z.object({
+  type: z.enum(["project", "profile", "request"]),
+  id: z.string().min(1).max(128),
+});
+
+/** Rich message creation: text + optional reply, attachment, reference, analysis. */
+export const chatMessageCreateSchema = z.object({
+  body: z.string().max(8000).default(""),
+  clientMessageId: z.string().trim().min(1).max(80),
+  replyToId: z.string().min(1).max(128).optional(),
+  attachmentId: z.string().min(1).max(128).optional(),
+  reference: chatReferenceSchema.optional(),
+  /** Client-shared AI analysis render (the sender's own content, like body text). */
+  analysis: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Single-emoji reaction (modifiers allowed, plain text rejected). */
+export const chatReactionSchema = z
+  .object({ emoji: z.string().trim().min(1).max(16) })
+  .refine((v) => Array.from(v.emoji).length <= 4 && /\p{Extended_Pictographic}/u.test(v.emoji), {
+    message: "Reactions must be a single emoji.",
+    path: ["emoji"],
+  });
+
+export const chatForwardSchema = z.object({
+  messageId: z.string().min(1).max(128),
+  toConversationId: z.string().min(1).max(128),
+});
+
+export const chatSettingsSchema = z.object({
+  muted: z.boolean().optional(),
+  pinned: z.boolean().optional(),
+  archived: z.boolean().optional(),
+});
+
+export const chatSummarizeSchema = z.object({
+  taskId: z.enum(["summarize_conversation", "summarize_decisions", "extract_action_items"]),
+  goal: z.string().trim().max(2000).optional(),
+  limit: z.coerce.number().int().min(10).max(200).default(100),
 });
 
 export const callCreateSchema = z.object({

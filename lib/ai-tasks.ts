@@ -99,6 +99,51 @@ export const AI_TASKS: AiTaskDef[] = [
     supported: true,
   },
   {
+    id: "summarize_conversation",
+    engine: "spark",
+    label: "Conversation summary",
+    description: "Summarize recent messages in a conversation you belong to.",
+    needs: ["goal"],
+    questions: {
+      goal: {
+        label: "What should the summary focus on?",
+        description: "Optional — leave blank for a general summary.",
+        long: true,
+      },
+    },
+    supported: true,
+  },
+  {
+    id: "summarize_decisions",
+    engine: "spark",
+    label: "Decision summary",
+    description: "Organize group decisions from recent conversation messages.",
+    needs: ["goal"],
+    questions: {
+      goal: {
+        label: "Which decisions matter here?",
+        description: "Optional — leave blank to capture all apparent decisions.",
+        long: true,
+      },
+    },
+    supported: true,
+  },
+  {
+    id: "extract_action_items",
+    engine: "spark",
+    label: "Action items",
+    description: "Extract action items from recent conversation messages.",
+    needs: ["goal"],
+    questions: {
+      goal: {
+        label: "What kind of follow-ups should it look for?",
+        description: "Optional — leave blank for general action items.",
+        long: true,
+      },
+    },
+    supported: true,
+  },
+  {
     id: "transcribe",
     engine: "voice",
     label: "Voice transcription",

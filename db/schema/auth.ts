@@ -32,6 +32,8 @@ export const users = pgTable(
     timezone: text("timezone").default("UTC"),
     /** individual | university | government | provider */
     category: text("category").notNull().default("individual"),
+    /** loan | support — provider kind, set by providers on their profile. */
+    providerKind: text("provider_kind"),
     /** user | group_admin | provider | admin — enforced server-side, never trusted from client */
     role: text("role").notNull().default("user"),
     /** pending_verification | active | deactivated | deleted */

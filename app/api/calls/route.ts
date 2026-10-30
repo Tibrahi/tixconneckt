@@ -7,6 +7,7 @@ import {
   users,
 } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import { notify } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
@@ -91,6 +92,16 @@ export async function POST(req: Request) {
     conversationId: conv.id,
     kind: call.kind,
     caller: { id: session.user.id, name: session.user.name, shortId: session.user.shortId },
+  });
+
+  // Persistent invite so an offline callee still learns about the call.
+  await notify({
+    userId: calleeId,
+    type: "call",
+    title: `Incoming ${call.kind} call`,
+    body: `${session.user.name} is calling you.`,
+    resourceType: "conversation",
+    resourceId: conv.id,
   });
 
   return apiOk(

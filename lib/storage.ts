@@ -43,6 +43,13 @@ export const ALLOWED_AUDIO_MIME_TYPES = new Set([
   "audio/wav",
   "audio/ogg",
 ]);
+export const MAX_CHAT_MEDIA_BYTES = 50 * 1024 * 1024;
+const ALLOWED_CHAT_MEDIA = new Set([
+  ...ALLOWED_AUDIO_MIME_TYPES,
+  "video/webm",
+  "video/mp4",
+  "video/quicktime",
+]);
 
 export function validateUpload(mimeType: string, sizeBytes: number): string | null {
   if (!ALLOWED_MIME_TYPES.has(mimeType)) {
@@ -68,6 +75,21 @@ export function validateAudioUpload(mimeType: string, sizeBytes: number): string
   }
   if (sizeBytes <= 0) {
     return "Audio is empty.";
+  }
+  return null;
+}
+
+/** Chat voice notes and short video clips: allowlisted types up to 50 MB. */
+export function validateChatMediaUpload(mimeType: string, sizeBytes: number): string | null {
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_CHAT_MEDIA.has(base)) {
+    return "Media type is not supported. Use a common audio or video format.";
+  }
+  if (sizeBytes > MAX_CHAT_MEDIA_BYTES) {
+    return "Media is larger than the 50 MB limit.";
+  }
+  if (sizeBytes <= 0) {
+    return "Media is empty.";
   }
   return null;
 }

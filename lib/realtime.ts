@@ -34,3 +34,28 @@ export async function emitToRoom(room: string, event: string, payload: unknown):
     return false;
   }
 }
+
+/**
+ * Genuine presence: which of these user ids hold a live socket connection
+ * right now. Returns null when the realtime server is unreachable, in which
+ * case callers must show no presence rather than a guess.
+ */
+export async function fetchPresence(userIds: string[]): Promise<string[] | null> {
+  const secret = process.env.INTERNAL_RELAY_SECRET;
+  if (!secret || userIds.length === 0) return secret ? [] : null;
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3000);
+    const params = new URLSearchParams({ ids: userIds.slice(0, 100).join(",") });
+    const res = await fetch(`${relayBase()}/internal/presence?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${secret}` },
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeout));
+    if (!res.ok) return null;
+    const data = (await res.json()) as { ok?: boolean; online?: string[] };
+    if (!data.ok || !Array.isArray(data.online)) return null;
+    return data.online;
+  } catch {
+    return null;
+  }
+}

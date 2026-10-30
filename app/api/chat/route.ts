@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, ne, notInArray, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, isNotNull, ne, notInArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   connections,
@@ -7,6 +7,7 @@ import {
   groupMembers,
   messageReads,
   messages,
+  projects,
   providerLinks,
   users,
 } from "@/db/schema";
@@ -14,19 +15,28 @@ import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import { conversationCreateSchema } from "@/lib/validation";
 
-/** List my conversations with last message and real unread counts. */
-export async function GET() {
+/**
+ * List my conversations with last message, real unread counts, categories,
+ * and per-member settings. Supports ?filter= for the navigation filters;
+ * archived conversations are hidden unless explicitly requested.
+ */
+export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const userId = session.user.id;
   const db = getDb();
+  const filter = new URL(req.url).searchParams.get("filter") ?? "all";
 
   const mine = await db
-    .select({ conversationId: conversationMembers.conversationId })
+    .select({
+      conversationId: conversationMembers.conversationId,
+      settings: conversationMembers.settings,
+    })
     .from(conversationMembers)
     .where(eq(conversationMembers.userId, userId));
   if (mine.length === 0) return apiOk({ individual: [], group: [] });
   const ids = mine.map((m) => m.conversationId);
+  const settingsByConv = new Map(mine.map((m) => [m.conversationId, m.settings as { muted?: boolean; pinned?: boolean; archived?: boolean }]));
 
   const convs = await db
     .select()
@@ -41,17 +51,45 @@ export async function GET() {
       userId: conversationMembers.userId,
       name: users.name,
       shortId: users.shortId,
+      role: users.role,
+      providerKind: users.providerKind,
     })
     .from(conversationMembers)
     .innerJoin(users, eq(users.id, conversationMembers.userId))
     .where(inArray(conversationMembers.conversationId, ids));
 
-  const membersByConv = new Map<string, Array<{ userId: string; name: string; shortId: string }>>();
+  const membersByConv = new Map<string, Array<{ userId: string; name: string; shortId: string; role: string; providerKind: string | null }>>();
   for (const m of memberRows) {
     const list = membersByConv.get(m.conversationId) ?? [];
-    list.push({ userId: m.userId, name: m.name, shortId: m.shortId });
+    list.push({ userId: m.userId, name: m.name, shortId: m.shortId, role: m.role, providerKind: m.providerKind });
     membersByConv.set(m.conversationId, list);
   }
+
+  // Project-linked conversation ids (group projects + provider-link projects).
+  const groupIds = [...new Set(convs.map((c) => c.groupId).filter((v): v is string => !!v))];
+  const projectGroups =
+    groupIds.length > 0
+      ? await db
+          .select({ groupId: projects.groupId })
+          .from(projects)
+          .where(inArray(projects.groupId, groupIds))
+      : [];
+  const projectGroupSet = new Set(projectGroups.map((p) => p.groupId));
+  const linkIds = [...new Set(convs.map((c) => c.providerLinkId).filter((v): v is string => !!v))];
+  const projectLinkRows =
+    linkIds.length > 0
+      ? await db
+          .select({ id: providerLinks.id })
+          .from(providerLinks)
+          .where(
+            and(
+              inArray(providerLinks.id, linkIds),
+              isNotNull(providerLinks.projectId),
+              ne(providerLinks.projectId, ""),
+            ),
+          )
+      : [];
+  const projectLinkSet = new Set(projectLinkRows.map((r) => r.id));
 
   const readIds = db
     .select({ id: messageReads.messageId })
@@ -61,7 +99,7 @@ export async function GET() {
   const shaped = await Promise.all(
     convs.map(async (c) => {
       const [last] = await db
-        .select({ body: messages.body, createdAt: messages.createdAt, senderId: messages.senderId })
+        .select({ body: messages.body, createdAt: messages.createdAt, senderId: messages.senderId, deletedAt: messages.deletedAt })
         .from(messages)
         .where(eq(messages.conversationId, c.id))
         .orderBy(desc(messages.createdAt))
@@ -85,6 +123,8 @@ export async function GET() {
           : others.length > 0
             ? others.map((o) => o.name).slice(0, 3).join(", ")
             : "Group conversation");
+      const peerProvider = others.find((o) => o.role === "provider");
+      const settings = settingsByConv.get(c.id) ?? {};
       return {
         id: c.id,
         type: c.type,
@@ -92,15 +132,41 @@ export async function GET() {
         groupId: c.groupId,
         updatedAt: c.updatedAt,
         unread: unread?.n ?? 0,
-        lastMessage: last ? { preview: last.body.slice(0, 120), createdAt: last.createdAt } : null,
+        lastMessage: last
+          ? {
+              preview: last.deletedAt ? "This message was deleted." : last.body.slice(0, 120),
+              createdAt: last.createdAt,
+            }
+          : null,
         memberCount: members.length,
+        peerShortId: c.type === "direct" ? (others[0]?.shortId ?? null) : null,
+        providerKind: peerProvider?.providerKind ?? null,
+        hasProject:
+          (c.groupId ? projectGroupSet.has(c.groupId) : false) ||
+          (c.providerLinkId ? projectLinkSet.has(c.providerLinkId) : false),
+        muted: settings.muted === true,
+        pinned: settings.pinned === true,
+        archived: settings.archived === true,
       };
     }),
   );
 
+  let filtered = shaped;
+  if (filter === "archived") {
+    filtered = shaped.filter((s) => s.archived);
+  } else {
+    filtered = shaped.filter((s) => !s.archived);
+    if (filter === "individual") filtered = filtered.filter((s) => s.type === "direct");
+    else if (filter === "groups") filtered = filtered.filter((s) => s.type === "group");
+    else if (filter === "providers") filtered = filtered.filter((s) => s.type === "provider");
+    else if (filter === "projects") filtered = filtered.filter((s) => s.hasProject);
+    else if (filter === "unread") filtered = filtered.filter((s) => s.unread > 0);
+  }
+  filtered.sort((a, b) => Number(b.pinned) - Number(a.pinned));
+
   return apiOk({
-    individual: shaped.filter((s) => s.type === "direct" || s.type === "provider"),
-    group: shaped.filter((s) => s.type === "group"),
+    individual: filtered.filter((s) => s.type === "direct" || s.type === "provider"),
+    group: filtered.filter((s) => s.type === "group"),
   });
 }
 
@@ -259,6 +325,27 @@ export async function POST(req: Request) {
   if (!involved && !groupOk) return apiError("This provider connection does not involve you.", 403);
 
   const otherId = link.providerId === userId ? (link.individualId ?? link.requestedBy) : link.providerId;
+
+  // Reuse the existing conversation for this provider link when present.
+  const [existingProviderConv] = await db
+    .select({ id: conversations.id })
+    .from(conversations)
+    .where(and(eq(conversations.type, "provider"), eq(conversations.providerLinkId, link.id)))
+    .limit(1);
+  if (existingProviderConv) {
+    const [alreadyMember] = await db
+      .select({ id: conversationMembers.id })
+      .from(conversationMembers)
+      .where(
+        and(
+          eq(conversationMembers.conversationId, existingProviderConv.id),
+          eq(conversationMembers.userId, userId),
+        ),
+      )
+      .limit(1);
+    if (alreadyMember) return apiOk({ conversationId: existingProviderConv.id, reused: true });
+  }
+
   const inserted = await db
     .insert(conversations)
     .values({ type: "provider", providerLinkId: link.id, createdBy: userId })

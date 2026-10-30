@@ -28,6 +28,8 @@ interface OwnProfile {
   location: string | null;
   contactVisibility: string;
   financialVisibility: string;
+  role: string;
+  providerKind: string | null;
   groupCount: number;
   connectionCount: number;
   projectCount: number;
@@ -76,6 +78,7 @@ export function OwnProfilePage() {
         location: body.data.location ?? "",
         contactVisibility: body.data.contactVisibility,
         financialVisibility: body.data.financialVisibility,
+        providerKind: body.data.providerKind ?? "",
       });
     } catch {
       setFailed(true);
@@ -108,6 +111,7 @@ export function OwnProfilePage() {
           location: draft.location || undefined,
           contactVisibility: draft.contactVisibility || undefined,
           financialVisibility: draft.financialVisibility || undefined,
+          ...(draft.providerKind !== undefined ? { providerKind: draft.providerKind || null } : {}),
         }),
       });
       const body = (await res.json()) as { ok: boolean; error?: string };
@@ -235,6 +239,19 @@ export function OwnProfilePage() {
               <TextField label="Phone" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
               <TextField label="Country" value={draft.country ?? ""} onChange={(e) => setDraft({ ...draft, country: e.target.value })} />
               <TextField label="Location" value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
+              {profile.role === "provider" ? (
+                <SelectField
+                  label="Provider category"
+                  value={draft.providerKind ?? ""}
+                  onChange={(e) => setDraft({ ...draft, providerKind: e.target.value })}
+                  options={[
+                    { value: "", label: "Not set" },
+                    { value: "loan", label: "Loan provider" },
+                    { value: "support", label: "Support provider" },
+                  ]}
+                  hint="Shown on your provider conversations."
+                />
+              ) : null}
               <SelectField
                 label="Who can see my contact details"
                 value={draft.contactVisibility ?? "connections"}
@@ -253,6 +270,9 @@ export function OwnProfilePage() {
               <div><dt className="text-neutral-600">Country</dt><dd>{profile.country ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Location</dt><dd>{profile.location ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Category</dt><dd className="capitalize">{profile.category}</dd></div>
+              {profile.role === "provider" ? (
+                <div><dt className="text-neutral-600">Provider category</dt><dd className="capitalize">{profile.providerKind ?? "Not set"}</dd></div>
+              ) : null}
             </dl>
           )}
         </Card>

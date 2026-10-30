@@ -19,6 +19,7 @@ import {
   getCallMedia,
   setTrackEnabled,
   stopStream,
+  turnConfigured,
 } from "@/lib/webrtc";
 
 /**
@@ -72,10 +73,41 @@ function formatElapsed(since: number, now: number): string {
   return `${mm}:${ss}`;
 }
 
+/** Audio/video call buttons for a 1:1 thread header. Disabled mid-call. */
+export function CallButtons({ conversationId, calleeName }: { conversationId: string; calleeName: string }) {
+  const { startCall, inCall } = useCall();
+  if (!callsSupported()) {
+    return <span className="text-xs text-neutral-500">Calls unavailable in this browser</span>;
+  }
+  return (
+    <span className="flex gap-1">
+      <Button
+        size="sm"
+        variant="secondary"
+        icon="phone"
+        disabled={inCall}
+        onClick={() => startCall(conversationId, "audio", calleeName)}
+      >
+        Audio
+      </Button>
+      <Button
+        size="sm"
+        variant="secondary"
+        icon="video"
+        disabled={inCall}
+        onClick={() => startCall(conversationId, "video", calleeName)}
+      >
+        Video
+      </Button>
+    </span>
+  );
+}
+
 export function CallProvider({ children }: { children: ReactNode }) {
   const { onEvent } = useSocket();
   const [incoming, setIncoming] = useState<IncomingCall | null>(null);
   const [active, setActive] = useState<ActiveCall | null>(null);
+  const [ringingOffline, setRingingOffline] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
@@ -134,6 +166,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       cleanupMedia();
       setActive(null);
       setIncoming(null);
+      setRingingOffline(false);
       setCallError(message ?? null);
       window.dispatchEvent(new Event("tix:calls"));
     },
@@ -189,7 +222,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed") {
-        endLocally("The connection failed — network conditions blocked the call. Hang up and try again.");
+        endLocally(
+          turnConfigured()
+            ? "The connection failed — network conditions blocked the call. Hang up and try again."
+            : "The connection failed — network conditions blocked the call, and no TURN relay is configured on this deployment.",
+        );
         decide(callId, "ended").catch(() => {});
       } else if (pc.connectionState === "disconnected") {
         setActive((a) => (a && a.callId === callId ? { ...a, phase: "connecting" } : a));
@@ -243,7 +280,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         });
         const body = (await res.json()) as {
           ok: boolean;
-          data?: { call: { id: string } };
+          data?: { call: { id: string; delivered: boolean } };
           error?: string;
         };
         if (!res.ok || !body.ok || !body.data) {
@@ -251,6 +288,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
           return;
         }
         callId = body.data.call.id;
+        setRingingOffline(body.data.call.delivered === false);
       } catch {
         setCallError("Your connection was interrupted. Please try again.");
         return;
@@ -542,7 +580,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
               <p className="text-sm">
                 <span className="font-semibold">{active.peerName}</span>{" "}
                 <span className="text-neutral-600">
-                  · {phaseLabel}
+                  · {active.phase === "ringing" && ringingOffline ? "Ringing… they may be offline; we notified them" : phaseLabel}
                   {active.phase === "active" ? ` · ${formatElapsed(active.startedAt, now)}` : ""}
                 </span>
               </p>

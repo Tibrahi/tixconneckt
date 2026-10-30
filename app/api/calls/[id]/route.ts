@@ -3,6 +3,7 @@ import { getDb } from "@/db";
 import { calls, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { resolveCallDecision, type CallActor, type CallStatus } from "@/lib/calls";
+import { postSystemMessage } from "@/lib/chat";
 import { notify } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
 import { emitToRoom } from "@/lib/realtime";
@@ -53,19 +54,36 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     status: outcome.status,
   });
 
+  const [caller] = await db
+    .select({ name: users.name })
+    .from(users)
+    .where(eq(users.id, call.callerId))
+    .limit(1);
+  const callerName = caller?.name ?? "A connection";
+
   if (outcome.notifyMissed) {
-    const [caller] = await db
-      .select({ name: users.name })
-      .from(users)
-      .where(eq(users.id, call.callerId))
-      .limit(1);
     await notify({
       userId: call.calleeId,
       type: "call",
       title: "Missed call",
-      body: `You missed a ${call.kind} call from ${caller?.name ?? "a connection"}.`,
+      body: `You missed a ${call.kind} call from ${callerName}.`,
       resourceType: "conversation",
       resourceId: call.conversationId,
+    });
+  }
+
+  // Call activity in the conversation history (terminal states only).
+  if (outcome.status === "missed" || outcome.status === "declined" || outcome.status === "ended") {
+    const label =
+      outcome.status === "missed"
+        ? `Missed ${call.kind} call from ${callerName}`
+        : outcome.status === "declined"
+          ? `${callerName}'s ${call.kind} call was declined`
+          : `${call.kind === "video" ? "Video" : "Audio"} call ended`;
+    await postSystemMessage(call.conversationId, label, {
+      event: `call_${outcome.status}`,
+      callId: call.id,
+      kind: call.kind,
     });
   }
 

@@ -13,6 +13,11 @@
  *
  * Events always reflect persisted operations; clients re-fetch authoritative
  * records from the API when an event arrives.
+ *
+ * Presence is genuine: the server counts live sockets per user id (a user
+ * with several devices counts once) and answers /internal/presence for the
+ * Next.js API only. This is single-instance state — a multi-instance
+ * deployment would need a shared store before presence stays accurate.
  */
 
 import { createServer } from "node:http";
@@ -29,6 +34,19 @@ if (!AUTH_SECRET) {
 }
 
 const key = new TextEncoder().encode(AUTH_SECRET);
+
+/** userId -> live socket count. */
+const presence = new Map();
+
+function markOnline(userId) {
+  presence.set(userId, (presence.get(userId) ?? 0) + 1);
+}
+
+function markOffline(userId) {
+  const left = (presence.get(userId) ?? 1) - 1;
+  if (left <= 0) presence.delete(userId);
+  else presence.set(userId, left);
+}
 
 const httpServer = createServer((req, res) => {
   // Internal server-to-server relay endpoint.
@@ -60,6 +78,19 @@ const httpServer = createServer((req, res) => {
   if (req.method === "GET" && req.url === "/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
     res.end(JSON.stringify({ ok: true, service: "tixconneckt-realtime" }));
+    return;
+  }
+  if (req.method === "GET" && req.url.startsWith("/internal/presence")) {
+    if (!INTERNAL_SECRET || req.headers.authorization !== `Bearer ${INTERNAL_SECRET}`) {
+      res.writeHead(401, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ ok: false }));
+      return;
+    }
+    const query = new URL(req.url, "http://localhost").searchParams.get("ids") ?? "";
+    const ids = query.split(",").map((s) => s.trim()).filter(Boolean).slice(0, 100);
+    const online = ids.filter((id) => (presence.get(id) ?? 0) > 0);
+    res.writeHead(200, { "Content-Type": "application/json" });
+    res.end(JSON.stringify({ ok: true, online }));
     return;
   }
   res.writeHead(404, { "Content-Type": "application/json" });
@@ -96,6 +127,8 @@ io.on("connection", (socket) => {
   const userId = socket.data.userId;
   // Personal room is implicit and always allowed.
   socket.join(`user:${userId}`);
+  markOnline(userId);
+  socket.on("disconnect", () => markOffline(userId));
 
   socket.on("join", async ({ room, ticket }, ack) => {
     try {
