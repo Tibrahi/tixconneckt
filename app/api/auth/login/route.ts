@@ -1,4 +1,4 @@
-import { verifyPassword } from "better-auth/crypto";
+import { verifyPassword } from "@/lib/password";
 import { and, eq } from "drizzle-orm";
 import { getDb, isDatabaseUnavailable } from "@/db";
 import { accounts, securityEvents, users } from "@/db/schema";
@@ -38,7 +38,7 @@ async function login(req: Request) {
   }
 
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.email, parsed.data.email)).limit(1);
+  const rows = await db.select().from(users).where(eq(users.email, parsed.data.email.trim().toLowerCase())).limit(1);
   const user = rows[0];
   if (!user) {
     return apiError("Incorrect email or password.", 401);

@@ -32,8 +32,8 @@ export async function retainVoiceAudio(
     return {
       retained: false,
       problem:
-        uploaded.error === "Object storage is not configured"
-          ? "Audio storage is not configured, so this recording was transcribed without being kept."
+        uploaded.error === "File storage is disabled for phase one"
+          ? "Audio uploads are unavailable in phase one, so this recording was transcribed without being kept."
           : "Audio storage failed, so this recording was transcribed without being kept.",
     };
   }

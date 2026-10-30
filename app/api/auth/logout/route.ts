@@ -9,7 +9,8 @@ import { clearSessionCookie, sessionCookieName } from "@/lib/auth-session";
 /** End the session: revoke server-side, clear cookie, redirect to login. */
 export async function POST() {
   const store = await cookies();
-  const token = store.get(sessionCookieName())?.value;
+  const cookie = store.get(sessionCookieName())?.value;
+  const token = cookie?.split(".")[0];
   if (token) {
     try {
       const db = getDb();

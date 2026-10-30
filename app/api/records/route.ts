@@ -4,7 +4,6 @@ import { getDb } from "@/db";
 import { flexibleRecords, groupMembers } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import {
-  MAX_FIELDS,
   applyDocUpdate,
   validateDocSize,
   validateFieldPath,
@@ -139,5 +138,4 @@ export async function POST(req: Request) {
   return apiOk({ record: created }, 201);
 }
 
-export { MAX_FIELDS };
 export type { DocUpdate };

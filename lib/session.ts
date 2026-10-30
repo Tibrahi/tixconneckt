@@ -1,6 +1,11 @@
-import { headers } from "next/headers";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { getAuth } from "./auth";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { and, eq, gt } from "drizzle-orm";
+import { getDb } from "@/db";
+import { sessions, users } from "@/db/schema";
+import { getConfig } from "./config";
+import { sessionCookieName } from "./auth-session";
 import { ROUTES } from "./routes";
 
 export interface SessionUser {
@@ -20,26 +25,46 @@ export async function getSession(): Promise<{
   session: { id: string; expiresAt: Date };
 } | null> {
   try {
-    const auth = getAuth();
-    const data = await auth.api.getSession({ headers: await headers() });
-    if (!data?.user || !data.session) return null;
-    const u = data.user as unknown as Record<string, unknown>;
+    const store = await cookies();
+    const cookie = store.get(sessionCookieName())?.value;
+    if (!cookie) return null;
+    const [token, suppliedSignature, ...extra] = cookie.split(".");
+    if (!token || !suppliedSignature || extra.length > 0) return null;
+    const expected = createHmac("sha256", getConfig().AUTH_SECRET).update(token).digest();
+    const actual = Buffer.from(suppliedSignature, "base64");
+    if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
+    const [row] = await getDb()
+      .select({
+        sessionId: sessions.id,
+        expiresAt: sessions.expiresAt,
+        id: users.id,
+        email: users.email,
+        name: users.name,
+        shortId: users.shortId,
+        role: users.role,
+        status: users.status,
+        category: users.category,
+        emailVerified: users.emailVerified,
+      })
+      .from(sessions)
+      .innerJoin(users, eq(users.id, sessions.userId))
+      .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
+      .limit(1);
+    if (!row) return null;
     return {
       user: {
-        id: String(u.id),
-        email: String(u.email),
-        name: String(u.name ?? ""),
-        shortId: String(u.shortId ?? ""),
-        role: String(u.role ?? "user"),
-        status: String(u.status ?? "active"),
-        category: String(u.category ?? "individual"),
-        emailVerified: Boolean(u.emailVerified),
+        id: row.id,
+        email: row.email,
+        name: row.name,
+        shortId: row.shortId,
+        role: row.role,
+        status: row.status,
+        category: row.category,
+        emailVerified: row.emailVerified,
       },
       session: {
-        id: String((data.session as unknown as Record<string, unknown>).id),
-        expiresAt: new Date(
-          String((data.session as unknown as Record<string, unknown>).expiresAt),
-        ),
+        id: row.sessionId,
+        expiresAt: row.expiresAt,
       },
     };
   } catch {

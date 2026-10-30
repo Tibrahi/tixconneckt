@@ -1,4 +1,4 @@
-import { hashPassword } from "better-auth/crypto";
+import { hashPassword } from "@/lib/password";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";

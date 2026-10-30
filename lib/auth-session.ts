@@ -1,31 +1,28 @@
 import { cookies } from "next/headers";
-import { generateRandomString, makeSignature } from "better-auth/crypto";
+import { createHmac, randomBytes } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { sessions } from "@/db/schema";
-import { isProduction } from "./config";
+import { getConfig, isProduction } from "./config";
 
-export const SESSION_COOKIE = "better-auth.session_token";
+export const SESSION_COOKIE = "tixconneckt.session_token";
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export function sessionCookieName(): string {
-  return isProduction() ? `__Secure-${SESSION_COOKIE}` : SESSION_COOKIE;
+  return isProduction() ? `__Host-${SESSION_COOKIE}` : SESSION_COOKIE;
 }
 
 /**
- * Create a persisted session and set the HttpOnly cookie.
- * Format-compatible with Better Auth so /api/auth/sign-out and
- * auth.api.getSession keep working.
+ * Create a persisted session and issue a signed, HttpOnly cookie.
  */
 export async function createSessionForUser(
   userId: string,
   opts: { ipAddress?: string; userAgent?: string } = {},
 ): Promise<{ token: string; expiresAt: Date }> {
   const db = getDb();
-  const token = generateRandomString(32, "a-z", "A-Z", "0-9");
+  const token = randomBytes(32).toString("base64url");
   const expiresAt = new Date(Date.now() + SESSION_TTL_SECONDS * 1000);
-  const secret = process.env.BETTER_AUTH_SECRET;
-  if (!secret) throw new Error("BETTER_AUTH_SECRET is required to create a session.");
+  const secret = getConfig().AUTH_SECRET;
   await db.insert(sessions).values({
     token,
     userId,
@@ -34,7 +31,8 @@ export async function createSessionForUser(
     userAgent: opts.userAgent?.slice(0, 500),
   });
   const store = await cookies();
-  store.set(sessionCookieName(), `${token}.${await makeSignature(token, secret)}`, {
+  const signature = createHmac("sha256", secret).update(token).digest("base64");
+  store.set(sessionCookieName(), `${token}.${signature}`, {
     httpOnly: true,
     secure: isProduction(),
     sameSite: "lax",

@@ -10,6 +10,9 @@ function getTransporter(): Transporter | null {
     host: process.env.SMTP_HOST ?? "smtp.gmail.com",
     port: Number(process.env.SMTP_PORT ?? 465),
     secure: Number(process.env.SMTP_PORT ?? 465) === 465,
+    connectionTimeout: 5_000,
+    greetingTimeout: 5_000,
+    socketTimeout: 15_000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,

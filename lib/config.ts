@@ -2,8 +2,7 @@ import { z } from "zod";
 
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
-  BETTER_AUTH_SECRET: z.string().min(32, "BETTER_AUTH_SECRET must be 32+ chars"),
-  BETTER_AUTH_URL: z.string().url().default("http://localhost:3000"),
+  AUTH_SECRET: z.string().min(32, "AUTH_SECRET must be 32+ chars"),
   SMTP_HOST: z.string().default("smtp.gmail.com"),
   SMTP_PORT: z.coerce.number().default(465),
   SMTP_USER: z.string().default(""),
@@ -13,16 +12,8 @@ const envSchema = z.object({
   MUSE_SPARK_API_KEY: z.string().default(""),
   MUSE_VOICE_API_URL: z.string().default(""),
   MUSE_VOICE_API_KEY: z.string().default(""),
-  TIXLPAY_API_URL: z.string().default(""),
-  TIXLPAY_API_KEY: z.string().default(""),
-  TIXLPAY_WEBHOOK_SECRET: z.string().default(""),
   UPSTASH_REDIS_REST_URL: z.string().default(""),
   UPSTASH_REDIS_REST_TOKEN: z.string().default(""),
-  S3_ENDPOINT: z.string().default(""),
-  S3_REGION: z.string().default("us-east-1"),
-  S3_BUCKET: z.string().default("tixconneckt-private"),
-  S3_ACCESS_KEY: z.string().default(""),
-  S3_SECRET_KEY: z.string().default(""),
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
   NEXT_PUBLIC_REALTIME_URL: z.string().default(""),
   REALTIME_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
@@ -38,7 +29,10 @@ let cached: AppConfig | null = null;
 /** Validate required server configuration at startup. Throws with clear errors in server logs. */
 export function getConfig(): AppConfig {
   if (cached) return cached;
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse({
+    ...process.env,
+    AUTH_SECRET: process.env.AUTH_SECRET,
+  });
   if (!parsed.success) {
     const issues = parsed.error.issues
       .map((i) => `${i.path.join(".")}: ${i.message}`)
@@ -51,7 +45,10 @@ export function getConfig(): AppConfig {
 
 /** Non-throwing check used by health endpoints and degraded-mode banners. */
 export function getConfigStatus(): { ok: boolean; missing: string[] } {
-  const parsed = envSchema.safeParse(process.env);
+  const parsed = envSchema.safeParse({
+    ...process.env,
+    AUTH_SECRET: process.env.AUTH_SECRET,
+  });
   if (parsed.success) return { ok: true, missing: [] };
   return {
     ok: false,
@@ -77,8 +74,4 @@ export function aiVoiceConfigured(): boolean {
 
 export function redisConfigured(): boolean {
   return Boolean(process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN);
-}
-
-export function storageConfigured(): boolean {
-  return Boolean(process.env.S3_ENDPOINT && process.env.S3_ACCESS_KEY && process.env.S3_SECRET_KEY);
 }

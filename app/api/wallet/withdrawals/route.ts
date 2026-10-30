@@ -10,7 +10,11 @@ import { notify, notifyMember } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession, isAdminRole } from "@/lib/session";
-import { submitPayout } from "@/lib/tixlpay";
+import {
+  submitPayout,
+  TIXLPAY_MAINTENANCE_MESSAGE,
+  TIXLPAY_UNDER_MAINTENANCE,
+} from "@/lib/tixlpay";
 import { individualWithdrawalSchema } from "@/lib/validation";
 import {
   availableBalance,
@@ -28,6 +32,7 @@ import {
  * the payout. Idempotent per idempotency key.
  */
 export async function POST(req: Request) {
+  if (TIXLPAY_UNDER_MAINTENANCE) return apiError(TIXLPAY_MAINTENANCE_MESSAGE, 503);
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const rl = await rateLimit("withdrawal", session.user.id, 10, "1 h");
@@ -217,6 +222,9 @@ export async function PATCH(req: Request) {
   }
 
   // Individual wallet: admin review, never the requester.
+  if (parsed.data.decision === "approved" && TIXLPAY_UNDER_MAINTENANCE) {
+    return apiError(TIXLPAY_MAINTENANCE_MESSAGE, 503);
+  }
   if (!isAdminRole(session.user.role)) {
     return apiError("Only administrators can approve individual withdrawals.", 403);
   }

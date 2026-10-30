@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { getConfig } from "./config";
 
 function secretKey(): Uint8Array {
-  return new TextEncoder().encode(getConfig().BETTER_AUTH_SECRET);
+  return new TextEncoder().encode(getConfig().AUTH_SECRET);
 }
 
 /** Short-lived signed recovery token (15 minutes). */

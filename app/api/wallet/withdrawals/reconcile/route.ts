@@ -5,7 +5,12 @@ import { ledgerEntries, wallets, withdrawals } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { settleWithdrawal } from "@/lib/payout";
 import { getSession, isAdminRole } from "@/lib/session";
-import { fetchPayoutStatus, submitPayout, tixlpayConfigured } from "@/lib/tixlpay";
+import {
+  fetchPayoutStatus,
+  submitPayout,
+  tixlpayConfigured,
+  TIXLPAY_MAINTENANCE_MESSAGE,
+} from "@/lib/tixlpay";
 
 const reconcileSchema = z.object({
   withdrawalId: z.string().min(1),
@@ -24,7 +29,7 @@ export async function POST(req: Request) {
     return apiError("Only administrators can reconcile payouts.", 403);
   }
   if (!tixlpayConfigured()) {
-    return apiError("TixlPay is not configured. Configure it, then reconcile again.", 503);
+    return apiError(TIXLPAY_MAINTENANCE_MESSAGE, 503);
   }
 
   let body: unknown;

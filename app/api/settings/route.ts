@@ -1,5 +1,5 @@
 import { and, desc, eq, ne } from "drizzle-orm";
-import { hashPassword, verifyPassword } from "better-auth/crypto";
+import { hashPassword, verifyPassword } from "@/lib/password";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { accounts, profiles, sessions, users } from "@/db/schema";

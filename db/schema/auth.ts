@@ -9,8 +9,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 /**
- * Better Auth core tables + application user extensions.
- * Managed through Drizzle; Better Auth reads/writes via the drizzle adapter.
+ * Application identity, credential, session, and verification records.
  */
 
 export const users = pgTable(

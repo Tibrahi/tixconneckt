@@ -59,8 +59,8 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const uploaded = await uploadPrivateObject(key, buffer, file.type || "application/octet-stream");
   if (!uploaded.ok) {
     return apiError(
-      uploaded.error === "Object storage is not configured"
-        ? "Document storage is pending configuration. Your file was not saved."
+      uploaded.error === "File storage is disabled for phase one"
+        ? "File uploads are unavailable in phase one. Your file was not saved."
         : "We couldn't store your file. Please try again.",
       502,
     );

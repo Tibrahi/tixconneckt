@@ -84,6 +84,15 @@ interface IndividualData {
   isReviewer: boolean;
 }
 
+function TixlPayMaintenanceNotice() {
+  return (
+    <div role="status" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+      <p className="font-semibold">TixlPay is under maintenance</p>
+      <p className="mt-1">Withdrawals through TixlPay are temporarily unavailable. Your wallet balances remain safe.</p>
+    </div>
+  );
+}
+
 export function WalletPage() {
   const [individual, setIndividual] = useState<IndividualData | null>(null);
   const [account, setAccount] = useState<MemberAccountRow | null>(null);
@@ -265,6 +274,7 @@ export function WalletPage() {
     return (
       <>
         <PageHeader title="Wallet" />
+        <TixlPayMaintenanceNotice />
         <LoadError onRetry={loadAll} />
       </>
     );
@@ -273,6 +283,7 @@ export function WalletPage() {
     return (
       <>
         <PageHeader title="Wallet" />
+        <TixlPayMaintenanceNotice />
         <SkeletonList rows={4} />
       </>
     );
@@ -522,6 +533,7 @@ export function WalletPage() {
   return (
     <>
       <PageHeader title="Wallet" description="Auditable balances. Nothing moves without verification and approval." />
+      <TixlPayMaintenanceNotice />
       <Tabs tabs={tabs} />
       {goalOpen ? (
         <Modal title="New savings goal" onClose={() => setGoalOpen(false)}>

@@ -8,6 +8,7 @@ export type Database = NodePgDatabase<typeof schema>;
 type DatabaseGlobal = typeof globalThis & {
   __tixconnecktDatabase?: Database;
   __tixconnecktPool?: Pool;
+  __tixconnecktDatabaseUrl?: string;
 };
 
 const databaseGlobal = globalThis as DatabaseGlobal;
@@ -35,15 +36,25 @@ function positiveInteger(value: string | undefined, fallback: number): number {
  * so the app can render degraded states instead of crashing at import time.
  */
 export function getDb(): Database {
-  if (databaseGlobal.__tixconnecktDatabase) {
+  const connectionString = resolveRuntimeDatabaseUrl();
+  if (
+    databaseGlobal.__tixconnecktDatabase &&
+    databaseGlobal.__tixconnecktDatabaseUrl === connectionString
+  ) {
     return databaseGlobal.__tixconnecktDatabase;
   }
 
+  // Next dev can reload .env without restarting the process. Replace stale
+  // pools when the connection target changes so requests use the new URL.
+  if (databaseGlobal.__tixconnecktPool) {
+    void databaseGlobal.__tixconnecktPool.end().catch(() => {});
+  }
+
   const pool = new Pool({
-    connectionString: resolveRuntimeDatabaseUrl(),
+    connectionString,
     max: positiveInteger(process.env.DB_POOL_MAX, 5),
     idleTimeoutMillis: positiveInteger(process.env.DB_IDLE_TIMEOUT_MS, 30_000),
-    connectionTimeoutMillis: positiveInteger(process.env.DB_CONNECT_TIMEOUT_MS, 5_000),
+    connectionTimeoutMillis: positiveInteger(process.env.DB_CONNECT_TIMEOUT_MS, 2_000),
     statement_timeout: positiveInteger(process.env.DB_STATEMENT_TIMEOUT_MS, 30_000),
   });
   pool.on("error", (error: Error & { code?: string }) => {
@@ -51,6 +62,7 @@ export function getDb(): Database {
   });
 
   databaseGlobal.__tixconnecktPool = pool;
+  databaseGlobal.__tixconnecktDatabaseUrl = connectionString;
   databaseGlobal.__tixconnecktDatabase = drizzle(pool, { schema });
   return databaseGlobal.__tixconnecktDatabase;
 }

@@ -10,7 +10,7 @@ Product, UI/UX, architecture, and security requirements live in `Specification/`
 
 ## Stack
 
-Next.js + React + TypeScript, Tailwind CSS, Neon PostgreSQL + Drizzle ORM, Better Auth (+ jose),
+Next.js + React + TypeScript, Tailwind CSS, Neon PostgreSQL + Drizzle ORM, app-owned auth (+ jose),
 Zod + React Hook Form, Nodemailer (Google SMTP), Socket.IO, Serwist PWA, Upstash Redis rate
 limiting, Font Awesome icons, Inter + IBM Plex Mono.
 
@@ -26,7 +26,7 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
 
    ```bash
    cp .env.example .env
-   # Fill in DATABASE_URL, BETTER_AUTH_SECRET, SMTP_*, CRON_SECRET, etc.
+   # Fill in DATABASE_URL, AUTH_SECRET, SMTP_*, and only the integrations you enable.
    ```
 
    `DATABASE_URL` must be a PostgreSQL connection URL. For Neon, use the pooled
@@ -84,7 +84,7 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
 
 ## Notes
 
-- Graceful degradation: SMTP, Muse AI, Redis, object storage, and the realtime
+- Graceful degradation: SMTP, Muse AI, Redis, and the realtime
   server are optional at runtime. Unconfigured integrations surface as explicit
   "pending" states — never fake success.
 - Private data (auth, API, dashboard) is excluded from the service-worker cache.

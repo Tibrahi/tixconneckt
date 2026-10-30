@@ -1,4 +1,4 @@
-import { hashPassword } from "better-auth/crypto";
+import { hashPassword } from "@/lib/password";
 import { eq, inArray } from "drizzle-orm";
 import { getDb, isDatabaseUnavailable } from "@/db";
 import { accounts, legalConsents, legalDocuments, profiles, users } from "@/db/schema";
