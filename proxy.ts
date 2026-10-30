@@ -11,9 +11,13 @@ export function proxy(req: NextRequest) {
   const isProtected = PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
   if (!isProtected) return NextResponse.next();
 
-  const hasSession =
-    req.cookies.has("better-auth.session_token") ||
-    req.cookies.has("__Secure-better-auth.session_token");
+  const hasSession = [
+    "tixconneckt.session_token",
+    "__Host-tixconneckt.session_token",
+    // Accept existing sessions during the cookie-name transition.
+    "better-auth.session_token",
+    "__Secure-better-auth.session_token",
+  ].some((name) => req.cookies.has(name));
   if (!hasSession) {
     const loginUrl = req.nextUrl.clone();
     loginUrl.pathname = ROUTES.login;

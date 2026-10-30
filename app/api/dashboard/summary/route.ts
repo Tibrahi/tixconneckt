@@ -1,5 +1,5 @@
 import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, isDatabaseUnavailable } from "@/db";
 import {
   connections,
   conversationMembers,
@@ -23,10 +23,18 @@ import { getSession } from "@/lib/session";
 
 /** Dashboard summary — every value from a defined database query. */
 export async function GET() {
-  const session = await getSession();
+  let session;
+  try {
+    session = await getSession({ throwOnDatabaseUnavailable: true });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return apiError("Dashboard data is temporarily unavailable. Please retry in a moment.", 503);
+    throw error;
+  }
   if (!session) return apiError("Sign in required.", 401);
   const userId = session.user.id;
   const db = getDb();
+
+  try {
 
   const [[profile], [user]] = await Promise.all([
     db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1),
@@ -223,4 +231,8 @@ export async function GET() {
     upcomingActions,
     recentNotifications,
   });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return apiError("Dashboard data is temporarily unavailable. Please retry in a moment.", 503);
+    throw error;
+  }
 }

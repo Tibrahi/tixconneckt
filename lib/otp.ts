@@ -76,8 +76,8 @@ export async function issueOtp(
     maxAttempts: String(MAX_ATTEMPTS),
   });
 
-  const { subject, text } = otpEmail(code, purpose);
-  const result = await sendEmail({ to: normalized, subject, text });
+  const { subject, text, html } = otpEmail(code, purpose);
+  const result = await sendEmail({ to: normalized, subject, text, html });
   return { ok: true, emailPending: !result.sent };
 }
 

@@ -86,6 +86,7 @@ export function isDatabaseUnavailable(error: unknown): boolean {
       message?: unknown;
       name?: unknown;
       sourceError?: unknown;
+      errors?: unknown[];
     };
     const code = typeof candidate.code === "string" ? candidate.code : "";
 
@@ -93,7 +94,12 @@ export function isDatabaseUnavailable(error: unknown): boolean {
       return true;
     }
 
-    pending.push(candidate.cause, candidate.sourceError);
+    const message = typeof candidate.message === "string" ? candidate.message.toLowerCase() : "";
+    if (message.includes("timeout exceeded when trying to connect") ||
+        message.includes("connection terminated due to connection timeout") ||
+        message.includes("connection timeout")) return true;
+
+    pending.push(candidate.cause, candidate.sourceError, ...(candidate.errors ?? []));
   }
 
   return false;

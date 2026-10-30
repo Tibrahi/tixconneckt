@@ -62,10 +62,16 @@ export async function sendEmail(input: SendEmailInput): Promise<SendEmailResult>
   }
 }
 
-export function otpEmail(code: string, purpose: string): { subject: string; text: string } {
+export function otpEmail(code: string, purpose: string): { subject: string; text: string; html: string } {
+  const purposeLabel = ({ register: "creating your account", login: "signing in", recovery: "resetting your password" } as Record<string, string>)[purpose] ?? "verifying your account";
+  const digits = [...code].map((digit) => `<td style="width:42px;height:48px;border:1px solid #d8dee8;border-radius:8px;background:#f8fafc;text-align:center;font:700 22px Arial,sans-serif;color:#172033">${digit}</td>`).join("<td style=\"width:6px\"></td>");
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "");
+  const logo = appUrl?.startsWith("https://") ? `<img src="${appUrl}/logo.png" width="40" height="40" alt="TIXCONNECKT" style="display:block;border:0">` : "";
+  const html = `<!doctype html><html><body style="margin:0;background:#f3f5f8;font-family:Arial,Helvetica,sans-serif;color:#172033"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="padding:32px 12px"><tr><td align="center"><table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width:560px;background:#fff;border:1px solid #e5e9f0;border-radius:14px"><tr><td style="padding:28px 32px 12px"><table role="presentation"><tr><td style="padding-right:12px">${logo}</td><td style="font-size:17px;font-weight:700;letter-spacing:.3px">TIXCONNECKT</td></tr></table></td></tr><tr><td style="padding:18px 32px 32px"><p style="margin:0 0 8px;color:#526078;font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase">Security verification</p><h1 style="margin:0 0 14px;font-size:24px;line-height:1.3">Confirm it’s you</h1><p style="margin:0 0 22px;color:#526078;font-size:15px;line-height:1.6">Use this code to continue ${purposeLabel}. Enter each digit on the verification screen.</p><table role="presentation" cellspacing="0" cellpadding="0" style="margin:0 auto 22px"><tr>${digits}</tr></table><p style="margin:0 0 18px;text-align:center;color:#68758b;font-size:13px">The code expires in <strong>10 minutes</strong>.</p><div style="padding:14px 16px;background:#f6f8fb;border-radius:8px;color:#526078;font-size:13px;line-height:1.5">If you did not request this code, you can safely ignore this email. Never share a verification code with anyone.</div></td></tr><tr><td style="padding:18px 32px;border-top:1px solid #e9edf2;color:#788397;font-size:12px;line-height:1.5">This is an automated account security email from TIXCONNECKT. Please do not reply. Keep your account secure by never forwarding this message.</td></tr></table><p style="margin:14px 0 0;color:#8a94a6;font-size:11px">© ${new Date().getFullYear()} TIXCONNECKT</p></td></tr></table></body></html>`;
   return {
-    subject: `TIXCONNECKT verification code for ${purpose}`,
-    text: `Your TIXCONNECKT verification code is: ${code}\n\nIt expires in 10 minutes. If you did not request this code, ignore this message.`,
+    subject: "Your TIXCONNECKT verification code",
+    text: `Confirm it’s you\n\nUse this code to continue ${purposeLabel}: ${code}\n\nIt expires in 10 minutes. If you did not request this code, ignore this email. Never share a verification code with anyone.`,
+    html,
   };
 }
 

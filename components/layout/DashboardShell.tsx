@@ -82,6 +82,7 @@ export function DashboardShell({
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
+  const [countsError, setCountsError] = useState(false);
   const router = useRouter();
 
   const loadCounts = useCallback(async () => {
@@ -89,10 +90,15 @@ export function DashboardShell({
       const res = await fetch("/api/dashboard/counts", { cache: "no-store" });
       if (res.ok) {
         const body = (await res.json()) as { ok: boolean; data?: Record<string, number> };
-        if (body.ok && body.data) setCounts(body.data);
+        if (body.ok && body.data) {
+          setCounts(body.data);
+          setCountsError(false);
+        } else setCountsError(true);
+      } else {
+        setCountsError(true);
       }
     } catch {
-      /* counts degrade to zero; pages still render */
+      setCountsError(true);
     }
   }, []);
 
@@ -234,6 +240,12 @@ export function DashboardShell({
 
         {/* Right content area */}
         <main id="tour-main" className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          {countsError ? (
+            <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+              <span>Some dashboard counts could not load. Please retry.</span>
+              <button type="button" onClick={loadCounts} className="shrink-0 font-semibold underline">Retry</button>
+            </div>
+          ) : null}
           <div className="mx-auto w-full max-w-6xl">{children}</div>
         </main>
       </div>

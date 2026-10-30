@@ -2,10 +2,10 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, isDatabaseUnavailable } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { getConfig } from "./config";
-import { sessionCookieName } from "./auth-session";
+import { LEGACY_SESSION_COOKIES, SESSION_COOKIE, sessionCookieName } from "./auth-session";
 import { ROUTES } from "./routes";
 
 export interface SessionUser {
@@ -20,13 +20,15 @@ export interface SessionUser {
 }
 
 /** Server-side session validation. Returns null when unauthenticated. */
-export async function getSession(): Promise<{
+export async function getSession(options: { throwOnDatabaseUnavailable?: boolean } = {}): Promise<{
   user: SessionUser;
   session: { id: string; expiresAt: Date };
 } | null> {
   try {
     const store = await cookies();
-    const cookie = store.get(sessionCookieName())?.value;
+    const cookie = [sessionCookieName(), SESSION_COOKIE, ...LEGACY_SESSION_COOKIES]
+      .map((name) => store.get(name)?.value)
+      .find(Boolean);
     if (!cookie) return null;
     const [token, suppliedSignature, ...extra] = cookie.split(".");
     if (!token || !suppliedSignature || extra.length > 0) return null;
@@ -67,7 +69,8 @@ export async function getSession(): Promise<{
         expiresAt: row.expiresAt,
       },
     };
-  } catch {
+  } catch (error) {
+    if (options.throwOnDatabaseUnavailable && isDatabaseUnavailable(error)) throw error;
     return null;
   }
 }

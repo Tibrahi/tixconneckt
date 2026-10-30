@@ -6,6 +6,10 @@ import { sessions } from "@/db/schema";
 import { getConfig, isProduction } from "./config";
 
 export const SESSION_COOKIE = "tixconneckt.session_token";
+export const LEGACY_SESSION_COOKIES = [
+  "better-auth.session_token",
+  "__Secure-better-auth.session_token",
+] as const;
 export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
 
 export function sessionCookieName(): string {

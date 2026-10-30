@@ -1,5 +1,5 @@
 import { and, count, eq, isNull, ne, notInArray, sql } from "drizzle-orm";
-import { getDb } from "@/db";
+import { getDb, isDatabaseUnavailable } from "@/db";
 import {
   connections,
   conversationMembers,
@@ -12,7 +12,13 @@ import { getSession } from "@/lib/session";
 
 /** Real unread counts for Chat, Notifications, and pending Conneckt requests. */
 export async function GET() {
-  const session = await getSession();
+  let session;
+  try {
+    session = await getSession({ throwOnDatabaseUnavailable: true });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return apiError("Dashboard data is temporarily unavailable. Please retry in a moment.", 503);
+    throw error;
+  }
   if (!session) return apiError("Sign in required.", 401);
   const userId = session.user.id;
   const db = getDb();
@@ -26,8 +32,9 @@ export async function GET() {
     .select({ id: messageReads.messageId })
     .from(messageReads)
     .where(eq(messageReads.userId, userId));
-  const [[unreadChat], [unreadNotifications], [pendingConnections]] =
-    await Promise.all([
+  try {
+    const [[unreadChat], [unreadNotifications], [pendingConnections]] =
+      await Promise.all([
       db
         .select({ n: count() })
         .from(messages)
@@ -53,11 +60,15 @@ export async function GET() {
             eq(connections.status, "pending"),
           ),
         ),
-    ]);
+      ]);
 
   return apiOk({
     chat: unreadChat?.n ?? 0,
     notifications: unreadNotifications?.n ?? 0,
     conneckt: pendingConnections?.n ?? 0,
   });
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return apiError("Dashboard data is temporarily unavailable. Please retry in a moment.", 503);
+    throw error;
+  }
 }
