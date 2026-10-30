@@ -131,6 +131,20 @@ export function evidenceRequestEmail(input: WalletEventEmailInput): { subject: s
   };
 }
 
+export function actionResultEmail(input: {
+  title: string;
+  outcome: "completed" | "failed";
+  detail: string;
+}): { subject: string; text: string } {
+  return {
+    subject: `TIXCONNECKT scheduled action ${input.outcome}: ${input.title}`,
+    text:
+      `Your scheduled action "${input.title}" ${input.outcome}.\n\n` +
+      `Result: ${input.detail}\n\n` +
+      `Open Actions in TIXCONNECKT to review the full history.`,
+  };
+}
+
 export function withdrawalEmail(input: WalletEventEmailInput): { subject: string; text: string } {
   return {
     subject: `TIXCONNECKT withdrawal ${input.status} (${input.reference})`,

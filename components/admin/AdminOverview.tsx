@@ -14,6 +14,9 @@ interface Overview {
   projects: number;
   pendingRequests: number;
   pendingPayments: number;
+  pendingActions: number;
+  executingActions: number;
+  failedActions: number;
   recentAudit: Array<{ id: string; action: string; createdAt: string }>;
 }
 
@@ -77,6 +80,9 @@ export function AdminOverview() {
         <Stat label="Projects" value={data.projects} href={ROUTES.adminProjects} />
         <Stat label="Pending funding requests" value={data.pendingRequests} href={ROUTES.adminRequests} />
         <Stat label="Pending payments" value={data.pendingPayments} href={ROUTES.adminSettings} />
+        <Stat label="Scheduled actions pending" value={data.pendingActions} href={ROUTES.adminAudit} />
+        <Stat label="Actions executing" value={data.executingActions} href={ROUTES.adminAudit} />
+        <Stat label="Actions failed" value={data.failedActions} href={ROUTES.adminAudit} />
       </div>
       <div className="mt-4">
         <Card

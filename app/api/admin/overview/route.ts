@@ -6,6 +6,7 @@ import {
   groups,
   payments,
   projects,
+  scheduledActions,
   users,
 } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
@@ -38,6 +39,18 @@ export async function GET() {
     .select({ n: count() })
     .from(payments)
     .where(eq(payments.status, "pending"));
+  const [pendingActions] = await db
+    .select({ n: count() })
+    .from(scheduledActions)
+    .where(eq(scheduledActions.status, "confirmed"));
+  const [executingActions] = await db
+    .select({ n: count() })
+    .from(scheduledActions)
+    .where(eq(scheduledActions.status, "executing"));
+  const [failedActions] = await db
+    .select({ n: count() })
+    .from(scheduledActions)
+    .where(eq(scheduledActions.status, "failed"));
   const recentAudit = await db
     .select()
     .from(auditLogs)
@@ -51,6 +64,9 @@ export async function GET() {
     projects: projectCount?.n ?? 0,
     pendingRequests: pendingRequests?.n ?? 0,
     pendingPayments: pendingPayments?.n ?? 0,
+    pendingActions: pendingActions?.n ?? 0,
+    executingActions: executingActions?.n ?? 0,
+    failedActions: failedActions?.n ?? 0,
     recentAudit,
   });
 }

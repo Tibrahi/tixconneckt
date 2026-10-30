@@ -194,9 +194,27 @@ export const actionScheduleSchema = z.object({
   scheduledFor: z.string().datetime({ offset: true }),
   timezone: z.string().trim().min(1).max(80),
   groupId: z.string().min(1).optional(),
+  /** Client idempotency key; double submits return the same action. */
+  idempotencyKey: z.string().trim().min(8).max(80).optional(),
 });
 
 export type ActionScheduleInput = z.infer<typeof actionScheduleSchema>;
+
+/**
+ * Composite workflow steps: a reviewed sequence of at most 5 sub-actions.
+ * Nesting workflows inside workflows is rejected structurally.
+ */
+export const workflowStepsSchema = z
+  .array(
+    z.object({
+      kind: z.enum(["message", "reminder", "profile_update"]),
+      title: z.string().trim().min(1).max(200).optional(),
+      payload: z.record(z.string(), z.unknown()),
+    }),
+  )
+  .max(5, "A workflow holds at most 5 steps.");
+
+export type WorkflowSteps = z.infer<typeof workflowStepsSchema>;
 
 /**
  * AI-extracted transaction proposal — validated before any financial use.
