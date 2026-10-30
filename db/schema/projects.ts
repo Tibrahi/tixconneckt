@@ -203,3 +203,224 @@ export const agreements = pgTable(
     index("agreement_request_idx").on(t.requestId),
   ],
 );
+
+/**
+ * Dynamic project workspace folders (Project.md §4/§7). Every project gets
+ * a root folder automatically; owners/members organize freely below it.
+ */
+export const projectFolders = pgTable(
+  "project_folders",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    parentFolderId: text("parent_folder_id"),
+    name: text("name").notNull(),
+    description: text("description"),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("project_folder_project_idx").on(t.projectId, t.parentFolderId),
+    index("project_folder_meta_gin").using("gin", t.metadata),
+  ],
+);
+
+/**
+ * Dynamic project documents (Project.md §4/§7). Structured editor JSON in
+ * contentJson; textCache is a server-derived plain-text excerpt for search
+ * and previews; binaries live in object storage via documents.
+ */
+export const projectFiles = pgTable(
+  "project_files",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    folderId: text("folder_id")
+      .notNull()
+      .references(() => projectFolders.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    /** Free-form document type named by the author (proposal, budget, ...). */
+    documentType: text("document_type").notNull().default("document"),
+    contentJson: jsonb("content_json").$type<Record<string, unknown>>().notNull().default({}),
+    textCache: text("text_cache").notNull().default(""),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    attachmentId: text("attachment_id"),
+    versionNumber: integer("version_number").notNull().default(1),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("project_file_project_idx").on(t.projectId, t.folderId),
+    index("project_file_updated_idx").on(t.projectId, t.updatedAt),
+    index("project_file_meta_gin").using("gin", t.metadata),
+  ],
+);
+
+/** Immutable version snapshots — history is preserved, never overwritten. */
+export const projectFileVersions = pgTable(
+  "project_file_versions",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    fileId: text("file_id")
+      .notNull()
+      .references(() => projectFiles.id, { onDelete: "cascade" }),
+    versionNumber: integer("version_number").notNull(),
+    title: text("title").notNull(),
+    contentJson: jsonb("content_json").$type<Record<string, unknown>>().notNull(),
+    metadata: jsonb("metadata").$type<Record<string, unknown>>().notNull().default({}),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_file_version_unique").on(t.fileId, t.versionNumber),
+    index("project_file_version_file_idx").on(t.fileId, t.versionNumber),
+  ],
+);
+
+/** Explicit project collaborators (owner | editor | viewer). */
+export const projectMembers = pgTable(
+  "project_members",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("viewer"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("project_member_unique").on(t.projectId, t.userId),
+    index("project_member_user_idx").on(t.userId),
+  ],
+);
+
+/** Append-only project activity (edits, shares, permissions, AI, responses). */
+export const projectActivity = pgTable(
+  "project_activity",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    targetType: text("target_type"),
+    targetId: text("target_id"),
+    details: jsonb("details").$type<Record<string, unknown>>().notNull().default({}),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("project_activity_project_idx").on(t.projectId, t.createdAt)],
+);
+
+/**
+ * Explicit provider shares (Project.md §9): file/folder grants scoped to a
+ * request with an optional expiry. Providers see only what is shared.
+ */
+export const projectShares = pgTable(
+  "project_shares",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    requestId: text("request_id").references(() => fundingRequests.id, {
+      onDelete: "cascade",
+    }),
+    providerId: text("provider_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    permission: text("permission").notNull().default("view"),
+    fileIds: jsonb("file_ids").$type<string[]>().notNull().default([]),
+    folderIds: jsonb("folder_ids").$type<string[]>().notNull().default([]),
+    grantedBy: text("granted_by").references(() => users.id, { onDelete: "set null" }),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    index("project_share_project_idx").on(t.projectId, t.providerId),
+    index("project_share_request_idx").on(t.requestId),
+  ],
+);
+
+/** Company / organization profiles with logos (Project.md §12). */
+export const organizations = pgTable(
+  "organizations",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    description: text("description"),
+    category: text("category"),
+    website: text("website"),
+    country: text("country"),
+    contactJson: jsonb("contact_json").$type<Record<string, unknown>>().notNull().default({}),
+    logoDocumentId: text("logo_document_id"),
+    /** public | private */
+    visibility: text("visibility").notNull().default("public"),
+    /** unverified | pending | verified */
+    verificationStatus: text("verification_status").notNull().default("unverified"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    index("organization_owner_idx").on(t.ownerId),
+    index("organization_visibility_idx").on(t.visibility),
+  ],
+);
+
+/** Verification evidence + review history (admins grant verified status). */
+export const organizationVerifications = pgTable(
+  "organization_verifications",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    evidenceDocumentIds: jsonb("evidence_document_ids").$type<string[]>().notNull().default([]),
+    note: text("note"),
+    /** pending | approved | rejected */
+    status: text("status").notNull().default("pending"),
+    reviewerId: text("reviewer_id").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("organization_verification_org_idx").on(t.organizationId, t.createdAt)],
+);

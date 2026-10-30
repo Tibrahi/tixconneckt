@@ -127,5 +127,42 @@ export async function POST(req: Request) {
       attributes: parsed.data.attributes,
     })
     .returning({ id: projects.id });
+
+  // Workspace bootstrap: root folder named for the project + invited members.
+  const { projectFolders, projectMembers } = await import("@/db/schema");
+  const { logActivity } = await import("@/lib/project-access");
+  const { notify } = await import("@/lib/notify");
+  await db.insert(projectFolders).values({
+    projectId: created.id,
+    parentFolderId: null,
+    name: parsed.data.title,
+    createdBy: session.user.id,
+  });
+  const invited: string[] = [];
+  for (const c of parsed.data.collaborators) {
+    const [user] = await db
+      .select({ id: users.id })
+      .from(users)
+      .where(eq(users.shortId, c.shortId))
+      .limit(1);
+    if (!user || user.id === session.user.id) continue;
+    await db
+      .insert(projectMembers)
+      .values({ projectId: created.id, userId: user.id, role: c.role })
+      .onConflictDoNothing();
+    invited.push(user.id);
+    await notify({
+      userId: user.id,
+      type: "project",
+      title: "Added to a project",
+      body: `${session.user.name} invited you to "${parsed.data.title}" as ${c.role}.`,
+      resourceType: "project",
+      resourceId: created.id,
+    });
+  }
+  await logActivity(created.id, session.user.id, "project.created", "project", created.id, {
+    title: parsed.data.title,
+    invited: invited.length,
+  });
   return apiOk({ projectId: created.id }, 201);
 }

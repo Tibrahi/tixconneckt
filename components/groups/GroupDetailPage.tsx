@@ -35,6 +35,7 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
   const [addOpen, setAddOpen] = useState(false);
   const [shortId, setShortId] = useState("");
   const [startingChat, setStartingChat] = useState(false);
+  const [pendingJoins, setPendingJoins] = useState<Array<{ userId: string; name: string; shortId: string }> | null>(null);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -49,9 +50,43 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
     }
   }, [groupId]);
 
+  const loadJoins = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}/members`, { cache: "no-store" });
+      const body = (await res.json()) as {
+        ok: boolean;
+        data?: { pending: Array<{ userId: string; name: string; shortId: string }> };
+      };
+      if (res.ok && body.ok && body.data) setPendingJoins(body.data.pending);
+      else setPendingJoins(null);
+    } catch {
+      setPendingJoins(null);
+    }
+  }, [groupId]);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadJoins();
+  }, [load, loadJoins]);
+
+  async function decideJoin(userId: string, decision: "approved" | "rejected") {
+    try {
+      const res = await fetch(`/api/groups/${encodeURIComponent(groupId)}/members`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, decision }),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !body.ok) {
+        setError(body.error ?? "We couldn't record your decision. Please try again.");
+        return;
+      }
+      load();
+      loadJoins();
+    } catch {
+      setError("Your connection was interrupted. Please try again.");
+    }
+  }
 
   async function addMember() {
     try {
@@ -168,6 +203,28 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
             ))}
           </ul>
         </Card>
+
+        {isAdmin && pendingJoins && pendingJoins.length > 0 ? (
+          <Card title={`Join requests (${pendingJoins.length})`}>
+            <ul className="flex flex-col gap-2">
+              {pendingJoins.map((p) => (
+                <li key={p.userId} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 p-2.5 text-sm">
+                  <Link href={ROUTES.profileById(p.shortId)} className="font-medium text-brand-700 hover:underline">
+                    {p.name} <span className="font-mono text-xs">({p.shortId})</span>
+                  </Link>
+                  <span className="flex gap-2">
+                    <Button size="sm" icon="check" onClick={() => decideJoin(p.userId, "approved")}>
+                      Approve
+                    </Button>
+                    <Button size="sm" variant="secondary" icon="xmark" onClick={() => decideJoin(p.userId, "rejected")}>
+                      Decline
+                    </Button>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Card>
+        ) : null}
 
         <Card title="Approvals">
           {detail.approvals.length === 0 ? (

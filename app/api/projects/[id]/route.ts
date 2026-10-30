@@ -171,10 +171,13 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 }
 
 const actionSchema = z.object({
-  action: z.enum(["reply", "react", "analyze", "restage", "update_attributes"]),
+  action: z.enum(["reply", "react", "analyze", "restage", "update_attributes", "update_settings"]),
   contributionId: z.string().min(1).optional(),
   body: z.string().trim().max(4000).optional(),
   stage: z.enum(["idea", "developing", "funded", "completed", "archived"]).optional(),
+  title: z.string().trim().min(4).max(200).optional(),
+  summary: z.string().trim().min(20).max(8000).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
   set: z.record(z.string(), z.unknown()).optional(),
   remove: z.array(z.string().min(1).max(256)).max(100).optional(),
 });
@@ -230,6 +233,31 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     }
     await db.update(projects).set({ stage: parsed.data.stage! }).where(eq(projects.id, id));
     return apiOk({ stage: parsed.data.stage });
+  }
+
+  // update_settings — title / summary / visibility (owner or admin).
+  if (parsed.data.action === "update_settings") {
+    if (project.ownerId !== session.user.id && session.user.role !== "admin") {
+      return apiError("Only the owner can change project settings.", 403);
+    }
+    const patch: { title?: string; summary?: string; visibility?: "public" | "private" } = {};
+    if (parsed.data.title !== undefined) patch.title = parsed.data.title;
+    if (parsed.data.summary !== undefined) patch.summary = parsed.data.summary;
+    if (parsed.data.visibility !== undefined) {
+      if (parsed.data.visibility === "private") {
+        const { hasSuperAccess } = await import("@/lib/entitlements");
+        const allowed = session.user.role === "admin" || (await hasSuperAccess(session.user.id));
+        if (!allowed) return apiError("Private projects require a Super plan.", 403);
+      }
+      patch.visibility = parsed.data.visibility;
+    }
+    if (Object.keys(patch).length === 0) return apiError("Nothing to update.", 400);
+    await db.update(projects).set(patch).where(eq(projects.id, id));
+    const { logActivity } = await import("@/lib/project-access");
+    await logActivity(id, session.user.id, "project.settings", "project", id, {
+      fields: Object.keys(patch),
+    });
+    return apiOk({ updated: true });
   }
 
   // update_attributes — dynamic project fields merged into JSONB (correction §2).

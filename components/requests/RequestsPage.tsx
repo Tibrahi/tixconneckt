@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { formatMoney } from "@/lib/currency";
@@ -8,8 +9,8 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, StatusBadge } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
-import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
-import { ErrorDialog, Modal } from "@/components/ui/Modal";
+import { SelectField } from "@/components/ui/Fields";
+import { Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
 
 interface RequestRow {
@@ -25,13 +26,12 @@ interface RequestRow {
 }
 
 export function RequestsPage() {
+  const router = useRouter();
   const [data, setData] = useState<{ outgoing: RequestRow[]; incoming: RequestRow[] } | null>(null);
   const [failed, setFailed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
-  const [providers, setProviders] = useState<Array<{ id: string; name: string; shortId: string }>>([]);
-  const [form, setForm] = useState({ projectId: "", providerId: "", amount: "", message: "" });
+  const [form, setForm] = useState({ projectId: "" });
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -54,52 +54,7 @@ export function RequestsPage() {
         if (b.ok && b.data) setProjects(b.data.items);
       })
       .catch(() => {});
-    fetch("/api/providers", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((b: { ok: boolean; data?: { providers: Array<{ id: string; name: string; shortId: string }> } }) => {
-        if (b.ok && b.data) setProviders(b.data.providers);
-      })
-      .catch(() => {});
   }, [load]);
-
-  async function submit() {
-    const minor = Math.round(Number(form.amount) * 100);
-    if (!form.projectId || !form.providerId || !Number.isInteger(minor) || minor <= 0) {
-      setError("Select a project and provider, and enter a valid amount.");
-      return;
-    }
-    try {
-      // Individual request: requesterId resolved server-side from ownership; pass my id via profile.
-      const me = await fetch("/api/profile", { cache: "no-store" }).then((r) => r.json()) as {
-        ok: boolean;
-        data?: { id: string };
-      };
-      if (!me.ok || !me.data) throw new Error();
-      const res = await fetch("/api/requests", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          projectId: form.projectId,
-          requesterType: "individual",
-          requesterId: me.data.id,
-          providerId: form.providerId,
-          amountMinor: minor,
-          currency: "USD",
-          message: form.message || undefined,
-        }),
-      });
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) {
-        setError(body.error ?? "We couldn't submit this request. Please try again.");
-        return;
-      }
-      setOpen(false);
-      setForm({ projectId: "", providerId: "", amount: "", message: "" });
-      load();
-    } catch {
-      setError("Your connection was interrupted. Please try again.");
-    }
-  }
 
   if (failed) {
     return (
@@ -172,30 +127,32 @@ export function RequestsPage() {
       {open ? (
         <Modal title="New funding request" onClose={() => setOpen(false)}>
           <div className="flex flex-col gap-3">
+            <p className="text-sm text-neutral-600">
+              Requests share project documents with the provider, so they are prepared inside the
+              project workspace — pick the project to continue there.
+            </p>
             <SelectField
               label="Project"
               value={form.projectId}
               onChange={(e) => setForm({ ...form, projectId: e.target.value })}
               options={[{ value: "", label: "Select project" }, ...projects.map((p) => ({ value: p.id, label: p.title }))]}
             />
-            <SelectField
-              label="Provider"
-              value={form.providerId}
-              onChange={(e) => setForm({ ...form, providerId: e.target.value })}
-              options={[{ value: "", label: "Select provider" }, ...providers.map((p) => ({ value: p.id, label: `${p.name} (${p.shortId})` }))]}
-            />
-            <TextField label="Amount" inputMode="decimal" value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} placeholder="500.00" />
-            <TextAreaField label="Message (optional)" value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
           </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setOpen(false)}>
               Cancel
             </Button>
-            <Button onClick={submit}>Submit request</Button>
+            <Button
+              disabled={!form.projectId}
+              onClick={() => {
+                router.push(`${ROUTES.projectById(form.projectId)}?newRequest=loan`);
+              }}
+            >
+              Continue in project
+            </Button>
           </div>
         </Modal>
       ) : null}
-      {error ? <ErrorDialog message={error} onClose={() => setError(null)} /> : null}
     </>
   );
 }

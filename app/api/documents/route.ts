@@ -13,7 +13,7 @@ import {
 } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
 
-const MODULES = ["wallet", "project", "request", "profile", "chat"] as const;
+const MODULES = ["wallet", "project", "request", "profile", "chat", "organization"] as const;
 
 /** List my uploaded documents and parsing jobs. */
 export async function GET() {

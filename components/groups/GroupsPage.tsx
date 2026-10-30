@@ -20,6 +20,15 @@ interface Group {
   createdAt: string;
 }
 
+interface DiscoverGroup {
+  id: string;
+  name: string;
+  description: string | null;
+  objective: string | null;
+  memberCount: number;
+  myStatus: string | null;
+}
+
 export function GroupsPage() {
   const router = useRouter();
   const [groups, setGroups] = useState<Group[] | null>(null);
@@ -31,6 +40,8 @@ export function GroupsPage() {
   const [objective, setObjective] = useState("");
   const [members, setMembers] = useState("");
   const [creating, setCreating] = useState(false);
+  const [discover, setDiscover] = useState<DiscoverGroup[] | null>(null);
+  const [joining, setJoining] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -45,9 +56,42 @@ export function GroupsPage() {
     }
   }, []);
 
+  const loadDiscover = useCallback(async () => {
+    try {
+      const res = await fetch("/api/groups?discover=1", { cache: "no-store" });
+      const body = (await res.json()) as { ok: boolean; data?: DiscoverGroup[] };
+      if (res.ok && body.ok && body.data) setDiscover(body.data);
+    } catch {
+      setDiscover([]);
+    }
+  }, []);
+
   useEffect(() => {
     load();
-  }, [load]);
+    loadDiscover();
+  }, [load, loadDiscover]);
+
+  async function join(id: string) {
+    setJoining(id);
+    setError(null);
+    try {
+      const res = await fetch(`/api/groups/${encodeURIComponent(id)}/join`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      const body = (await res.json()) as { ok: boolean; error?: string };
+      if (!res.ok || !body.ok) {
+        setError(body.error ?? "We couldn't send your request. Please try again.");
+        return;
+      }
+      loadDiscover();
+    } catch {
+      setError("Your connection was interrupted. Please try again.");
+    } finally {
+      setJoining(null);
+    }
+  }
 
   async function create() {
     setCreating(true);
@@ -137,6 +181,34 @@ export function GroupsPage() {
               actions={<Badge tone={g.role === "admin" ? "info" : "neutral"}>{g.role}</Badge>}
             >
               <p className="text-sm text-neutral-600">{g.objective ?? g.description ?? "No description yet."}</p>
+            </Card>
+          ))}
+        </div>
+      )}
+      <h2 className="mb-2 mt-6 text-base font-semibold text-black">Discover groups</h2>
+      {!discover ? (
+        <SkeletonList rows={2} />
+      ) : discover.length === 0 ? (
+        <p className="text-sm text-neutral-600">No other groups to join right now.</p>
+      ) : (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {discover.map((g) => (
+            <Card
+              key={g.id}
+              title={g.name}
+              actions={
+                g.myStatus === "pending" ? (
+                  <Badge tone="warning">requested</Badge>
+                ) : (
+                  <Button size="sm" variant="secondary" loading={joining === g.id} onClick={() => join(g.id)}>
+                    Ask to join
+                  </Button>
+                )
+              }
+            >
+              <p className="text-sm text-neutral-600">
+                {g.objective ?? g.description ?? "No description yet."} · {g.memberCount} member(s)
+              </p>
             </Card>
           ))}
         </div>

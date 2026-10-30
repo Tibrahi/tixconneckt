@@ -200,6 +200,11 @@ export const projectSubmitSchema = z.object({
   groupId: z.string().min(1).optional(),
   /** Optional dynamic attributes, validated as flexible fields. */
   attributes: z.record(z.string(), z.unknown()).default({}),
+  /** Collaborators invited at creation (identifier + role). */
+  collaborators: z
+    .array(z.object({ shortId: shortIdSchema, role: z.enum(["editor", "viewer"]) }))
+    .max(50)
+    .default([]),
 });
 
 export type ProjectSubmitInput = z.infer<typeof projectSubmitSchema>;
@@ -228,6 +233,115 @@ export const agreementSchema = z.object({
   requestId: z.string().min(1),
   title: z.string().trim().min(4).max(200),
   terms: z.string().trim().max(20000).optional(),
+});
+
+/** Workspace folder create/rename/move (Project.md §4). */
+export const projectFolderSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(2000).optional(),
+  parentFolderId: z.string().min(1).max(128).nullable().optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Workspace file create (title/type free-form, content structured JSON). */
+export const projectFileCreateSchema = z.object({
+  folderId: z.string().min(1).max(128),
+  title: z.string().trim().min(1).max(200),
+  documentType: z.string().trim().min(1).max(60).default("document"),
+  contentJson: z.record(z.string(), z.unknown()).optional(),
+  attachmentId: z.string().min(1).max(128).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Document save with optimistic concurrency (409 on version conflict). */
+export const projectFileSaveSchema = z.object({
+  title: z.string().trim().min(1).max(200).optional(),
+  documentType: z.string().trim().min(1).max(60).optional(),
+  contentJson: z.record(z.string(), z.unknown()),
+  baseVersion: z.number().int().positive(),
+  milestone: z.string().trim().max(120).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Collaborator invite / role change (owner | editor | viewer). */
+export const projectMemberSchema = z.object({
+  shortId: shortIdSchema,
+  role: z.enum(["owner", "editor", "viewer"]),
+});
+
+/** Provider share grant (explicit files/folders + optional expiry). */
+export const projectShareSchema = z.object({
+  providerId: z.string().min(1).max(128),
+  requestId: z.string().min(1).max(128).optional(),
+  fileIds: z.array(z.string().min(1).max(128)).max(200).default([]),
+  folderIds: z.array(z.string().min(1).max(128)).max(100).default([]),
+  accessDays: z.number().int().min(1).max(365).optional(),
+  reviewRequested: z.boolean().optional(),
+});
+
+/** Funding request with attached project documents (Project.md §9). */
+export const fundingRequestDocumentsSchema = z.object({
+  fileIds: z.array(z.string().min(1).max(128)).max(200).default([]),
+  folderIds: z.array(z.string().min(1).max(128)).max(100).default([]),
+  accessDays: z.number().int().min(1).max(365).optional(),
+});
+
+/** Provider response document (dynamic title/structure). */
+export const providerResponseSchema = z.object({
+  title: z.string().trim().min(1).max(200),
+  documentType: z.string().trim().min(1).max(60).default("response"),
+  contentJson: z.record(z.string(), z.unknown()).optional(),
+  submit: z.boolean().default(false),
+});
+
+/** Document assistant task on the active file (Project.md §6). */
+export const projectAssistSchema = z.object({
+  task: z.enum([
+    "summarize",
+    "missing_info",
+    "improve",
+    "rewrite_selection",
+    "generate_section",
+    "proposal",
+    "budget",
+    "research",
+    "loan_request",
+    "support_request",
+    "analyze_responses",
+    "compare_versions",
+    "ask",
+  ]),
+  selection: z.string().max(20000).optional(),
+  instruction: z.string().trim().max(4000).optional(),
+  versionA: z.number().int().positive().optional(),
+  versionB: z.number().int().positive().optional(),
+  question: z.string().trim().max(4000).optional(),
+  fileIds: z.array(z.string().min(1).max(128)).max(10).optional(),
+});
+
+/** Organization profile (Project.md §12). */
+export const organizationSchema = z.object({
+  name: z.string().trim().min(2).max(200),
+  description: z.string().trim().max(5000).optional(),
+  category: z.string().trim().max(120).optional(),
+  website: z.string().trim().max(300).optional(),
+  country: z.string().trim().max(120).optional(),
+  contact: z.record(z.string(), z.unknown()).optional(),
+  visibility: z.enum(["public", "private"]).optional(),
+  logoDocumentId: z.string().min(1).max(128).nullable().optional(),
+});
+
+/** Verification evidence submission. */
+export const verificationSubmitSchema = z.object({
+  evidenceDocumentIds: z.array(z.string().min(1).max(128)).min(1).max(20),
+  note: z.string().trim().max(4000).optional(),
+});
+
+/** Admin verification decision (rejection needs a reason). */
+export const verificationDecisionSchema = z.object({
+  verificationId: z.string().min(1),
+  decision: z.enum(["approved", "rejected"]),
+  reason: z.string().trim().max(2000).optional(),
 });
 
 export const actionScheduleSchema = z.object({

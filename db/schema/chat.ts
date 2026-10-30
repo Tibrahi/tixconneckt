@@ -23,6 +23,8 @@ export const conversations = pgTable(
       onDelete: "cascade",
     }),
     providerLinkId: text("provider_link_id"),
+    /** Structured negotiation thread for one funding request (Project.md §8). */
+    requestId: text("request_id"),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -37,6 +39,7 @@ export const conversations = pgTable(
   (t) => [
     index("conversation_group_idx").on(t.groupId),
     index("conversation_updated_idx").on(t.updatedAt),
+    uniqueIndex("conversation_request_unique").on(t.requestId),
   ],
 );
 

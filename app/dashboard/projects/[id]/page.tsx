@@ -1,8 +1,8 @@
-import { ProjectDetailPage } from "@/components/projects/ProjectDetailPage";
+import { WorkspacePage } from "@/components/projects/WorkspacePage";
 
 export const instant = false;
 
 export default async function ProjectRoute({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <ProjectDetailPage projectId={id} />;
+  return <WorkspacePage projectId={id} />;
 }

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { groupMembers, groups, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
@@ -7,11 +7,45 @@ import { getSession } from "@/lib/session";
 import { groupCreateSchema, shortIdSchema } from "@/lib/validation";
 import { notify } from "@/lib/notify";
 
-/** Groups the current user belongs to. */
-export async function GET() {
+/** Groups the current user belongs to. ?discover=1 lists joinable groups. */
+export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const db = getDb();
+  const url = new URL(req.url);
+  if (url.searchParams.get("discover") === "1") {
+    const mine = await db
+      .select({ groupId: groupMembers.groupId, status: groupMembers.status })
+      .from(groupMembers)
+      .where(eq(groupMembers.userId, session.user.id));
+    const statusByGroup = new Map(mine.map((m) => [m.groupId, m.status]));
+    const all = await db
+      .select({
+        id: groups.id,
+        name: groups.name,
+        description: groups.description,
+        objective: groups.objective,
+        createdAt: groups.createdAt,
+      })
+      .from(groups)
+      .orderBy(desc(groups.createdAt))
+      .limit(100);
+    const counts = await db
+      .select({ groupId: groupMembers.groupId, n: count() })
+      .from(groupMembers)
+      .where(eq(groupMembers.status, "active"))
+      .groupBy(groupMembers.groupId);
+    const countByGroup = new Map(counts.map((c) => [c.groupId, c.n]));
+    return apiOk(
+      all
+        .filter((g) => statusByGroup.get(g.id) !== "active")
+        .map((g) => ({
+          ...g,
+          memberCount: countByGroup.get(g.id) ?? 0,
+          myStatus: statusByGroup.get(g.id) ?? null,
+        })),
+    );
+  }
   const rows = await db
     .select({
       id: groups.id,

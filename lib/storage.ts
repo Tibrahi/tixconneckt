@@ -79,6 +79,69 @@ export function validateAudioUpload(mimeType: string, sizeBytes: number): string
   return null;
 }
 
+const ALLOWED_PROJECT_MIME_TYPES = new Set([
+  "application/pdf",
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "text/plain",
+  "text/markdown",
+  "text/csv",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]);
+
+/**
+ * Magic-byte sniffing: never trust the client-provided MIME type alone.
+ * Returns the detected base type, or null when the content is unknown.
+ */
+export function sniffContentKind(buffer: Buffer | Uint8Array): string | null {
+  const b = buffer instanceof Buffer ? buffer : Buffer.from(buffer);
+  if (b.length < 4) return null;
+  if (b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) return "image/png";
+  if (b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return "image/jpeg";
+  if (b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) return "image/gif";
+  if (b[0] === 0x52 && b[1] === 0x49 && b[2] === 0x46 && b[3] === 0x46 && b.length > 12 && b[8] === 0x57 && b[9] === 0x45 && b[10] === 0x42 && b[11] === 0x50) {
+    return "image/webp";
+  }
+  if (b[0] === 0x25 && b[1] === 0x50 && b[2] === 0x44 && b[3] === 0x46) return "application/pdf";
+  if (b[0] === 0x50 && b[1] === 0x4b && b[2] === 0x03 && b[3] === 0x04) return "application/zip";
+  // Plain text: no NUL bytes in the first 8 KB.
+  const head = b.subarray(0, Math.min(b.length, 8192));
+  if (!head.includes(0)) return "text/plain";
+  return null;
+}
+
+/**
+ * Project uploads: documents, spreadsheets, text, CSV, and images.
+ * The claimed MIME type must match the sniffed content kind.
+ */
+export function validateProjectUpload(
+  mimeType: string,
+  sizeBytes: number,
+  buffer: Buffer | Uint8Array,
+): string | null {
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_PROJECT_MIME_TYPES.has(base)) {
+    return "File type is not supported. Use PDF, DOCX, XLSX, TXT, Markdown, CSV, or an image.";
+  }
+  if (sizeBytes > MAX_UPLOAD_BYTES) return "File is larger than the 10 MB limit.";
+  if (sizeBytes <= 0) return "File is empty.";
+  const sniffed = sniffContentKind(buffer);
+  if (!sniffed) return "The file content could not be recognized.";
+  if (base === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" || base === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet") {
+    if (sniffed !== "application/zip") return "That file is not a valid Office document.";
+    return null;
+  }
+  if (base === "text/markdown" || base === "text/csv") {
+    if (sniffed !== "text/plain") return "That file is not plain text.";
+    return null;
+  }
+  if (sniffed !== base) return "The file content does not match its type.";
+  return null;
+}
+
 /** Chat voice notes and short video clips: allowlisted types up to 50 MB. */
 export function validateChatMediaUpload(mimeType: string, sizeBytes: number): string | null {
   const base = mimeType.split(";")[0].trim().toLowerCase();

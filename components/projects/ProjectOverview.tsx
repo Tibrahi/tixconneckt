@@ -1,7 +1,6 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, PendingIntegration, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
@@ -35,7 +34,8 @@ interface Detail {
   canEdit: boolean;
 }
 
-export function ProjectDetailPage({ projectId }: { projectId: string }) {
+/** Idea overview, analysis, and discussion — the project's public face. */
+export function ProjectOverview({ projectId }: { projectId: string }) {
   const [detail, setDetail] = useState<Detail | null>(null);
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -109,45 +109,34 @@ export function ProjectDetailPage({ projectId }: { projectId: string }) {
   }
 
   if (failed) {
-    return (
-      <>
-        <PageHeader title="Project" />
-        <LoadError message="We couldn't open this project. It may be private or removed." onRetry={load} />
-      </>
-    );
+    return <LoadError message="We couldn't open this project. It may be private or removed." onRetry={load} />;
   }
   if (!detail) {
-    return (
-      <>
-        <PageHeader title="Project" />
-        <SkeletonList rows={4} />
-      </>
-    );
+    return <SkeletonList rows={4} />;
   }
 
   return (
     <>
-      <PageHeader
-        title={detail.project.title}
-        description={`by ${detail.owner?.name ?? "Unknown"} · ${detail.project.visibility} · stage: ${detail.project.stage}`}
-        actions={
-          <>
-            <Button
-              size="sm"
-              variant={detail.liked ? "primary" : "secondary"}
-              icon="thumbs-up"
-              onClick={() => act("react")}
-            >
-              {detail.reactionCount}
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <span className="text-sm text-neutral-600">
+          by {detail.owner?.name ?? "Unknown"} · {detail.project.visibility} · stage: {detail.project.stage}
+        </span>
+        <span className="flex gap-2">
+          <Button
+            size="sm"
+            variant={detail.liked ? "primary" : "secondary"}
+            icon="thumbs-up"
+            onClick={() => act("react")}
+          >
+            {detail.reactionCount}
+          </Button>
+          {detail.canEdit ? (
+            <Button size="sm" variant="secondary" icon="wand-magic-sparkles" loading={analyzing} onClick={async () => { setAnalyzing(true); await act("analyze"); setAnalyzing(false); }}>
+              Re-analyze
             </Button>
-            {detail.canEdit ? (
-              <Button size="sm" variant="secondary" icon="wand-magic-sparkles" loading={analyzing} onClick={async () => { setAnalyzing(true); await act("analyze"); setAnalyzing(false); }}>
-                Re-analyze
-              </Button>
-            ) : null}
-          </>
-        }
-      />
+          ) : null}
+        </span>
+      </div>
       {aiPending ? (
         <div className="mb-4">
           <PendingIntegration name="AI project analysis" detail={aiPending} />

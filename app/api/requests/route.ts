@@ -1,10 +1,10 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import { fundingRequests, groupMembers, projects, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { notify } from "@/lib/notify";
 import { getSession } from "@/lib/session";
-import { fundingRequestSchema } from "@/lib/validation";
+import { fundingRequestDocumentsSchema, fundingRequestSchema } from "@/lib/validation";
 
 /** My outgoing requests + incoming requests where I am the provider. */
 export async function GET() {
@@ -81,6 +81,8 @@ export async function POST(req: Request) {
   }
   const parsed = fundingRequestSchema.safeParse(body);
   if (!parsed.success) return apiError("Provide a project, recipient, and amount.", 400);
+  const docs = fundingRequestDocumentsSchema.safeParse(body);
+  if (!docs.success) return apiError("Invalid document selection.", 400);
   const input = parsed.data;
   const db = getDb();
   const userId = session.user.id;
@@ -148,7 +150,101 @@ export async function POST(req: Request) {
     });
   }
 
-  return apiOk({ requestId: created.id }, 201);
+  // Document sharing: grant the provider exactly the selected files/folders.
+  const { projectFiles, projectFolders, projectShares } = await import("@/db/schema");
+  if (docs.data.fileIds.length > 0) {
+    const rows = await db
+      .select({ id: projectFiles.id })
+      .from(projectFiles)
+      .where(and(eq(projectFiles.projectId, project.id), inArray(projectFiles.id, docs.data.fileIds)));
+    if (rows.length !== new Set(docs.data.fileIds).size) {
+      return apiError("One of the selected documents is not in this project.", 400);
+    }
+  }
+  if (docs.data.folderIds.length > 0) {
+    const rows = await db
+      .select({ id: projectFolders.id })
+      .from(projectFolders)
+      .where(and(eq(projectFolders.projectId, project.id), inArray(projectFolders.id, docs.data.folderIds)));
+    if (rows.length !== new Set(docs.data.folderIds).size) {
+      return apiError("One of the selected folders is not in this project.", 400);
+    }
+  }
+  if (docs.data.fileIds.length > 0 || docs.data.folderIds.length > 0) {
+    await db.insert(projectShares).values({
+      projectId: project.id,
+      requestId: created.id,
+      providerId,
+      permission: "view",
+      fileIds: [...new Set(docs.data.fileIds)],
+      folderIds: [...new Set(docs.data.folderIds)],
+      grantedBy: userId,
+      expiresAt: docs.data.accessDays ? new Date(Date.now() + docs.data.accessDays * 86_400_000) : null,
+    });
+    const { logActivity } = await import("@/lib/project-access");
+    await logActivity(project.id, userId, "request.submitted", "request", created.id, {
+      providerId,
+      files: docs.data.fileIds.length,
+      folders: docs.data.folderIds.length,
+    });
+  }
+
+  // Provider Responses folder for this request's response documents.
+  const [responsesFolder] = await db
+    .select({ id: projectFolders.id })
+    .from(projectFolders)
+    .where(and(eq(projectFolders.projectId, project.id), eq(projectFolders.name, "Provider Responses")))
+    .limit(1);
+  if (!responsesFolder) {
+    const { ensureRootFolder } = await import("@/lib/project-access");
+    const root = await ensureRootFolder(project.id, project.title, userId);
+    await db.insert(projectFolders).values({
+      projectId: project.id,
+      parentFolderId: root.id,
+      name: "Provider Responses",
+      description: "Response documents submitted by providers for funding requests.",
+      createdBy: userId,
+    });
+  }
+
+  // Request conversation, named for the project and provider.
+  const { conversationMembers, conversations } = await import("@/db/schema");
+  const { postSystemMessage } = await import("@/lib/chat");
+  const [conv] = await db
+    .insert(conversations)
+    .values({
+      type: "provider",
+      title: `${project.title} — ${provider?.name ?? "Provider"}`.slice(0, 200),
+      requestId: created.id,
+      createdBy: userId,
+    })
+    .returning({ id: conversations.id });
+  const memberIds = new Set<string>([providerId]);
+  if (input.requesterType === "individual") {
+    memberIds.add(input.requesterId);
+  } else {
+    const admins = await db
+      .select({ userId: groupMembers.userId })
+      .from(groupMembers)
+      .where(
+        and(
+          eq(groupMembers.groupId, input.requesterId),
+          eq(groupMembers.status, "active"),
+          eq(groupMembers.role, "admin"),
+        ),
+      );
+    for (const a of admins) memberIds.add(a.userId);
+  }
+  for (const memberId of memberIds) {
+    await db.insert(conversationMembers).values({ conversationId: conv.id, userId: memberId, role: "member" });
+  }
+  await postSystemMessage(
+    conv.id,
+    `Funding request submitted for "${project.title}" (${input.amountMinor / 100} ${input.currency}).`,
+    { event: "request_submitted", requestId: created.id, projectId: project.id },
+  );
+
+  return apiOk({ requestId: created.id, conversationId: conv.id }, 201);
 }
 
 /** Requester closes their own request. */
