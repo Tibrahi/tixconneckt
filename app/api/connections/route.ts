@@ -1,19 +1,88 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { connections, users } from "@/db/schema";
+import { connections, profiles, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import { invalidateDashboard } from "@/lib/dashboard-queries";
 import { notify } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
-import { connectionRequestSchema } from "@/lib/validation";
+import { connectionRequestSchema, projectInterestCopy } from "@/lib/validation";
 
-/** List incoming, outgoing, and accepted individual connections. */
-export async function GET() {
+/**
+ * List incoming, outgoing, and accepted individual connections.
+ * `?view=connected` returns a paginated accepted-only list with lightweight
+ * profile previews for the Connected section.
+ */
+export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const userId = session.user.id;
   const db = getDb();
+  const url = new URL(req.url);
+
+  if (url.searchParams.get("view") === "connected") {
+    const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+    const pageSize = Math.min(20, Math.max(1, Number(url.searchParams.get("pageSize") ?? 10)));
+    const where = and(
+      or(eq(connections.requesterId, userId), eq(connections.addresseeId, userId)),
+      eq(connections.status, "accepted"),
+    );
+    const rows = await db
+      .select({
+        id: connections.id,
+        createdAt: connections.createdAt,
+        requesterId: connections.requesterId,
+        addresseeId: connections.addresseeId,
+      })
+      .from(connections)
+      .where(where)
+      .orderBy(desc(connections.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+    const otherIds = [...new Set(rows.map((r) => (r.requesterId === userId ? r.addresseeId : r.requesterId)))];
+    const others =
+      otherIds.length > 0
+        ? await db
+            .select({
+              id: users.id,
+              name: users.name,
+              shortId: users.shortId,
+              country: users.country,
+              role: users.role,
+              major: profiles.major,
+              skills: profiles.skills,
+            })
+            .from(users)
+            .leftJoin(profiles, eq(profiles.userId, users.id))
+            .where(inArray(users.id, otherIds))
+        : [];
+    const byId = new Map(others.map((o) => [o.id, o]));
+    const [total] = await db.select({ n: sql<number>`COUNT(*)::int` }).from(connections).where(where);
+    return apiOk({
+      items: rows.map((r) => {
+        const otherId = r.requesterId === userId ? r.addresseeId : r.requesterId;
+        const other = byId.get(otherId);
+        return {
+          id: r.id,
+          createdAt: r.createdAt,
+          other: other
+            ? {
+                shortId: other.shortId,
+                name: other.name,
+                headline: other.major ?? null,
+                skills: (other.skills ?? []).slice(0, 5),
+                country: other.country,
+                role: other.role,
+              }
+            : { shortId: "----", name: "Unknown user", headline: null, skills: [], country: null, role: "user" },
+        };
+      }),
+      total: total?.n ?? 0,
+      page,
+      pageSize,
+    });
+  }
 
   const rows = await db
     .select({
@@ -31,13 +100,13 @@ export async function GET() {
     .orderBy(desc(connections.createdAt))
     .limit(100);
 
-  const otherIds = rows.map((r) => (r.requesterId === userId ? r.addresseeId : r.requesterId));
+  const otherIds = [...new Set(rows.map((r) => (r.requesterId === userId ? r.addresseeId : r.requesterId)))];
   const others =
     otherIds.length > 0
       ? await db
           .select({ id: users.id, name: users.name, shortId: users.shortId })
           .from(users)
-          .where(or(...otherIds.map((id) => eq(users.id, id))))
+          .where(inArray(users.id, otherIds))
       : [];
   const byId = new Map(others.map((o) => [o.id, o]));
 
@@ -86,6 +155,20 @@ export async function POST(req: Request) {
     return apiError("You cannot connect with yourself.", 400);
   }
 
+  // Project-interest context: the requester must be able to view the project
+  // (public projects are visible to every signed-in user, including private
+  // providers) and the target must own it. Privacy checks stay server-side.
+  let interestProject: { id: string; title: string } | null = null;
+  if (parsed.data.projectId) {
+    const { loadProjectWithAccess } = await import("@/lib/project-access");
+    const loaded = await loadProjectWithAccess(parsed.data.projectId, session.user.id, session.user.role);
+    if (!loaded.ok) return apiError(loaded.error, loaded.status);
+    if (loaded.project.ownerId !== target.id) {
+      return apiError("This project does not belong to that user.", 400);
+    }
+    interestProject = { id: loaded.project.id, title: loaded.project.title };
+  }
+
   const existing = await db
     .select()
     .from(connections)
@@ -113,17 +196,26 @@ export async function POST(req: Request) {
     });
   }
 
-  await notify({
-    userId: target.id,
-    type: "connection",
-    title: "New connection request",
-    body: `${session.user.name} wants to connect with you.`,
-    resourceType: "connection",
-    resourceId: session.user.id,
-    emailTo: target.email,
-  });
-  await emitToRoom(`user:${target.id}`, "connection:updated", { kind: "incoming" });
+  // Notify + realtime fan-out run concurrently: both are best-effort
+  // deliveries of an already-persisted request. Sequential awaits kept the
+  // sender stuck on loading for the sum of both latencies.
+  const copy = interestProject
+    ? projectInterestCopy(session.user.name, interestProject.title)
+    : { title: "New connection request", body: `${session.user.name} wants to connect with you.` };
+  await Promise.all([
+    notify({
+      userId: target.id,
+      type: "connection",
+      title: copy.title,
+      body: copy.body,
+      resourceType: interestProject ? "project" : "connection",
+      resourceId: interestProject ? interestProject.id : session.user.id,
+      emailTo: target.email,
+    }),
+    emitToRoom(`user:${target.id}`, "connection:updated", { kind: "incoming" }),
+  ]);
 
+  invalidateDashboard(session.user.id, target.id);
   return apiOk({ sent: true }, 201);
 }
 
@@ -166,19 +258,22 @@ export async function PATCH(req: Request) {
 
   const [requester] = await db.select().from(users).where(eq(users.id, rows[0].requesterId)).limit(1);
   if (requester) {
-    await notify({
-      userId: requester.id,
-      type: "connection",
-      title:
-        parsed.data.decision === "accepted"
-          ? `${session.user.name} accepted your request`
-          : `${session.user.name} declined your request`,
-      resourceType: "connection",
-      resourceId: rows[0].id,
-      emailTo: requester.email,
-    });
-    await emitToRoom(`user:${requester.id}`, "connection:updated", { kind: "decision" });
+    await Promise.all([
+      notify({
+        userId: requester.id,
+        type: "connection",
+        title:
+          parsed.data.decision === "accepted"
+            ? `${session.user.name} accepted your request`
+            : `${session.user.name} declined your request`,
+        resourceType: "connection",
+        resourceId: rows[0].id,
+        emailTo: requester.email,
+      }),
+      emitToRoom(`user:${requester.id}`, "connection:updated", { kind: "decision" }),
+    ]);
   }
 
+  invalidateDashboard(session.user.id, rows[0].requesterId);
   return apiOk({ decided: parsed.data.decision });
 }

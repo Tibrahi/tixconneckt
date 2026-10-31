@@ -1,8 +1,10 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { groupApprovals, groupMembers, groups, providerLinks, users } from "@/db/schema";
+import { groupApprovals, groupMembers, groups, profiles, providerLinks, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import { invalidateDashboard } from "@/lib/dashboard-queries";
+import { publicProfileFilter } from "@/lib/discovery";
 import { notify } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
@@ -14,16 +16,30 @@ const linkRequestSchema = z.object({
 });
 
 /** List eligible providers plus the caller's link requests and group approvals. */
-export async function GET() {
+export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const db = getDb();
+  const url = new URL(req.url);
+  const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
+  const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get("pageSize") ?? 50)));
 
+  // Discovery portion: public providers only. Private providers never leak
+  // into listings (enforced in SQL, not by frontend filtering).
   const providers = await db
     .select({ id: users.id, name: users.name, shortId: users.shortId, country: users.country })
     .from(users)
-    .where(and(eq(users.role, "provider"), eq(users.status, "active")))
-    .limit(50);
+    .leftJoin(profiles, eq(profiles.userId, users.id))
+    .where(
+      and(
+        eq(users.role, "provider"),
+        eq(users.status, "active"),
+        publicProfileFilter(),
+      ),
+    )
+    .orderBy(users.createdAt)
+    .limit(pageSize)
+    .offset((page - 1) * pageSize);
 
   const mine = await db
     .select()
@@ -50,9 +66,7 @@ export async function GET() {
       ? await db
           .select()
           .from(providerLinks)
-          .where(
-            or(...myGroupIds.map((id) => eq(providerLinks.groupId, id))),
-          )
+          .where(inArray(providerLinks.groupId, myGroupIds))
           .orderBy(desc(providerLinks.createdAt))
           .limit(50)
       : [];
@@ -75,14 +89,41 @@ export async function GET() {
           .innerJoin(groups, eq(groups.id, groupApprovals.groupId))
           .where(
             and(
-              or(...myGroupIds.map((id) => eq(groupApprovals.groupId, id))),
+              inArray(groupApprovals.groupId, myGroupIds),
               eq(groupApprovals.status, "pending"),
             ),
           )
           .limit(50)
       : [];
 
-  return apiOk({ providers, myLinks: mine, groupLinks, approvals, myGroupIds });
+  // Providers the caller already has a live link with (any visibility): an
+  // established relationship, not discovery — project Share/Request dialogs
+  // need these to keep working with private providers they already use.
+  const linkedIds = new Set<string>();
+  for (const link of [...mine, ...groupLinks]) {
+    if ((link.status === "pending" || link.status === "approved") && link.providerId !== session.user.id) {
+      linkedIds.add(link.providerId);
+    }
+  }
+  const publicIds = new Set(providers.map((p) => p.id));
+  const missingLinked = [...linkedIds].filter((id) => !publicIds.has(id));
+  const linkedProviders =
+    missingLinked.length > 0
+      ? await db
+          .select({ id: users.id, name: users.name, shortId: users.shortId, country: users.country })
+          .from(users)
+          .where(and(inArray(users.id, missingLinked), eq(users.status, "active")))
+      : [];
+
+  return apiOk({
+    providers: [...providers, ...linkedProviders],
+    myLinks: mine,
+    groupLinks,
+    approvals,
+    myGroupIds,
+    page,
+    pageSize,
+  });
 }
 
 /**
@@ -149,6 +190,7 @@ export async function POST(req: Request) {
       resourceId: inserted[0].id,
       emailTo: provider.email,
     });
+    invalidateDashboard(session.user.id, provider.id);
     return apiOk({ linkId: inserted[0].id }, 201);
   }
 
@@ -179,24 +221,30 @@ export async function POST(req: Request) {
     })
     .returning({ id: groupApprovals.id });
 
-  // Notify group admins.
+  // Notify group admins + realtime fan-out concurrently: deliveries of an
+  // already-persisted approval. Sequential awaits stacked SMTP/socket
+  // latencies onto the requester's loading state.
   const admins = await db
     .select({ userId: groupMembers.userId })
     .from(groupMembers)
     .where(and(eq(groupMembers.groupId, parsed.data.groupId), eq(groupMembers.role, "admin")));
-  for (const admin of admins) {
-    if (admin.userId === session.user.id) continue;
-    await notify({
-      userId: admin.userId,
-      type: "group",
-      title: "Provider connection needs approval",
-      body: `${session.user.name} requested a provider connection for your group.`,
-      resourceType: "group_approval",
-      resourceId: inserted[0].id,
-    });
-  }
-  await emitToRoom(`group:${parsed.data.groupId}`, "group:approval", { id: inserted[0].id });
+  await Promise.all([
+    ...admins
+      .filter((admin) => admin.userId !== session.user.id)
+      .map((admin) =>
+        notify({
+          userId: admin.userId,
+          type: "group",
+          title: "Provider connection needs approval",
+          body: `${session.user.name} requested a provider connection for your group.`,
+          resourceType: "group_approval",
+          resourceId: inserted[0].id,
+        }),
+      ),
+    emitToRoom(`group:${parsed.data.groupId}`, "group:approval", { id: inserted[0].id }),
+  ]);
 
+  invalidateDashboard(session.user.id);
   return apiOk({ approvalId: inserted[0].id }, 201);
 }
 
@@ -248,5 +296,6 @@ export async function PATCH(req: Request) {
     resourceId: rows[0].id,
   });
 
+  invalidateDashboard(rows[0].requestedBy, session.user.id);
   return apiOk({ decided: parsed.data.decision });
 }

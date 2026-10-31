@@ -1,6 +1,6 @@
 import { verifyPassword } from "@/lib/password";
 import { and, eq } from "drizzle-orm";
-import { getDb, isDatabaseUnavailable } from "@/db";
+import { getDb, isDatabaseUnavailable, withDbRead } from "@/db";
 import { accounts, securityEvents, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { issueOtp } from "@/lib/otp";
@@ -16,7 +16,9 @@ export async function POST(req: Request) {
     return await login(req);
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
-    return apiError("Service temporarily unavailable. Please try again shortly.", 503);
+    return apiError("Service temporarily unavailable. Please try again shortly.", 503, undefined, {
+      "Retry-After": "5",
+    });
   }
 }
 
@@ -38,7 +40,11 @@ async function login(req: Request) {
   }
 
   const db = getDb();
-  const rows = await db.select().from(users).where(eq(users.email, parsed.data.email.trim().toLowerCase())).limit(1);
+  // Idempotent reads: one automatic retry on connection-level failures
+  // (pool saturation, reset connections) before surfacing a 503.
+  const rows = await withDbRead(() =>
+    db.select().from(users).where(eq(users.email, parsed.data.email.trim().toLowerCase())).limit(1),
+  );
   const user = rows[0];
   if (!user) {
     return apiError("Incorrect email or password.", 401);
@@ -50,11 +56,13 @@ async function login(req: Request) {
     return apiError("This account is no longer active.", 403);
   }
 
-  const creds = await db
-    .select()
-    .from(accounts)
-    .where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")))
-    .limit(1);
+  const creds = await withDbRead(() =>
+    db
+      .select()
+      .from(accounts)
+      .where(and(eq(accounts.userId, user.id), eq(accounts.providerId, "credential")))
+      .limit(1),
+  );
   const hash = creds[0]?.password;
   if (!hash || !(await verifyPassword({ hash, password: parsed.data.password }))) {
     await db.insert(securityEvents).values({

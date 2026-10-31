@@ -1,7 +1,6 @@
-import { and, count, desc, eq, gt, inArray, isNull, ne, notInArray, or, sql } from "drizzle-orm";
-import { getDb, isDatabaseUnavailable } from "@/db";
+import { and, count, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { getDb, isDatabaseUnavailable, withDbRead } from "@/db";
 import {
-  connections,
   conversationMembers,
   fundingRequests,
   groupApprovals,
@@ -9,7 +8,6 @@ import {
   groups,
   ledgerEntries,
   matchResults,
-  messageReads,
   messages,
   notifications,
   profiles,
@@ -19,7 +17,21 @@ import {
   wallets,
 } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import {
+  getDashboardCounts,
+  summaryCache,
+  unavailableHeaders,
+} from "@/lib/dashboard-queries";
 import { getSession } from "@/lib/session";
+
+function unavailable() {
+  return apiError(
+    "Dashboard data is temporarily unavailable. Please retry in a moment.",
+    503,
+    undefined,
+    unavailableHeaders(),
+  );
+}
 
 /** Dashboard summary — every value from a defined database query. */
 export async function GET() {
@@ -27,19 +39,32 @@ export async function GET() {
   try {
     session = await getSession({ throwOnDatabaseUnavailable: true });
   } catch (error) {
-    if (isDatabaseUnavailable(error)) return apiError("Dashboard data is temporarily unavailable. Please retry in a moment.", 503);
+    if (isDatabaseUnavailable(error)) return unavailable();
     throw error;
   }
   if (!session) return apiError("Sign in required.", 401);
   const userId = session.user.id;
-  const db = getDb();
 
   try {
+    const data = await summaryCache.get(userId, () => buildSummary(userId));
+    return apiOk(data);
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) return unavailable();
+    throw error;
+  }
+}
 
-  const [[profile], [user]] = await Promise.all([
+async function buildSummary(userId: string): Promise<Record<string, unknown>> {
+  const db = getDb();
+  // Queries run sequentially (never Promise.all fan-out): each holds one
+  // pool connection briefly, so concurrent dashboard loads queue instead of
+  // exhausting the pool and failing with 503s.
+  const [profile] = await withDbRead(() =>
     db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1),
+  );
+  const [user] = await withDbRead(() =>
     db.select().from(users).where(eq(users.id, userId)).limit(1),
-  ]);
+  );
 
   // Profile completion from filled fields.
   const fields = [
@@ -56,53 +81,32 @@ export async function GET() {
   const filled = fields.filter((f) => f && String(f).trim().length > 0).length;
   const profileCompletion = Math.round((filled / fields.length) * 100);
 
-  const myConversations = db
-    .select({ id: conversationMembers.conversationId })
-    .from(conversationMembers)
-    .where(eq(conversationMembers.userId, userId));
-  const readIds = db
-    .select({ id: messageReads.messageId })
-    .from(messageReads)
-    .where(eq(messageReads.userId, userId));
-  const [
-    [unreadChat],
-    [unreadNotifications],
-    [pendingConnections],
-    [matchingOpportunities],
-    myGroups,
-    myWallets,
-    recentMessages,
-  ] = await Promise.all([
-    db
-      .select({ n: count() })
-      .from(messages)
-      .where(
-        and(
-          sql`${messages.conversationId} IN (${myConversations})`,
-          ne(messages.senderId, userId),
-          notInArray(messages.id, readIds),
-        ),
-      ),
-    db
-      .select({ n: count() })
-      .from(notifications)
-      .where(and(eq(notifications.userId, userId), isNull(notifications.readAt))),
-    db
-      .select({ n: count() })
-      .from(connections)
-      .where(and(eq(connections.addresseeId, userId), eq(connections.status, "pending"))),
+  const counts = await getDashboardCounts(db, userId);
+
+  const [matchingOpportunities] = await withDbRead(() =>
     db
       .select({ n: count() })
       .from(matchResults)
       .where(and(eq(matchResults.userId, userId), eq(matchResults.status, "suggested"))),
+  );
+  const myGroups = await withDbRead(() =>
     db
       .select({ groupId: groupMembers.groupId, role: groupMembers.role })
       .from(groupMembers)
       .where(and(eq(groupMembers.userId, userId), eq(groupMembers.status, "active"))),
+  );
+  const myWallets = await withDbRead(() =>
     db
       .select()
       .from(wallets)
       .where(and(eq(wallets.ownerType, "user"), eq(wallets.ownerId, userId))),
+  );
+
+  const myConversations = db
+    .select({ id: conversationMembers.conversationId })
+    .from(conversationMembers)
+    .where(eq(conversationMembers.userId, userId));
+  const recentMessages = await withDbRead(() =>
     db
       .select({
         id: messages.id,
@@ -116,35 +120,39 @@ export async function GET() {
       .where(sql`${messages.conversationId} IN (${myConversations})`)
       .orderBy(desc(messages.createdAt))
       .limit(5),
-  ]);
+  );
 
-  const myProjectIds = db.select({ id: projects.id }).from(projects).where(eq(projects.ownerId, userId));
   const myGroupIds = myGroups.map((g) => g.groupId);
-  const recentProjects = await db
-    .select({ id: projects.id, title: projects.title, stage: projects.stage, updatedAt: projects.updatedAt })
-    .from(projects)
-    .where(
-      or(
-        eq(projects.ownerId, userId),
-        myGroupIds.length > 0 ? inArray(projects.groupId, myGroupIds) : sql`false`,
-      ),
-    )
-    .orderBy(desc(projects.updatedAt))
-    .limit(5);
+  const recentProjects = await withDbRead(() =>
+    db
+      .select({ id: projects.id, title: projects.title, stage: projects.stage, updatedAt: projects.updatedAt })
+      .from(projects)
+      .where(
+        or(
+          eq(projects.ownerId, userId),
+          myGroupIds.length > 0 ? inArray(projects.groupId, myGroupIds) : sql`false`,
+        ),
+      )
+      .orderBy(desc(projects.updatedAt))
+      .limit(5),
+  );
 
   const [pendingApprovals] = myGroupIds.length
-    ? await db
-        .select({ n: count() })
-        .from(groupApprovals)
-        .where(
-          and(
-            inArray(groupApprovals.groupId, myGroupIds),
-            eq(groupApprovals.status, "pending"),
+    ? await withDbRead(() =>
+        db
+          .select({ n: count() })
+          .from(groupApprovals)
+          .where(
+            and(
+              inArray(groupApprovals.groupId, myGroupIds),
+              eq(groupApprovals.status, "pending"),
+            ),
           ),
-        )
+      )
     : [{ n: 0 }];
 
-  const [upcomingActions, [openFunding], recentNotifications, [approvedVolume]] = await Promise.all([
+  const myProjectIds = db.select({ id: projects.id }).from(projects).where(eq(projects.ownerId, userId));
+  const upcomingActions = await withDbRead(() =>
     db
       .select({
         id: scheduledActions.id,
@@ -163,6 +171,8 @@ export async function GET() {
       )
       .orderBy(scheduledActions.scheduledFor)
       .limit(5),
+  );
+  const [openFunding] = await withDbRead(() =>
     db
       .select({ n: count() })
       .from(fundingRequests)
@@ -172,6 +182,8 @@ export async function GET() {
           or(eq(fundingRequests.status, "pending"), eq(fundingRequests.status, "under_review")),
         ),
       ),
+  );
+  const recentNotifications = await withDbRead(() =>
     db
       .select({
         id: notifications.id,
@@ -186,6 +198,8 @@ export async function GET() {
       .where(eq(notifications.userId, userId))
       .orderBy(desc(notifications.createdAt))
       .limit(5),
+  );
+  const [approvedVolume] = await withDbRead(() =>
     db
       .select({ total: sql<number>`COALESCE(SUM(${ledgerEntries.amountMinor}), 0)` })
       .from(ledgerEntries)
@@ -198,21 +212,23 @@ export async function GET() {
           eq(ledgerEntries.direction, "credit"),
         ),
       ),
-  ]);
+  );
 
   const groupNames = myGroupIds.length
-    ? await db
-        .select({ id: groups.id, name: groups.name })
-        .from(groups)
-        .where(inArray(groups.id, myGroupIds))
+    ? await withDbRead(() =>
+        db
+          .select({ id: groups.id, name: groups.name })
+          .from(groups)
+          .where(inArray(groups.id, myGroupIds)),
+      )
     : [];
 
-  return apiOk({
+  return {
     profileCompletion,
     shortId: user?.shortId ?? "",
-    unreadChat: unreadChat?.n ?? 0,
-    unreadNotifications: unreadNotifications?.n ?? 0,
-    pendingConnections: pendingConnections?.n ?? 0,
+    unreadChat: counts.chat,
+    unreadNotifications: counts.notifications,
+    pendingConnections: counts.conneckt,
     matchingOpportunities: matchingOpportunities?.n ?? 0,
     groupCount: myGroups.length,
     groups: groupNames,
@@ -230,9 +246,5 @@ export async function GET() {
     openFunding: openFunding?.n ?? 0,
     upcomingActions,
     recentNotifications,
-  });
-  } catch (error) {
-    if (isDatabaseUnavailable(error)) return apiError("Dashboard data is temporarily unavailable. Please retry in a moment.", 503);
-    throw error;
-  }
+  };
 }

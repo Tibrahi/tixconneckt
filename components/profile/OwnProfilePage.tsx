@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { apiFetch } from "@/lib/api-client";
+import { useOperation } from "@/hooks/useOperation";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, PendingIntegration, SkeletonList } from "@/components/ui/Feedback";
@@ -51,7 +53,8 @@ export function OwnProfilePage() {
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState<Record<string, string>>({});
-  const [saving, setSaving] = useState(false);
+  const saveOp = useOperation();
+  const saving = saveOp.loading;
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [assistOpen, setAssistOpen] = useState(false);
@@ -97,11 +100,13 @@ export function OwnProfilePage() {
   }, [load]);
 
   async function save() {
-    setSaving(true);
+    // Idle → loading → success|error with duplicate-submit guard and a
+    // request timeout, so the button always clears. The draft is preserved
+    // on failure so retrying never loses entered information.
     setError(null);
     setSaved(false);
-    try {
-      const res = await fetch("/api/profile", {
+    const result = await saveOp.run(() =>
+      apiFetch<unknown>("/api/profile", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -122,19 +127,14 @@ export function OwnProfilePage() {
           profileVisibility: draft.profileVisibility || undefined,
           ...(draft.providerKind !== undefined ? { providerKind: draft.providerKind || null } : {}),
         }),
-      });
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) {
-        setError(body.error ?? "We couldn't save your changes. Your entered information is still available. Please try again.");
-        return;
-      }
+      }),
+    );
+    if (result.ok) {
       setSaved(true);
       setEditing(false);
       load();
-    } catch {
-      setError("Your connection was interrupted. Your entered information is still available. Please try again.");
-    } finally {
-      setSaving(false);
+    } else if (!result.duplicate) {
+      setError(`${result.error} Your entered information is still available. Please try again.`);
     }
   }
 
@@ -265,14 +265,27 @@ export function OwnProfilePage() {
                 />
               ) : null}
               <SelectField
-                label="Who can view my profile"
+                label={profile.role === "provider" ? "Provider profile visibility" : "Who can view my profile"}
                 value={draft.profileVisibility ?? "public"}
                 onChange={(e) => setDraft({ ...draft, profileVisibility: e.target.value })}
-                options={[
-                  { value: "public", label: "Everyone" },
-                  { value: "connections", label: "My connections" },
-                  { value: "private", label: "Only my name and photos" },
-                ]}
+                options={
+                  profile.role === "provider"
+                    ? [
+                        { value: "public", label: "Public — appear in provider discovery" },
+                        { value: "connections", label: "Connections — hidden from discovery" },
+                        { value: "private", label: "Private — hidden from discovery" },
+                      ]
+                    : [
+                        { value: "public", label: "Everyone" },
+                        { value: "connections", label: "My connections" },
+                        { value: "private", label: "Only my name and photos" },
+                      ]
+                }
+                hint={
+                  profile.role === "provider"
+                    ? "Private providers stay hidden from provider listings but can still discover public projects and receive requests."
+                    : undefined
+                }
               />
               <SelectField
                 label="Who can see my contact details"

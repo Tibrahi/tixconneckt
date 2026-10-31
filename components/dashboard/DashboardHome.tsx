@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { formatDateTime, formatMoney } from "@/lib/currency";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -69,30 +69,46 @@ function StatCard({ label, value, href, icon }: { label: string; value: number; 
 export function DashboardHome() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failed, setFailed] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const { onEvent } = useSocket();
+  const abortRef = useRef<AbortController | null>(null);
 
-  const load = useCallback(async () => {
-    setFailed(false);
+  const load = useCallback(async (options: { background?: boolean } = {}) => {
+    const background = options.background === true;
+    if (!background) setFailed(false);
+    else setRefreshing(true);
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
-      const res = await fetch("/api/dashboard/summary", { cache: "no-store" });
+      const res = await fetch("/api/dashboard/summary", { cache: "no-store", signal: controller.signal });
       if (!res.ok) throw new Error("bad status");
       const body = (await res.json()) as { ok: boolean; data?: Summary };
       if (!body.ok || !body.data) throw new Error("bad body");
       setSummary(body.data);
-    } catch {
-      setFailed(true);
+      if (!background) setFailed(false);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      // Background refreshes never replace the page with an error state.
+      if (!background) setFailed(true);
+    } finally {
+      clearTimeout(timer);
+      if (!background) setRefreshing(false);
+      else setRefreshing(false);
     }
   }, []);
 
   useEffect(() => {
     load();
+    return () => abortRef.current?.abort();
   }, [load]);
 
   useEffect(() => {
     let refreshTimer: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
       if (refreshTimer) clearTimeout(refreshTimer);
-      refreshTimer = setTimeout(() => void load(), 300);
+      refreshTimer = setTimeout(() => void load({ background: true }), 300);
     };
     const offs = [
       onEvent("notification:new", refresh),
@@ -110,7 +126,7 @@ export function DashboardHome() {
     return (
       <>
         <PageHeader title="Dashboard" />
-        <LoadError onRetry={load} />
+        <LoadError onRetry={() => load()} />
       </>
     );
   }
@@ -136,7 +152,16 @@ export function DashboardHome() {
             </>
           ) : undefined
         }
-        actions={<TourButton />}
+        actions={
+          <>
+            {refreshing ? (
+              <span className="text-xs text-neutral-500" role="status">
+                Updating…
+              </span>
+            ) : null}
+            <TourButton />
+          </>
+        }
       />
 
       <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">

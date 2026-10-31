@@ -141,29 +141,50 @@ export async function POST(req: Request) {
   });
 
   // Invite collaborators and emit notifications after the project is durable.
+  // Invites run concurrently and a single invite/notification failure must
+  // never fail the whole request: the project already exists, so a 500 here
+  // only produces duplicate projects when the user retries.
   const { logActivity } = await import("@/lib/project-access");
   const { notify } = await import("@/lib/notify");
   const invited: string[] = [];
-  for (const c of parsed.data.collaborators) {
-    const [user] = await db
-      .select({ id: users.id })
-      .from(users)
-      .where(eq(users.shortId, c.shortId))
-      .limit(1);
-    if (!user || user.id === session.user.id) continue;
-    await db
-      .insert(projectMembers)
-      .values({ projectId: created.id, userId: user.id, role: c.role })
-      .onConflictDoNothing();
-    invited.push(user.id);
-    await notify({
-      userId: user.id,
-      type: "project",
-      title: "Added to a project",
-      body: `${session.user.name} invited you to "${parsed.data.title}" as ${c.role}.`,
-      resourceType: "project",
-      resourceId: created.id,
-    });
+  // Small batches: concurrent enough to avoid stacked SMTP latencies, small
+  // enough to never pressure the database pool.
+  const pending = [...parsed.data.collaborators];
+  while (pending.length > 0) {
+    const batch = pending.splice(0, 5);
+    const results = await Promise.allSettled(
+      batch.map(async (c) => {
+        const [user] = await db
+          .select({ id: users.id })
+          .from(users)
+          .where(eq(users.shortId, c.shortId))
+          .limit(1);
+        if (!user || user.id === session.user.id) return null;
+        await db
+          .insert(projectMembers)
+          .values({ projectId: created.id, userId: user.id, role: c.role })
+          .onConflictDoNothing();
+        await notify({
+          userId: user.id,
+          type: "project",
+          title: "Added to a project",
+          body: `${session.user.name} invited you to "${parsed.data.title}" as ${c.role}.`,
+          resourceType: "project",
+          resourceId: created.id,
+        });
+        return user.id;
+      }),
+    );
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value) invited.push(result.value);
+      else if (result.status === "rejected") {
+        console.error(
+          `[projects:invite] invite failed for project ${created.id}: ${
+            result.reason instanceof Error ? result.reason.message : String(result.reason)
+          }`,
+        );
+      }
+    }
   }
   await logActivity(created.id, session.user.id, "project.created", "project", created.id, {
     title: parsed.data.title,

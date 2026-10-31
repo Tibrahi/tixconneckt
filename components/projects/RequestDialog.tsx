@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useOperation } from "@/hooks/useOperation";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Card";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
@@ -46,7 +47,8 @@ export function RequestDialog({
   const [fileIds, setFileIds] = useState<Set<string>>(new Set());
   const [folderIds, setFolderIds] = useState<Set<string>>(new Set([data.rootFolderId]));
   const [accessDays, setAccessDays] = useState("30");
-  const [saving, setSaving] = useState(false);
+  const submitOp = useOperation();
+  const saving = submitOp.loading;
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -95,10 +97,11 @@ export function RequestDialog({
     (fileIds.size > 0 || folderIds.size > 0);
 
   async function submit() {
-    setSaving(true);
+    // Duplicate-submit guarded; api() applies a request timeout, so the
+    // button always clears. The form is preserved on failure for safe retry.
     setError(null);
-    try {
-      const res = await api<{ requestId: string }>("/api/requests", {
+    const result = await submitOp.run(() =>
+      api<{ requestId: string }>("/api/requests", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -113,12 +116,10 @@ export function RequestDialog({
           folderIds: [...folderIds],
           accessDays: accessDays ? Number(accessDays) : undefined,
         }),
-      });
-      onDone(res.requestId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't submit the request.");
-      setSaving(false);
-    }
+      }),
+    );
+    if (result.ok) onDone(result.value.requestId);
+    else if (!result.duplicate) setError(result.error);
   }
 
   return (

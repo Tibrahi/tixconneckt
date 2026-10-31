@@ -17,7 +17,9 @@ export async function POST(req: Request) {
     return await register(req);
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
-    return apiError("Service temporarily unavailable. Please try again shortly.", 503);
+    return apiError("Service temporarily unavailable. Please try again shortly.", 503, undefined, {
+      "Retry-After": "5",
+    });
   }
 }
 

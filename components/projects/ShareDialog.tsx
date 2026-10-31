@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useOperation } from "@/hooks/useOperation";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Card";
 import { SelectField, TextField } from "@/components/ui/Fields";
@@ -50,7 +51,8 @@ export function ShareDialog({
   const [folderIds, setFolderIds] = useState<Set<string>>(new Set(preselectedFolderIds));
   const [accessDays, setAccessDays] = useState("30");
   const [reviewRequested, setReviewRequested] = useState(false);
-  const [saving, setSaving] = useState(false);
+  const submitOp = useOperation();
+  const saving = submitOp.loading;
   const [error, setError] = useState<string | null>(null);
 
   async function load() {
@@ -79,10 +81,11 @@ export function ShareDialog({
   };
 
   async function submit() {
-    setSaving(true);
+    // Duplicate-submit guarded; api() applies a request timeout, so the
+    // button always clears. Selections are preserved on failure.
     setError(null);
-    try {
-      await api(`/api/projects/${projectId}/shares`, {
+    const result = await submitOp.run(() =>
+      api(`/api/projects/${projectId}/shares`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -92,12 +95,10 @@ export function ShareDialog({
           accessDays: accessDays ? Number(accessDays) : undefined,
           reviewRequested,
         }),
-      });
-      onDone();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't create the share.");
-      setSaving(false);
-    }
+      }),
+    );
+    if (result.ok) onDone();
+    else if (!result.duplicate) setError(result.error);
   }
 
   async function revoke(shareId: string) {

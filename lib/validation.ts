@@ -105,7 +105,28 @@ export type MatchingAnswerInput = z.infer<typeof matchingAnswerSchema>;
 
 export const connectionRequestSchema = z.object({
   shortId: shortIdSchema,
+  /**
+   * Optional project context: "express interest" in a public project owned by
+   * the target user. The route verifies project visibility and that the
+   * target owns the project before accepting it.
+   */
+  projectId: z.string().uuid("Unknown project.").optional(),
 });
+
+/**
+ * Project-interest notification copy. Pure and unit-tested. Only the
+ * requester's display name and the public project title are included —
+ * never private contact details.
+ */
+export function projectInterestCopy(requesterName: string, projectTitle: string): {
+  title: string;
+  body: string;
+} {
+  return {
+    title: "Interest in your project",
+    body: `${requesterName} is interested in "${projectTitle}" and wants to connect with you.`,
+  };
+}
 
 export const messageSendSchema = z.object({
   conversationId: z.string().min(1),

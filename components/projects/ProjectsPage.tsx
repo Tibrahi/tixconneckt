@@ -2,13 +2,14 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
+import { useToast } from "@/components/ui/Toast";
 import { ProjectCreateDialog } from "./ProjectCreateDialog";
 
 interface ProjectItem {
@@ -30,12 +31,19 @@ export function ProjectsPage() {
   const [mineOnly, setMineOnly] = useState(false);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
+  const { success } = useToast();
+  const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async () => {
     setFailed(false);
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    const timer = setTimeout(() => controller.abort(), 25000);
     try {
       const res = await fetch(`/api/projects?page=${page}&pageSize=12${mineOnly ? "&mine=1" : ""}`, {
         cache: "no-store",
+        signal: controller.signal,
       });
       if (!res.ok) throw new Error();
       const body = (await res.json()) as {
@@ -45,20 +53,28 @@ export function ProjectsPage() {
       if (!body.ok || !body.data) throw new Error();
       setItems(body.data.items);
       setTotal(body.data.total);
-    } catch {
-      setFailed(true);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") return;
+      // Background page changes keep old data; only the initial load fails hard.
+      setItems((current) => {
+        if (current === null) setFailed(true);
+        return current;
+      });
+    } finally {
+      clearTimeout(timer);
     }
   }, [page, mineOnly]);
 
   useEffect(() => {
     load();
+    return () => abortRef.current?.abort();
   }, [load]);
 
   if (failed) {
     return (
       <>
         <PageHeader title="Project" />
-        <LoadError onRetry={load} />
+        <LoadError onRetry={() => load()} />
       </>
     );
   }
@@ -128,6 +144,7 @@ export function ProjectsPage() {
         <ProjectCreateDialog
           onClose={() => setOpen(false)}
           onDone={(projectId) => {
+            success("Project created successfully.");
             router.push(ROUTES.projectById(projectId));
           }}
         />

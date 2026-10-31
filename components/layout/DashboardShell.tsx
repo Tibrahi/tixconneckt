@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ADMIN_NAV, DASHBOARD_NAV, ROUTES, type NavItem } from "@/lib/routes";
 import { Icon } from "@/components/ui/Icon";
 
@@ -84,31 +84,60 @@ export function DashboardShell({
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [countsError, setCountsError] = useState(false);
   const router = useRouter();
+  const countsAbortRef = useRef<AbortController | null>(null);
+  const countsFailuresRef = useRef(0);
 
   const loadCounts = useCallback(async () => {
+    // Cancel any in-flight poll so slow responses never overlap or pile up.
+    countsAbortRef.current?.abort();
+    const controller = new AbortController();
+    countsAbortRef.current = controller;
+    const timer = setTimeout(() => controller.abort(), 20000);
     try {
-      const res = await fetch("/api/dashboard/counts", { cache: "no-store" });
+      const res = await fetch("/api/dashboard/counts", { cache: "no-store", signal: controller.signal });
       if (res.ok) {
         const body = (await res.json()) as { ok: boolean; data?: Record<string, number> };
         if (body.ok && body.data) {
           setCounts(body.data);
           setCountsError(false);
-        } else setCountsError(true);
+          countsFailuresRef.current = 0;
+        } else {
+          setCountsError(true);
+        }
       } else {
         setCountsError(true);
+        countsFailuresRef.current += 1;
       }
-    } catch {
+    } catch (error) {
+      // Aborts from a newer poll or unmount are not errors.
+      if (error instanceof DOMException && error.name === "AbortError") return;
       setCountsError(true);
+      countsFailuresRef.current += 1;
+    } finally {
+      clearTimeout(timer);
     }
   }, []);
 
   useEffect(() => {
     loadCounts();
-    const id = setInterval(loadCounts, 30000);
+    // Jittered interval with backoff: when the backend is struggling, polls
+    // back off instead of stampeding it; jitter desynchronizes open tabs.
+    let delay = 30000 + Math.floor(Math.random() * 10000);
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      timer = setTimeout(async () => {
+        await loadCounts();
+        const backoff = Math.min(120000, delay * (countsFailuresRef.current > 0 ? 2 : 1));
+        delay = countsFailuresRef.current > 0 ? backoff : 30000 + Math.floor(Math.random() * 10000);
+        schedule();
+      }, delay);
+    };
+    schedule();
     const onUpdate = () => loadCounts();
     window.addEventListener("tix:counts", onUpdate);
     return () => {
-      clearInterval(id);
+      clearTimeout(timer);
+      countsAbortRef.current?.abort();
       window.removeEventListener("tix:counts", onUpdate);
     };
   }, [loadCounts]);

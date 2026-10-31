@@ -1,13 +1,19 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { ROUTES } from "@/lib/routes";
+import { apiFetch } from "@/lib/api-client";
+import { useOperation } from "@/hooks/useOperation";
 import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, PendingIntegration, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
 import { AiTaskRunner } from "@/components/ai/AiTaskRunner";
+import { api } from "./types";
 
 interface Detail {
   project: {
@@ -47,15 +53,16 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
   const [newAttrKey, setNewAttrKey] = useState("");
   const [newAttrValue, setNewAttrValue] = useState("");
   const [savingAttr, setSavingAttr] = useState(false);
+  const interestOp = useOperation();
+  const contribOp = useOperation();
+  const { success: toastOk, error: toastErr } = useToast();
 
   const load = useCallback(async () => {
     setFailed(false);
     try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, { cache: "no-store" });
-      if (!res.ok) throw new Error();
-      const body = (await res.json()) as { ok: boolean; data?: Detail };
-      if (!body.ok || !body.data) throw new Error();
-      setDetail(body.data);
+      // api() applies a request timeout so the skeleton always clears.
+      const data = await api<Detail>(`/api/projects/${encodeURIComponent(projectId)}`);
+      setDetail(data);
     } catch {
       setFailed(true);
     }
@@ -67,44 +74,40 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
 
   async function act(action: string, extra: Record<string, unknown> = {}) {
     try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action, ...extra }),
-      });
-      const body = (await res.json()) as { ok: boolean; data?: { pending?: boolean; pendingReason?: string }; error?: string };
-      if (!res.ok || !body.ok) {
-        setError(body.error ?? "We couldn't complete this action. Please try again.");
-        return;
-      }
-      if (body.data?.pending) {
-        setAiPending(body.data.pendingReason ?? "AI analysis is not configured");
+      const data = await api<{ pending?: boolean; pendingReason?: string }>(
+        `/api/projects/${encodeURIComponent(projectId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, ...extra }),
+        },
+      );
+      if (data?.pending) {
+        setAiPending(data.pendingReason ?? "AI analysis is not configured");
         return;
       }
       setAiPending(null);
       load();
-    } catch {
-      setError("Your connection was interrupted. Please try again.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "We couldn't complete this action. Please try again.");
     }
   }
 
   async function submitContribution() {
     if (!contribution.trim()) return;
-    try {
-      const res = await fetch(`/api/projects/${encodeURIComponent(projectId)}`, {
+    // Duplicate-submit guarded; the text is preserved on failure for retry.
+    const result = await contribOp.run(() =>
+      api(`/api/projects/${encodeURIComponent(projectId)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ body: contribution.trim() }),
-      });
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) {
-        setError(body.error ?? "We couldn't save your contribution. Please try again.");
-        return;
-      }
+      }),
+    );
+    if (result.ok) {
       setContribution("");
       load();
-    } catch {
-      setError("Your connection was interrupted. Please try again.");
+    } else if (!result.duplicate) {
+      setError(result.error);
     }
   }
 
@@ -115,11 +118,39 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
     return <SkeletonList rows={4} />;
   }
 
+  async function expressInterest() {
+    if (!detail?.owner) return;
+    // Duplicate-submit guarded; the server also rejects duplicate requests
+    // with 409, so double-clicks can never create two requests.
+    const owner = detail.owner;
+    const result = await interestOp.run(() =>
+      apiFetch<{ sent: boolean }>("/api/connections", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ shortId: owner.shortId, projectId: detail.project.id }),
+      }),
+    );
+    if (result.ok) {
+      toastOk(`Interest sent to ${owner.name}. They can accept your connection request.`);
+      window.dispatchEvent(new Event("tix:counts"));
+    } else if (!result.duplicate) {
+      toastErr(result.error);
+    }
+  }
+
   return (
     <>
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <span className="text-sm text-neutral-600">
-          by {detail.owner?.name ?? "Unknown"} · {detail.project.visibility} · stage: {detail.project.stage}
+          by{" "}
+          {detail.owner ? (
+            <Link href={ROUTES.profileById(detail.owner.shortId)} className="font-medium text-brand-700 hover:underline">
+              {detail.owner.name}
+            </Link>
+          ) : (
+            "Unknown"
+          )}{" "}
+          · {detail.project.visibility} · stage: {detail.project.stage}
         </span>
         <span className="flex gap-2">
           <Button
@@ -133,6 +164,10 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
           {detail.canEdit ? (
             <Button size="sm" variant="secondary" icon="wand-magic-sparkles" loading={analyzing} onClick={async () => { setAnalyzing(true); await act("analyze"); setAnalyzing(false); }}>
               Re-analyze
+            </Button>
+          ) : detail.owner ? (
+            <Button size="sm" icon="send" loading={interestOp.loading} onClick={expressInterest}>
+              Express interest
             </Button>
           ) : null}
         </span>
@@ -238,7 +273,7 @@ export function ProjectOverview({ projectId }: { projectId: string }) {
           <div className="mb-3 flex flex-col gap-2">
             <TextAreaField label="Add your contribution" value={contribution} onChange={(e) => setContribution(e.target.value)} placeholder="Share an improvement, resource, or concern…" />
             <div>
-              <Button size="sm" disabled={!contribution.trim()} onClick={submitContribution}>
+              <Button size="sm" disabled={!contribution.trim()} loading={contribOp.loading} onClick={submitContribution}>
                 Contribute
               </Button>
             </div>

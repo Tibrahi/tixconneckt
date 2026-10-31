@@ -91,13 +91,28 @@ export interface FileDetail {
   breadcrumb: Array<{ id: string }>;
 }
 
-export async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(path, { cache: "no-store", ...init });
-  const body = (await res.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
-  if (!res.ok || !body?.ok) {
-    throw new Error(body?.error ?? "Something went wrong. Please try again.");
+export async function api<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
+  const { timeoutMs = 25_000, signal: externalSignal, ...rest } = init ?? {};
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  externalSignal?.addEventListener("abort", onAbort, { once: true });
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(path, { cache: "no-store", ...rest, signal: controller.signal });
+    const body = (await res.json().catch(() => null)) as { ok?: boolean; data?: T; error?: string } | null;
+    if (!res.ok || !body?.ok) {
+      throw new Error(body?.error ?? "Something went wrong. Please try again.");
+    }
+    return body.data as T;
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError" && !externalSignal?.aborted) {
+      throw new Error("The request took too long. Please try again.");
+    }
+    throw error instanceof Error ? error : new Error("Something went wrong. Please try again.");
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener("abort", onAbort);
   }
-  return body.data as T;
 }
 
 export function formatDate(value: string | Date): string {

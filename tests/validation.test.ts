@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  connectionRequestSchema,
   loginSchema,
   messageSendSchema,
   otpVerifySchema,
+  projectInterestCopy,
   projectSubmitSchema,
   registerSchema,
   shortIdSchema,
@@ -78,6 +80,34 @@ describe("messageSendSchema", () => {
     expect(
       messageSendSchema.safeParse({ conversationId: "c", body: "  ", clientMessageId: "m" }).success,
     ).toBe(false);
+  });
+});
+
+describe("connectionRequestSchema", () => {
+  it("accepts a plain request and one with project-interest context", () => {
+    expect(connectionRequestSchema.safeParse({ shortId: "A2WD" }).success).toBe(true);
+    expect(
+      connectionRequestSchema.safeParse({
+        shortId: "A2WD",
+        projectId: "123e4567-e89b-12d3-a456-426614174000",
+      }).success,
+    ).toBe(true);
+  });
+  it("rejects invalid identifiers and non-uuid project ids", () => {
+    expect(connectionRequestSchema.safeParse({ shortId: "a2wd" }).success).toBe(false);
+    expect(
+      connectionRequestSchema.safeParse({ shortId: "A2WD", projectId: "not-a-uuid" }).success,
+    ).toBe(false);
+  });
+});
+
+describe("projectInterestCopy", () => {
+  it("names only the requester and the public project title", () => {
+    const copy = projectInterestCopy("Jane Doe", "Solar Kiosks");
+    expect(copy.title).toBe("Interest in your project");
+    expect(copy.body).toContain("Jane Doe");
+    expect(copy.body).toContain("Solar Kiosks");
+    expect(copy.body).not.toContain("@");
   });
 });
 

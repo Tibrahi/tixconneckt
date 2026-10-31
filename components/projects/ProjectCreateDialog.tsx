@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useOperation } from "@/hooks/useOperation";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
@@ -36,8 +37,9 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
   const [collaborators, setCollaborators] = useState<Collaborator[]>([]);
   const [inviteId, setInviteId] = useState("");
   const [inviteRole, setInviteRole] = useState<"editor" | "viewer">("viewer");
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const submitOp = useOperation();
+  const saving = submitOp.loading;
+  const error = submitOp.error;
 
   useEffect(() => {
     api<Group[]>("/api/groups")
@@ -57,12 +59,13 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
   }
 
   async function submit() {
-    setSaving(true);
-    setError(null);
-    try {
-      const res = await api<{ projectId: string }>("/api/projects", {
+    // Idle → loading → success|error with duplicate-submit guard; user input
+    // is preserved on failure so retrying is safe.
+    const res = await submitOp.run(() =>
+      api<{ projectId: string }>("/api/projects", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        timeoutMs: 30000,
         body: JSON.stringify({
           title: title.trim(),
           summary: summary.trim(),
@@ -72,12 +75,10 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
           groupId: kind === "group" ? groupId : undefined,
           collaborators,
         }),
-      });
-      onDone(res.projectId);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn't create the project.");
-      setSaving(false);
-    }
+      }),
+    );
+    // Success is confirmed only after the backend responds; onDone navigates.
+    if (res.ok) onDone(res.value.projectId);
   }
 
   return (

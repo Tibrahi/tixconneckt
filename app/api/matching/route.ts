@@ -13,6 +13,7 @@ import {
 import { callMuseSpark } from "@/lib/ai";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
+import { invalidateDashboard } from "@/lib/dashboard-queries";
 import { matchingAnswerSchema } from "@/lib/validation";
 import { getSession } from "@/lib/session";
 import { rankCandidates, type CandidateInput } from "@/lib/matching";
@@ -295,6 +296,7 @@ export async function PATCH(req: Request) {
           emailTo: candidate.email,
         });
       }
+      invalidateDashboard(userId, parsed.data.candidateId);
     }
   }
 

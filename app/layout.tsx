@@ -4,6 +4,7 @@ import { config as faConfig } from "@fortawesome/fontawesome-svg-core";
 import "@fortawesome/fontawesome-svg-core/styles.css";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/pwa/ServiceWorkerRegister";
+import { ToastProvider } from "@/components/ui/Toast";
 
 faConfig.autoAddCss = false;
 
@@ -52,7 +53,7 @@ export default function RootLayout({
     >
       <body>
         <ServiceWorkerRegister />
-        {children}
+        <ToastProvider>{children}</ToastProvider>
       </body>
     </html>
   );

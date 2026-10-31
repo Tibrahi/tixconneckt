@@ -40,15 +40,27 @@ export async function notify(input: NotifyInput): Promise<string> {
     status: "pending",
   });
 
-  // Realtime fan-out (best effort; lists always re-read the database).
-  const delivered = await emitToRoom(`user:${input.userId}`, "notification:new", {
-    id: notificationId,
-    type: input.type,
-    title: input.title,
-    body: input.body,
-    resourceType: input.resourceType,
-    resourceId: input.resourceId,
-  });
+  // Realtime fan-out and email run concurrently: both are best-effort
+  // deliveries of an already-persisted notification, and running them
+  // sequentially kept user actions (project shares, connection requests)
+  // stuck on loading for the sum of both latencies.
+  const [delivered, emailResult] = await Promise.all([
+    emitToRoom(`user:${input.userId}`, "notification:new", {
+      id: notificationId,
+      type: input.type,
+      title: input.title,
+      body: input.body,
+      resourceType: input.resourceType,
+      resourceId: input.resourceId,
+    }),
+    input.emailTo
+      ? sendEmail({
+          to: input.emailTo,
+          subject: `TIXCONNECKT: ${input.title}`,
+          text: input.body ?? input.title,
+        })
+      : Promise.resolve(null),
+  ]);
   await db.insert(notificationDeliveries).values({
     notificationId,
     channel: "socket",
@@ -57,18 +69,13 @@ export async function notify(input: NotifyInput): Promise<string> {
     lastError: delivered ? null : "Realtime server unreachable",
   });
 
-  if (input.emailTo) {
-    const result = await sendEmail({
-      to: input.emailTo,
-      subject: `TIXCONNECKT: ${input.title}`,
-      text: input.body ?? input.title,
-    });
+  if (emailResult) {
     await db.insert(notificationDeliveries).values({
       notificationId,
       channel: "email",
-      status: result.sent ? "sent" : "failed",
+      status: emailResult.sent ? "sent" : "failed",
       attempts: 1,
-      lastError: result.error ?? result.pendingReason ?? null,
+      lastError: emailResult.error ?? emailResult.pendingReason ?? null,
     });
   }
 

@@ -51,6 +51,7 @@ export const users = pgTable(
     uniqueIndex("users_short_id_unique").on(t.shortId),
     index("users_status_idx").on(t.status),
     index("users_role_idx").on(t.role),
+    index("users_status_role_idx").on(t.status, t.role),
   ],
 );
 

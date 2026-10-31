@@ -3,6 +3,8 @@ import { requireUser } from "@/lib/session";
 import { ChatThreadPage } from "@/components/chat/ChatThreadPage";
 import { SkeletonList } from "@/components/ui/Feedback";
 
+export const instant = false;
+
 export default function ChatThreadRoute({ params }: { params: Promise<{ id: string }> }) {
   return <Suspense fallback={<SkeletonList rows={4} />}><ChatThreadContent params={params} /></Suspense>;
 }

@@ -31,7 +31,9 @@ export const profiles = pgTable("profiles", {
     .notNull()
     .defaultNow()
     .$onUpdate(() => new Date()),
-});
+}, (t) => [
+  index("profiles_visibility_idx").on(t.profileVisibility),
+]);
 
 const profileImageBytes = customType<{ data: Buffer | null; driverData: Buffer | null }>({
   dataType: () => "bytea",
@@ -221,5 +223,7 @@ export const providerLinks = pgTable(
   (t) => [
     index("provider_link_provider_idx").on(t.providerId, t.status),
     index("provider_link_group_idx").on(t.groupId),
+    index("provider_link_requested_idx").on(t.requestedBy, t.status),
+    index("provider_link_individual_idx").on(t.individualId, t.status),
   ],
 );
