@@ -1,14 +1,17 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { documents, parsingJobs } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import {
   buildStorageKey,
+  getDocumentUrl,
   MAX_UPLOAD_BYTES,
-  uploadPrivateObject,
+  storeUpload,
   validateChatMediaUpload,
+  validateOrganizationUpload,
   validateUpload,
 } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
@@ -20,8 +23,20 @@ export async function GET() {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const db = getDb();
+  // Metadata only: PostgreSQL-mode rows carry bytes in `data`, which must
+  // never be serialized into a list response.
   const docs = await db
-    .select()
+    .select({
+      id: documents.id,
+      ownerId: documents.ownerId,
+      ownerType: documents.ownerType,
+      module: documents.module,
+      filename: documents.filename,
+      mimeType: documents.mimeType,
+      sizeBytes: documents.sizeBytes,
+      storageKey: documents.storageKey,
+      createdAt: documents.createdAt,
+    })
     .from(documents)
     .where(eq(documents.ownerId, session.user.id))
     .orderBy(desc(documents.createdAt))
@@ -51,47 +66,49 @@ export async function POST(req: Request) {
   if (!(file instanceof File)) return apiError("No file provided.", 400);
   if (!(MODULES as readonly string[]).includes(docModule)) return apiError("Unknown destination module.", 400);
 
+  const buffer = Buffer.from(await file.arrayBuffer());
+  const mimeBase = file.type.split(";")[0].trim().toLowerCase();
   // Chat additionally accepts voice notes, video clips, and web images.
-  const chatExtra =
-    docModule === "chat" &&
-    /^(audio|video)\//.test(file.type.split(";")[0].trim().toLowerCase());
-  const chatImage =
-    docModule === "chat" && ["image/gif", "image/webp"].includes(file.type.split(";")[0].trim().toLowerCase());
-  const problem = chatExtra
-    ? validateChatMediaUpload(file.type, file.size)
-    : chatImage
-      ? file.size > MAX_UPLOAD_BYTES
-        ? "File is larger than the 10 MB limit."
-        : file.size <= 0
-          ? "File is empty."
-          : null
-      : validateUpload(file.type, file.size);
+  // Organizations accept logos (PNG, JPEG, GIF, WebP, SVG) and verification
+  // evidence (PDF, TXT, DOCX), with content sniffed against the claim.
+  const chatExtra = docModule === "chat" && /^(audio|video)\//.test(mimeBase);
+  const chatImage = docModule === "chat" && ["image/gif", "image/webp"].includes(mimeBase);
+  const problem =
+    docModule === "organization"
+      ? validateOrganizationUpload(file.type, file.size, buffer)
+      : chatExtra
+        ? validateChatMediaUpload(file.type, file.size)
+        : chatImage
+          ? file.size > MAX_UPLOAD_BYTES
+            ? "File is larger than the 10 MB limit."
+            : file.size <= 0
+              ? "File is empty."
+              : null
+          : validateUpload(file.type, file.size);
   if (problem) return apiError(problem, 400);
 
-  const buffer = Buffer.from(await file.arrayBuffer());
   const key = buildStorageKey(session.user.id, docModule, file.name);
-  const uploaded = await uploadPrivateObject(key, buffer, file.type);
-  if (!uploaded.ok) {
-    return apiError(
-      uploaded.error === "File storage is disabled for phase one"
-        ? "File uploads are unavailable in phase one. Your file was not saved."
-        : "We couldn't store your file. Please try again.",
-      502,
-    );
-  }
+  // Dual-mode store: Neon Object Storage when available, else the bytes in
+  // Neon PostgreSQL — uploads no longer 502 when object storage is absent.
+  const stored = await storeUpload(key, buffer, file.type);
 
   const db = getDb();
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      ownerId: session.user.id,
-      module: docModule,
-      filename: file.name.slice(0, 200),
-      mimeType: file.type,
-      sizeBytes: file.size,
-      storageKey: key,
-    })
-    .returning({ id: documents.id });
+  // Self-heals once when the schema is behind the code (missing `data`
+  // column): applies pending migrations and retries the insert.
+  const [doc] = await withMigrationRetry(() =>
+    db
+      .insert(documents)
+      .values({
+        ownerId: session.user.id,
+        module: docModule,
+        filename: file.name.slice(0, 200),
+        mimeType: file.type,
+        sizeBytes: file.size,
+        storageKey: stored.storageKey,
+        data: stored.data,
+      })
+      .returning({ id: documents.id }),
+  );
   const [job] = await db
     .insert(parsingJobs)
     .values({
@@ -153,13 +170,11 @@ export async function PATCH(req: Request) {
   if (!parsed.success) return apiError("Invalid request.", 400);
   const db = getDb();
   const [doc] = await db
-    .select()
+    .select({ id: documents.id, storageKey: documents.storageKey, filename: documents.filename })
     .from(documents)
     .where(and(eq(documents.id, parsed.data.documentId), eq(documents.ownerId, session.user.id)))
     .limit(1);
   if (!doc) return apiError("Document not found.", 404);
-  const { getPrivateObjectUrl } = await import("@/lib/storage");
-  const url = await getPrivateObjectUrl(doc.storageKey);
-  if (!url) return apiError("Document storage is unavailable.", 502);
+  const url = await getDocumentUrl(doc);
   return apiOk({ url, filename: doc.filename });
 }

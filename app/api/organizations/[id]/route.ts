@@ -66,7 +66,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
 
   if (parsed.data.logoDocumentId) {
     const [doc] = await db
-      .select()
+      .select({ id: documents.id, mimeType: documents.mimeType })
       .from(documents)
       .where(
         and(
@@ -77,6 +77,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       )
       .limit(1);
     if (!doc) return apiError("Logo not found. Upload it as an organization document first.", 400);
+    if (!["image/png", "image/jpeg", "image/webp", "image/gif", "image/svg+xml"].includes(doc.mimeType.split(";")[0].trim().toLowerCase())) {
+      return apiError("The logo must be an image file.", 400);
+    }
   }
 
   await db

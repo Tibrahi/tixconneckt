@@ -91,12 +91,17 @@ export const groups = pgTable(
   (t) => [index("groups_owner_idx").on(t.ownerId)],
 );
 
-/** Private group avatar/cover object keys; binaries stay outside PostgreSQL. */
+/**
+ * Private group avatar/cover. Dual-mode like profile media: the Neon Object
+ * Storage key (bucket `tixconneckt`) when configured, else the image bytes
+ * in PostgreSQL `data` so group images never 503.
+ */
 export const groupMedia = pgTable("group_media", {
   groupId: text("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
   kind: text("kind").notNull(),
   contentType: text("content_type").notNull(),
-  storageKey: text("storage_key").notNull(),
+  data: profileImageBytes("data"),
+  storageKey: text("storage_key"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("group_media_group_kind_unique").on(t.groupId, t.kind)]);
 

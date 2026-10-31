@@ -41,7 +41,20 @@ export function ProfilePhotos({
       const form = new FormData();
       form.set("kind", kind);
       form.set("file", compressed, `${kind}.webp`);
-      const response = await fetch("/api/profile/media", { method: "PUT", body: form });
+      // Bounded upload so "Saving…" always clears, even on a stalled network.
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 30000);
+      let response: Response;
+      try {
+        response = await fetch("/api/profile/media", { method: "PUT", body: form, signal: controller.signal });
+      } catch (cause) {
+        if (cause instanceof DOMException && cause.name === "AbortError") {
+          throw new Error("The upload took too long. Please try again.");
+        }
+        throw cause;
+      } finally {
+        clearTimeout(timer);
+      }
       const result = await response.json() as { ok: boolean; error?: string };
       if (!response.ok || !result.ok) throw new Error(result.error ?? "Could not save this image.");
       setFailed((current) => ({ ...current, [kind]: false }));

@@ -1,11 +1,12 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { documents, projectFiles, projectFolders } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { loadProjectWithAccess, logActivity, projectAudience } from "@/lib/project-access";
 import { notify } from "@/lib/notify";
 import { getSession } from "@/lib/session";
-import { buildStorageKey, uploadPrivateObject, validateProjectUpload } from "@/lib/storage";
+import { buildStorageKey, storeUpload, validateProjectUpload } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
 
 function documentTypeFor(mime: string): string {
@@ -56,27 +57,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (problem) return apiError(problem, 400);
 
   const key = buildStorageKey(session.user.id, "project", file.name);
-  const uploaded = await uploadPrivateObject(key, buffer, file.type || "application/octet-stream");
-  if (!uploaded.ok) {
-    return apiError(
-      uploaded.error === "File storage is disabled for phase one"
-        ? "File uploads are unavailable in phase one. Your file was not saved."
-        : "We couldn't store your file. Please try again.",
-      502,
-    );
-  }
+  const stored = await storeUpload(key, buffer, file.type || "application/octet-stream");
 
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      ownerId: session.user.id,
-      module: "project",
-      filename: file.name.slice(0, 200),
-      mimeType: file.type || "application/octet-stream",
-      sizeBytes: buffer.length,
-      storageKey: key,
-    })
-    .returning({ id: documents.id });
+  const [doc] = await withMigrationRetry(() =>
+    db
+      .insert(documents)
+      .values({
+        ownerId: session.user.id,
+        module: "project",
+        filename: file.name.slice(0, 200),
+        mimeType: file.type || "application/octet-stream",
+        sizeBytes: buffer.length,
+        storageKey: stored.storageKey,
+        data: stored.data,
+      })
+      .returning({ id: documents.id }),
+  );
 
   const name = (title || file.name).slice(0, 200);
   const [created] = await db

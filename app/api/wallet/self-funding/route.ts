@@ -242,7 +242,7 @@ export async function PATCH(req: Request) {
 
     if (parsed.data.documentId) {
       const [doc] = await db
-        .select()
+        .select({ id: documents.id })
         .from(documents)
         .where(and(eq(documents.id, parsed.data.documentId), eq(documents.ownerId, session.user.id)))
         .limit(1);

@@ -1,6 +1,7 @@
 import "server-only";
 import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+import { getStorageConfig, objectStorageConfigured, type StorageConfig } from "./storage-config";
 
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
@@ -116,6 +117,60 @@ export function validateProjectUpload(
   return null;
 }
 
+const ALLOWED_ORGANIZATION_MIME_TYPES = new Set([
+  "image/png",
+  "image/jpeg",
+  "image/gif",
+  "image/webp",
+  "image/svg+xml",
+  "application/pdf",
+  "text/plain",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+]);
+
+function isSvgDocument(buffer: Buffer | Uint8Array): boolean {
+  const b = buffer instanceof Buffer ? buffer : Buffer.from(buffer);
+  const head = b.subarray(0, Math.min(b.length, 4096)).toString("utf8").trim().toLowerCase();
+  if (head.includes("\0")) return false;
+  let start = head;
+  if (start.startsWith("<?xml")) {
+    const end = start.indexOf("?>");
+    if (end === -1) return false;
+    start = start.slice(end + 2);
+  }
+  return start.trimStart().startsWith("<svg");
+}
+
+/**
+ * Organization uploads: logos (PNG, JPEG, GIF, WebP, SVG) and verification
+ * evidence (PDF, TXT, DOCX). The claimed MIME type must match the sniffed
+ * content so a renamed binary can never pose as a logo.
+ */
+export function validateOrganizationUpload(
+  mimeType: string,
+  sizeBytes: number,
+  buffer: Buffer | Uint8Array,
+): string | null {
+  const base = mimeType.split(";")[0].trim().toLowerCase();
+  if (!ALLOWED_ORGANIZATION_MIME_TYPES.has(base)) {
+    return "File type is not supported. Use an image (PNG, JPEG, GIF, WebP, SVG), PDF, TXT, or DOCX.";
+  }
+  if (sizeBytes > MAX_UPLOAD_BYTES) return "File is larger than the 10 MB limit.";
+  if (sizeBytes <= 0) return "File is empty.";
+  const sniffed = sniffContentKind(buffer);
+  if (!sniffed) return "The file content could not be recognized.";
+  if (base === "image/svg+xml") {
+    if (!isSvgDocument(buffer)) return "That file is not a valid SVG image.";
+    return null;
+  }
+  if (base === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+    if (sniffed !== "application/zip") return "That file is not a valid Office document.";
+    return null;
+  }
+  if (sniffed !== base) return "The file content does not match its type.";
+  return null;
+}
+
 /** Chat voice notes and short video clips: allowlisted types up to 50 MB. */
 export function validateChatMediaUpload(mimeType: string, sizeBytes: number): string | null {
   const base = mimeType.split(";")[0].trim().toLowerCase();
@@ -137,27 +192,22 @@ export function buildStorageKey(ownerId: string, module: string, filename: strin
 }
 
 let neonS3Client: S3Client | null = null;
-function getStorageConfig() {
-  const bucket = process.env.NEON_STORAGE_BUCKET;
-  const region = process.env.AWS_REGION;
-  const endpoint = process.env.AWS_ENDPOINT_URL_S3;
-  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
-  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
-  if (!bucket || !region || !endpoint || !accessKeyId || !secretAccessKey) return null;
-  return { bucket, region, endpoint, accessKeyId, secretAccessKey };
-}
-function getS3Client(): S3Client | null {
+let neonS3ClientKey: string | null = null;
+function getS3Client(): { client: S3Client; config: StorageConfig } | null {
   const config = getStorageConfig();
   if (!config) return null;
-  if (!neonS3Client) {
+  // Recreate the client if credentials/endpoint change (env reloads in dev).
+  const key = `${config.endpoint}|${config.region}|${config.accessKeyId}`;
+  if (!neonS3Client || neonS3ClientKey !== key) {
     neonS3Client = new S3Client({
       region: config.region,
       endpoint: config.endpoint,
       credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
       forcePathStyle: true,
     });
+    neonS3ClientKey = key;
   }
-  return neonS3Client;
+  return { client: neonS3Client, config };
 }
 
 export async function uploadPrivateObject(
@@ -165,11 +215,10 @@ export async function uploadPrivateObject(
   body: Buffer | Uint8Array,
   mimeType: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  const config = getStorageConfig();
-  const client = getS3Client();
-  if (!config || !client) return { ok: false, error: "Neon Object Storage is not configured" };
+  const s3 = getS3Client();
+  if (!s3) return { ok: false, error: "Neon Object Storage is not configured" };
   try {
-    await client.send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: body, ContentType: mimeType }));
+    await s3.client.send(new PutObjectCommand({ Bucket: s3.config.bucket, Key: key, Body: body, ContentType: mimeType }));
     return { ok: true };
   } catch {
     return { ok: false, error: "Could not write to Neon Object Storage" };
@@ -177,11 +226,10 @@ export async function uploadPrivateObject(
 }
 
 export async function downloadPrivateObject(key: string): Promise<{ body: Buffer; contentType?: string } | null> {
-  const config = getStorageConfig();
-  const client = getS3Client();
-  if (!config || !client) return null;
+  const s3 = getS3Client();
+  if (!s3) return null;
   try {
-    const result = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+    const result = await s3.client.send(new GetObjectCommand({ Bucket: s3.config.bucket, Key: key }));
     if (!result.Body) return null;
     return { body: Buffer.from(await result.Body.transformToByteArray()), contentType: result.ContentType };
   } catch {
@@ -190,22 +238,84 @@ export async function downloadPrivateObject(key: string): Promise<{ body: Buffer
 }
 
 export async function deletePrivateObject(key: string): Promise<void> {
-  const config = getStorageConfig();
-  const client = getS3Client();
-  if (!config || !client) return;
-  await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
+  const s3 = getS3Client();
+  if (!s3) return;
+  await s3.client.send(new DeleteObjectCommand({ Bucket: s3.config.bucket, Key: key }));
 }
 
 /** Short-lived signed URL — private objects are never publicly readable. */
 export async function getPrivateObjectUrl(key: string, expiresInSeconds = 300): Promise<string | null> {
-  const config = getStorageConfig();
-  const client = getS3Client();
-  if (!config || !client) return null;
+  const s3 = getS3Client();
+  if (!s3) return null;
   try {
-    return await getSignedUrl(client, new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
+    return await getSignedUrl(s3.client, new GetObjectCommand({ Bucket: s3.config.bucket, Key: key }), {
       expiresIn: Math.max(30, Math.min(expiresInSeconds, 3600)),
     });
   } catch {
     return null;
   }
+}
+
+export interface StoredUpload {
+  storageKey: string | null;
+  data: Buffer | null;
+}
+
+/**
+ * Dual-mode store: Neon Object Storage (bucket `tixconneckt`) when it is
+ * configured and healthy, otherwise the bytes for Neon PostgreSQL. Returns
+ * the pair the caller persists on the row — exactly one side holds the file
+ * — so uploads never 502 just because object storage is absent or failing.
+ */
+export async function storeUpload(
+  key: string,
+  body: Buffer | Uint8Array,
+  mimeType: string,
+): Promise<StoredUpload> {
+  const uploaded = await uploadPrivateObject(key, body, mimeType);
+  if (uploaded.ok) return { storageKey: key, data: null };
+  if (objectStorageConfigured()) {
+    console.warn(`[storage] object upload failed (${uploaded.error ?? "unknown error"}); keeping bytes in PostgreSQL: ${key}`);
+  }
+  return { storageKey: null, data: body instanceof Buffer ? body : Buffer.from(body) };
+}
+
+/**
+ * Dual-mode read: object storage first when the row has a key, PostgreSQL
+ * bytes otherwise (or when the object fetch fails and row bytes exist).
+ */
+export async function resolveStoredBytes(
+  storageKey: string | null,
+  fallbackData: Buffer | Uint8Array | null,
+  fallbackContentType?: string,
+): Promise<{ body: Buffer; contentType?: string } | null> {
+  if (storageKey) {
+    const object = await downloadPrivateObject(storageKey);
+    if (object) return object;
+  }
+  if (!fallbackData) return null;
+  return {
+    body: fallbackData instanceof Buffer ? fallbackData : Buffer.from(fallbackData),
+    contentType: fallbackContentType,
+  };
+}
+
+/** Same-origin byte URL for PostgreSQL-mode documents (authorized server-side). */
+export function postgresDocumentUrl(documentId: string): string {
+  return `/api/documents/${encodeURIComponent(documentId)}/file`;
+}
+
+/**
+ * Client-facing document URL in either mode: a short-lived signed object URL
+ * when object storage holds the file, else the same-origin byte endpoint.
+ */
+export async function getDocumentUrl(
+  doc: { id: string; storageKey: string | null },
+  expiresInSeconds = 300,
+): Promise<string> {
+  if (doc.storageKey) {
+    const url = await getPrivateObjectUrl(doc.storageKey, expiresInSeconds);
+    if (url) return url;
+  }
+  return postgresDocumentUrl(doc.id);
 }

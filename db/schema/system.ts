@@ -1,4 +1,5 @@
 import {
+  customType,
   index,
   integer,
   jsonb,
@@ -8,6 +9,10 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
+
+const documentBytes = customType<{ data: Buffer | null; driverData: Buffer | null }>({
+  dataType: () => "bytea",
+});
 
 /** Server-side scheduled actions — never depend on the browser being open. */
 export const scheduledActions = pgTable(
@@ -134,12 +139,18 @@ export const documents = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** user | group */
     ownerType: text("owner_type").notNull().default("user"),
-    /** wallet | project | request | profile | chat */
+    /** wallet | project | request | profile | chat | organization */
     module: text("module").notNull(),
     filename: text("filename").notNull(),
     mimeType: text("mime_type").notNull(),
     sizeBytes: integer("size_bytes").notNull(),
-    storageKey: text("storage_key").notNull(),
+    /**
+     * Dual-mode storage: the Neon Object Storage key (bucket `tixconneckt`)
+     * when object storage holds the bytes, else null and the bytes live in
+     * `data` (Neon PostgreSQL). Exactly one of the two holds the file.
+     */
+    storageKey: text("storage_key"),
+    data: documentBytes("data"),
     createdAt: timestamp("created_at", { withTimezone: true })
       .notNull()
       .defaultNow(),

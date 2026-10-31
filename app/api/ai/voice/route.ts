@@ -1,4 +1,5 @@
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { documents, flexibleRecords } from "@/db/schema";
 import { transcribeWithMuseVoice, voiceTaskSupported } from "@/lib/ai";
 import { getAiTask } from "@/lib/ai-tasks";
@@ -7,7 +8,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/session";
 import {
   buildStorageKey,
-  uploadPrivateObject,
+  storeUpload,
   validateAudioUpload,
 } from "@/lib/storage";
 
@@ -51,28 +52,23 @@ export async function POST(req: Request) {
 
   const buffer = Buffer.from(await audio.arrayBuffer());
   const key = buildStorageKey(session.user.id, `voice/${docModule}`, audio.name || "audio.webm");
-  const uploaded = await uploadPrivateObject(key, buffer, audio.type);
-  if (!uploaded.ok) {
-    return apiError(
-      uploaded.error === "File storage is disabled for phase one"
-        ? "Audio uploads are unavailable in phase one. Your recording was not saved."
-        : "We couldn't store your audio. Please try again.",
-      502,
-    );
-  }
+  const stored = await storeUpload(key, buffer, audio.type);
 
   const db = getDb();
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      ownerId: session.user.id,
-      module: docModule,
-      filename: (audio.name || "audio.webm").slice(0, 200),
-      mimeType: audio.type,
-      sizeBytes: audio.size,
-      storageKey: key,
-    })
-    .returning({ id: documents.id });
+  const [doc] = await withMigrationRetry(() =>
+    db
+      .insert(documents)
+      .values({
+        ownerId: session.user.id,
+        module: docModule,
+        filename: (audio.name || "audio.webm").slice(0, 200),
+        mimeType: audio.type,
+        sizeBytes: audio.size,
+        storageKey: stored.storageKey,
+        data: stored.data,
+      })
+      .returning({ id: documents.id }),
+  );
 
   const result = await transcribeWithMuseVoice(audio, audio.name || "audio.webm");
   if (!result.configured) {

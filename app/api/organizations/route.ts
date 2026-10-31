@@ -9,7 +9,7 @@ const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/webp", "image/gif
 
 async function logoIsMine(db: ReturnType<typeof getDb>, logoDocumentId: string, ownerId: string) {
   const [doc] = await db
-    .select()
+    .select({ id: documents.id, mimeType: documents.mimeType })
     .from(documents)
     .where(
       and(

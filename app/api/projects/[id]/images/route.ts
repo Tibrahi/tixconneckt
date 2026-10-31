@@ -1,10 +1,11 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { documents, projectFiles, projectFolders } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { canEditFile, canViewFile, loadProjectWithAccess } from "@/lib/project-access";
 import { getSession } from "@/lib/session";
-import { buildStorageKey, uploadPrivateObject, validateProjectUpload } from "@/lib/storage";
+import { buildStorageKey, storeUpload, validateProjectUpload } from "@/lib/storage";
 import { rateLimit } from "@/lib/rate-limit";
 
 const IMAGE_MIMES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"]);
@@ -57,20 +58,22 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (problem) return apiError(problem, 400);
 
   const key = buildStorageKey(session.user.id, "project", file.name);
-  const uploaded = await uploadPrivateObject(key, buffer, mime);
-  if (!uploaded.ok) return apiError("We couldn't store your image. Please try again.", 502);
+  const stored = await storeUpload(key, buffer, mime);
 
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      ownerId: session.user.id,
-      module: "project",
-      filename: file.name.slice(0, 200),
-      mimeType: mime,
-      sizeBytes: buffer.length,
-      storageKey: key,
-    })
-    .returning({ id: documents.id });
+  const [doc] = await withMigrationRetry(() =>
+    db
+      .insert(documents)
+      .values({
+        ownerId: session.user.id,
+        module: "project",
+        filename: file.name.slice(0, 200),
+        mimeType: mime,
+        sizeBytes: buffer.length,
+        storageKey: stored.storageKey,
+        data: stored.data,
+      })
+      .returning({ id: documents.id }),
+  );
 
   const meta = (target.metadata ?? {}) as Record<string, unknown>;
   const images = Array.isArray(meta.images) ? (meta.images as string[]).filter((v) => typeof v === "string") : [];

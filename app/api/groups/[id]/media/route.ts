@@ -1,9 +1,10 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { groupMedia, groupMembers, groups } from "@/db/schema";
 import { apiError } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
-import { buildStorageKey, deletePrivateObject, downloadPrivateObject, sniffContentKind, uploadPrivateObject } from "@/lib/storage";
+import { buildStorageKey, deletePrivateObject, resolveStoredBytes, sniffContentKind, storeUpload } from "@/lib/storage";
 
 const allowed = new Set(["avatar", "cover"]);
 const imageTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -25,12 +26,12 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   if (!allowed.has(kind)) return new Response(null, { status: 404 });
   const [media] = await getDb().select().from(groupMedia).where(and(eq(groupMedia.groupId, id), eq(groupMedia.kind, kind))).limit(1);
   if (!media) return new Response(null, { status: 404 });
-  const object = await downloadPrivateObject(media.storageKey);
-  if (!object) return new Response(null, { status: 404 });
-  const body = object.body.buffer.slice(object.body.byteOffset, object.body.byteOffset + object.body.byteLength) as ArrayBuffer;
+  const stored = await resolveStoredBytes(media.storageKey, media.data, media.contentType);
+  if (!stored) return new Response(null, { status: 404 });
+  const body = stored.body.buffer.slice(stored.body.byteOffset, stored.body.byteOffset + stored.body.byteLength) as ArrayBuffer;
   return new Response(body, { headers: {
-    "Content-Type": object.contentType ?? media.contentType,
-    "Content-Length": String(object.body.byteLength),
+    "Content-Type": stored.contentType ?? media.contentType,
+    "Content-Length": String(stored.body.byteLength),
     "Cache-Control": "private, max-age=300",
     "X-Content-Type-Options": "nosniff",
   } });
@@ -52,19 +53,22 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
   const bytes = Buffer.from(await file.arrayBuffer());
   if (sniffContentKind(bytes) !== file.type) return apiError("The image content does not match its file type.", 400);
   const key = buildStorageKey(session.user.id, `groups/${id}`, `${kind}.webp`);
-  const uploaded = await uploadPrivateObject(key, bytes, file.type);
-  if (!uploaded.ok) return apiError("Group media storage is unavailable. Please try again later.", 503);
+  const stored = await storeUpload(key, bytes, file.type);
   const db = getDb();
-  let previous: { storageKey: string } | undefined;
+  let previous: { storageKey: string | null } | undefined;
   try {
     [previous] = await db.select({ storageKey: groupMedia.storageKey }).from(groupMedia)
       .where(and(eq(groupMedia.groupId, id), eq(groupMedia.kind, kind))).limit(1);
-    await db.insert(groupMedia).values({ groupId: id, kind, contentType: file.type, storageKey: key })
-      .onConflictDoUpdate({ target: [groupMedia.groupId, groupMedia.kind], set: { contentType: file.type, storageKey: key, updatedAt: new Date() } });
+    await withMigrationRetry(() =>
+      db.insert(groupMedia).values({ groupId: id, kind, contentType: file.type, data: stored.data, storageKey: stored.storageKey })
+        .onConflictDoUpdate({ target: [groupMedia.groupId, groupMedia.kind], set: { contentType: file.type, data: stored.data, storageKey: stored.storageKey, updatedAt: new Date() } }),
+    );
   } catch (error) {
-    await deletePrivateObject(key).catch(() => undefined);
+    if (stored.storageKey) await deletePrivateObject(stored.storageKey).catch(() => undefined);
     throw error;
   }
-  if (previous?.storageKey) await deletePrivateObject(previous.storageKey).catch(() => undefined);
+  if (previous?.storageKey && previous.storageKey !== stored.storageKey) {
+    await deletePrivateObject(previous.storageKey).catch(() => undefined);
+  }
   return Response.json({ ok: true });
 }

@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { documents, messages, parsingJobs } from "@/db/schema";
 import { transcribeWithMuseVoice } from "@/lib/ai";
 import { aiVoiceConfigured } from "@/lib/config";
@@ -7,7 +8,7 @@ import { apiError, apiOk } from "@/lib/api-response";
 import { requireConversationMembership } from "@/lib/chat";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/session";
-import { getPrivateObjectUrl } from "@/lib/storage";
+import { resolveStoredBytes } from "@/lib/storage";
 
 type RouteContext = { params: Promise<{ id: string; messageId: string }> };
 
@@ -29,7 +30,10 @@ async function loadAttachment(
   if (!message || !message.attachmentId || message.deletedAt) {
     return { error: "No attachment on this message.", status: 404 };
   }
-  const [doc] = await db.select().from(documents).where(eq(documents.id, message.attachmentId)).limit(1);
+  const attachmentId = message.attachmentId;
+  const [doc] = await withMigrationRetry(() =>
+    db.select().from(documents).where(eq(documents.id, attachmentId)).limit(1),
+  );
   if (!doc) return { error: "Attachment not found.", status: 404 };
   return { doc };
 }
@@ -86,16 +90,9 @@ export async function PUT(_req: Request, { params }: RouteContext) {
     return apiError("Only voice notes can be transcribed.", 400);
   }
 
-  const url = await getPrivateObjectUrl(found.doc.storageKey, 300);
-  if (!url) return apiError("Document storage is unavailable.", 502);
-  let audio: Blob;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) return apiError("We couldn't fetch the voice note. Please try again.", 502);
-    audio = new Blob([await res.arrayBuffer()], { type: found.doc.mimeType });
-  } catch {
-    return apiError("We couldn't fetch the voice note. Please try again.", 502);
-  }
+  const stored = await resolveStoredBytes(found.doc.storageKey, found.doc.data, found.doc.mimeType);
+  if (!stored) return apiError("Document storage is unavailable.", 502);
+  const audio = new Blob([new Uint8Array(stored.body)], { type: found.doc.mimeType });
 
   const result = await transcribeWithMuseVoice(audio, found.doc.filename);
   if (!result.configured) return apiError(result.pendingReason ?? "Transcription unavailable.", 503);

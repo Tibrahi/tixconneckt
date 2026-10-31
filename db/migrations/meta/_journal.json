@@ -64,6 +64,13 @@
       "when": 1793450000000,
       "tag": "0009_discovery_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793566800000,
+      "tag": "0010_storage_postgres_fallback",
+      "breakpoints": true
     }
   ]
 }

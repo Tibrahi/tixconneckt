@@ -1,8 +1,9 @@
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { documents } from "@/db/schema";
 import {
   buildStorageKey,
-  uploadPrivateObject,
+  storeUpload,
   validateAudioUpload,
 } from "./storage";
 
@@ -14,9 +15,8 @@ export interface RetainedAudio {
 
 /**
  * Retain captured/uploaded voice audio (correction §4): validate the audio,
- * store it in private object storage, and persist its reference + metadata
- * in PostgreSQL. When storage is not configured the audio cannot be kept —
- * callers report that honestly instead of pretending it was saved.
+ * store it in Neon Object Storage when available (else the bytes in Neon
+ * PostgreSQL), and persist its reference + metadata in PostgreSQL.
  */
 export async function retainVoiceAudio(
   userId: string,
@@ -27,27 +27,21 @@ export async function retainVoiceAudio(
   if (problem) return { retained: false, problem };
   const buffer = Buffer.from(await audio.arrayBuffer());
   const key = buildStorageKey(userId, `voice/${module}`, audio.name || "audio.webm");
-  const uploaded = await uploadPrivateObject(key, buffer, audio.type);
-  if (!uploaded.ok) {
-    return {
-      retained: false,
-      problem:
-        uploaded.error === "File storage is disabled for phase one"
-          ? "Audio uploads are unavailable in phase one, so this recording was transcribed without being kept."
-          : "Audio storage failed, so this recording was transcribed without being kept.",
-    };
-  }
+  const stored = await storeUpload(key, buffer, audio.type);
   const db = getDb();
-  const [doc] = await db
-    .insert(documents)
-    .values({
-      ownerId: userId,
-      module,
-      filename: (audio.name || "audio.webm").slice(0, 200),
-      mimeType: audio.type,
-      sizeBytes: audio.size,
-      storageKey: key,
-    })
-    .returning({ id: documents.id });
+  const [doc] = await withMigrationRetry(() =>
+    db
+      .insert(documents)
+      .values({
+        ownerId: userId,
+        module,
+        filename: (audio.name || "audio.webm").slice(0, 200),
+        mimeType: audio.type,
+        sizeBytes: audio.size,
+        storageKey: stored.storageKey,
+        data: stored.data,
+      })
+      .returning({ id: documents.id }),
+  );
   return { retained: true, documentId: doc.id };
 }

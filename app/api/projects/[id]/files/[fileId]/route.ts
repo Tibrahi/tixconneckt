@@ -1,7 +1,7 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { documents, projectFiles, projectFileVersions, projectFolders, users } from "@/db/schema";
-import { getPrivateObjectUrl } from "@/lib/storage";
+import { getDocumentUrl } from "@/lib/storage";
 import { apiError, apiOk } from "@/lib/api-response";
 import {
   canEditFile,
@@ -85,8 +85,8 @@ export async function GET(_req: Request, { params }: RouteContext) {
             .from(documents)
             .where(eq(documents.id, docId))
             .limit(1);
-          const url = doc ? await getPrivateObjectUrl(doc.storageKey, 900) : null;
-          node.attrs.src = url ?? "";
+          const url = doc ? await getDocumentUrl({ id: docId, storageKey: doc.storageKey }, 900) : "";
+          node.attrs.src = url;
           if (url) imageRefs[url] = ref;
         } else {
           node.attrs.src = "";
