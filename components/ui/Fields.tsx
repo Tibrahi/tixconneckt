@@ -1,4 +1,4 @@
-import type { InputHTMLAttributes, ReactNode, SelectHTMLAttributes, TextareaHTMLAttributes } from "react";
+import { useId, type InputHTMLAttributes, type ReactNode, type SelectHTMLAttributes, type TextareaHTMLAttributes } from "react";
 
 function FieldWrapper({
   label,
@@ -42,7 +42,8 @@ export interface TextFieldProps extends InputHTMLAttributes<HTMLInputElement> {
 }
 
 export function TextField({ label, error, hint, id, required, ...rest }: TextFieldProps) {
-  const fieldId = id ?? rest.name ?? label;
+  const generatedId = useId();
+  const fieldId = id ?? `${rest.name ?? label}-${generatedId}`;
   return (
     <FieldWrapper label={label} htmlFor={fieldId} required={required} error={error} hint={hint}>
       <input
@@ -63,7 +64,8 @@ export interface TextAreaFieldProps extends TextareaHTMLAttributes<HTMLTextAreaE
 }
 
 export function TextAreaField({ label, error, hint, id, required, ...rest }: TextAreaFieldProps) {
-  const fieldId = id ?? rest.name ?? label;
+  const generatedId = useId();
+  const fieldId = id ?? `${rest.name ?? label}-${generatedId}`;
   return (
     <FieldWrapper label={label} htmlFor={fieldId} required={required} error={error} hint={hint}>
       <textarea
@@ -85,7 +87,8 @@ export interface SelectFieldProps extends SelectHTMLAttributes<HTMLSelectElement
 }
 
 export function SelectField({ label, error, hint, id, required, options, ...rest }: SelectFieldProps) {
-  const fieldId = id ?? rest.name ?? label;
+  const generatedId = useId();
+  const fieldId = id ?? `${rest.name ?? label}-${generatedId}`;
   return (
     <FieldWrapper label={label} htmlFor={fieldId} required={required} error={error} hint={hint}>
       <select

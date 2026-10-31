@@ -25,8 +25,7 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
 2. Configure environment:
 
    ```bash
-   cp .env.example .env
-   # Fill in DATABASE_URL, AUTH_SECRET, SMTP_*, and only the integrations you enable.
+   # Create .env and fill in DATABASE_URL, AUTH_SECRET, SMTP_*, and only the integrations you enable.
    ```
 
    `DATABASE_URL` must be a PostgreSQL connection URL. For Neon, use the pooled
@@ -36,16 +35,23 @@ limiting, Font Awesome icons, Inter + IBM Plex Mono.
    `DB_IDLE_TIMEOUT_MS=30000`, `DB_STATEMENT_TIMEOUT_MS=30000` by default).
    Set these `DB_*` values only when the deployment needs different limits.
 
-3. Create the database schema and seed reference data (legal versions + plan catalog):
+   Private uploaded documents and profile/group photos use Neon Object Storage.
+   Configure `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
+   `AWS_REGION`, and `NEON_STORAGE_BUCKET` with a bucket and a Neon credential
+   that has `storage:write` access. Without these values uploads return an
+   explicit unavailable response; they are never stored in a temporary local
+   file. Apply migration `0008_neon_object_storage.sql` to an existing database.
+
+3. Apply the committed schema migrations and seed reference data (legal versions + plan catalog):
 
    ```bash
-   npm run db:push
+   npm run db:migrate
    npm run db:seed
    ```
 
-   For an existing database, apply the files in `db/migrations/` in numeric
-   order (all idempotent) or run
-   `npm run db:push`. No existing data is altered.
+   `db:migrate` is the schema-change path for existing databases and production.
+   `db:push` is for local development only; do not use it against production.
+   Migrations preserve existing profile media while new uploads use object storage.
 
 4. Run the app:
 

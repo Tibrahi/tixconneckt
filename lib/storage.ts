@@ -1,3 +1,7 @@
+import "server-only";
+import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
+
 export const MAX_UPLOAD_BYTES = 10 * 1024 * 1024;
 export const MAX_AUDIO_BYTES = 25 * 1024 * 1024;
 export const ALLOWED_MIME_TYPES = new Set([
@@ -132,20 +136,76 @@ export function buildStorageKey(ownerId: string, module: string, filename: strin
   return `${module}/${ownerId}/${Date.now()}-${crypto.randomUUID()}-${safe}`;
 }
 
+let neonS3Client: S3Client | null = null;
+function getStorageConfig() {
+  const bucket = process.env.NEON_STORAGE_BUCKET;
+  const region = process.env.AWS_REGION;
+  const endpoint = process.env.AWS_ENDPOINT_URL_S3;
+  const accessKeyId = process.env.AWS_ACCESS_KEY_ID;
+  const secretAccessKey = process.env.AWS_SECRET_ACCESS_KEY;
+  if (!bucket || !region || !endpoint || !accessKeyId || !secretAccessKey) return null;
+  return { bucket, region, endpoint, accessKeyId, secretAccessKey };
+}
+function getS3Client(): S3Client | null {
+  const config = getStorageConfig();
+  if (!config) return null;
+  if (!neonS3Client) {
+    neonS3Client = new S3Client({
+      region: config.region,
+      endpoint: config.endpoint,
+      credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+      forcePathStyle: true,
+    });
+  }
+  return neonS3Client;
+}
+
 export async function uploadPrivateObject(
   key: string,
   body: Buffer | Uint8Array,
   mimeType: string,
 ): Promise<{ ok: boolean; error?: string }> {
-  void key;
-  void body;
-  void mimeType;
-  return { ok: false, error: "File storage is disabled for phase one" };
+  const config = getStorageConfig();
+  const client = getS3Client();
+  if (!config || !client) return { ok: false, error: "Neon Object Storage is not configured" };
+  try {
+    await client.send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: body, ContentType: mimeType }));
+    return { ok: true };
+  } catch {
+    return { ok: false, error: "Could not write to Neon Object Storage" };
+  }
+}
+
+export async function downloadPrivateObject(key: string): Promise<{ body: Buffer; contentType?: string } | null> {
+  const config = getStorageConfig();
+  const client = getS3Client();
+  if (!config || !client) return null;
+  try {
+    const result = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+    if (!result.Body) return null;
+    return { body: Buffer.from(await result.Body.transformToByteArray()), contentType: result.ContentType };
+  } catch {
+    return null;
+  }
+}
+
+export async function deletePrivateObject(key: string): Promise<void> {
+  const config = getStorageConfig();
+  const client = getS3Client();
+  if (!config || !client) return;
+  await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
 }
 
 /** Short-lived signed URL — private objects are never publicly readable. */
 export async function getPrivateObjectUrl(key: string, expiresInSeconds = 300): Promise<string | null> {
-  void key;
-  void expiresInSeconds;
-  return null;
+  const config = getStorageConfig();
+  const client = getS3Client();
+  if (!config || !client) return null;
+  try {
+    return await getSignedUrl(client, new GetObjectCommand({ Bucket: config.bucket, Key: key }), {
+      expiresIn: Math.max(30, Math.min(expiresInSeconds, 3600)),
+    });
+  } catch {
+    return null;
+  }
 }

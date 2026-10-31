@@ -1,13 +1,13 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { contributions, groupMembers, savingsGoals, wallets, withdrawals } from "@/db/schema";
+import { contributions, groupMembers, savingsGoals, wallets } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
-import { decideEntry, ensureWallet, goalProgress, recordPendingEntry } from "@/lib/wallet";
+import { createPendingWithdrawal, decideEntry, ensureWallet, goalProgress, recordPendingEntry } from "@/lib/wallet";
 
 const contributeSchema = z.object({
   groupId: z.string().min(1),
@@ -245,25 +245,20 @@ export async function PUT(req: Request) {
     return apiError("The group wallet balance is insufficient.", 400);
   }
 
-  const entry = await recordPendingEntry({
-    walletId: wallet.id,
-    direction: "debit",
-    amountMinor: parsed.data.amountMinor,
-    currency: parsed.data.currency,
-    kind: "withdrawal",
-    createdBy: session.user.id,
-  });
-  const [draw] = await db
-    .insert(withdrawals)
-    .values({
+  let created: Awaited<ReturnType<typeof createPendingWithdrawal>>;
+  try {
+    created = await createPendingWithdrawal({
       walletId: wallet.id,
       requesterId: session.user.id,
       amountMinor: parsed.data.amountMinor,
       currency: parsed.data.currency,
-      ledgerEntryId: entry.id,
-      status: "pending",
-    })
-    .returning({ id: withdrawals.id });
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Insufficient available balance for this withdrawal.") {
+      return apiError("The group wallet has insufficient available funds after pending reservations.", 400);
+    }
+    throw error;
+  }
 
   const admins = await db
     .select({ userId: groupMembers.userId })
@@ -279,5 +274,5 @@ export async function PUT(req: Request) {
       resourceId: wallet.id,
     });
   }
-  return apiOk({ withdrawalId: draw.id, entryId: entry.id, reference: entry.reference }, 201);
+  return apiOk({ withdrawalId: created.withdrawalId, entryId: created.entryId, reference: created.reference }, 201);
 }

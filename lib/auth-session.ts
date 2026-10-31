@@ -10,7 +10,8 @@ export const LEGACY_SESSION_COOKIES = [
   "better-auth.session_token",
   "__Secure-better-auth.session_token",
 ] as const;
-export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 7;
+// Keep sessions active for 30 days unless the user signs out or the account is revoked.
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30;
 
 export function sessionCookieName(): string {
   return isProduction() ? `__Host-${SESSION_COOKIE}` : SESSION_COOKIE;

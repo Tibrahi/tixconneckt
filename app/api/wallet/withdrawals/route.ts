@@ -18,9 +18,9 @@ import {
 import { individualWithdrawalSchema } from "@/lib/validation";
 import {
   availableBalance,
+  createPendingWithdrawal,
   decideEntry,
   getOrCreateMemberAccount,
-  recordPendingEntry,
 } from "@/lib/wallet";
 
 /**
@@ -76,6 +76,17 @@ export async function POST(req: Request) {
     return apiError("This withdrawal is below your minimum withdrawal amount.", 400);
   }
 
+  const rawKey = parsed.data.idempotencyKey ?? `auto:${randomUUID()}`;
+  const idempotencyKey = `w:${session.user.id}:${rawKey}`;
+  const [existing] = await db
+    .select()
+    .from(withdrawals)
+    .where(eq(withdrawals.idempotencyKey, idempotencyKey))
+    .limit(1);
+  if (existing) {
+    return apiOk({ withdrawalId: existing.id, status: existing.status, deduplicated: true });
+  }
+
   const funds = await availableBalance(wallet.id);
   if (parsed.data.amountMinor > funds.availableMinor) {
     return apiError(
@@ -105,43 +116,24 @@ export async function POST(req: Request) {
     }
   }
 
-  const rawKey = parsed.data.idempotencyKey ?? `auto:${randomUUID()}`;
-  const idempotencyKey = `w:${session.user.id}:${rawKey}`;
-  const [existing] = await db
-    .select()
-    .from(withdrawals)
-    .where(eq(withdrawals.idempotencyKey, idempotencyKey))
-    .limit(1);
-  if (existing) {
-    return apiOk({ withdrawalId: existing.id, status: existing.status, deduplicated: true });
-  }
-
-  const entry = await recordPendingEntry({
-    walletId: wallet.id,
-    direction: "debit",
-    amountMinor: parsed.data.amountMinor,
-    currency,
-    kind: "withdrawal",
-    createdBy: session.user.id,
-  });
-  const [draw] = await db
-    .insert(withdrawals)
-    .values({
+  let created: Awaited<ReturnType<typeof createPendingWithdrawal>>;
+  try {
+    created = await createPendingWithdrawal({
       walletId: wallet.id,
       requesterId: session.user.id,
       amountMinor: parsed.data.amountMinor,
       currency,
-      ledgerEntryId: entry.id,
-      status: "pending",
       idempotencyKey,
-      provider: "tixlpay",
-      providerStatus: "awaiting_review",
-    })
-    .returning({ id: withdrawals.id });
-  await db
-    .update(ledgerEntries)
-    .set({ relatedType: "withdrawal", relatedId: draw.id })
-    .where(eq(ledgerEntries.id, entry.id));
+    });
+  } catch (error) {
+    if (error instanceof Error && error.message === "Insufficient available balance for this withdrawal.") {
+      return apiError("Insufficient available funds. Another pending request may have reserved this amount.", 400);
+    }
+    throw error;
+  }
+  if (created.deduplicated) {
+    return apiOk({ withdrawalId: created.withdrawalId, status: "pending", deduplicated: true });
+  }
 
   const admins = await db.select({ id: users.id }).from(users).where(eq(users.role, "admin"));
   for (const admin of admins) {
@@ -152,7 +144,7 @@ export async function POST(req: Request) {
       title: "Withdrawal awaiting review",
       body: `${session.user.name} requested a withdrawal.`,
       resourceType: "withdrawal",
-      resourceId: draw.id,
+      resourceId: created.withdrawalId,
     });
   }
 
@@ -160,12 +152,12 @@ export async function POST(req: Request) {
     actorId: session.user.id,
     action: "wallet.withdrawal.request",
     targetType: "withdrawal",
-    targetId: draw.id,
+    targetId: created.withdrawalId,
     ipAddress: clientIp(req),
   });
 
   return apiOk(
-    { withdrawalId: draw.id, entryId: entry.id, reference: entry.reference, status: "pending" },
+    { withdrawalId: created.withdrawalId, entryId: created.entryId, reference: created.reference, status: "pending" },
     201,
   );
 }

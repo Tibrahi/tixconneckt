@@ -42,6 +42,39 @@ test("registration validates input", async ({ page }) => {
   await expect(page.getByText(/full name is required|valid email is required/i).first()).toBeVisible();
 });
 
+test("registration inputs keep focus through fast typing, edits, validation, and keyboard navigation", async ({ page }) => {
+  await page.goto("/register");
+  const name = page.getByRole("textbox", { name: "Full name" });
+  const email = page.getByRole("textbox", { name: "Email" });
+
+  await name.focus();
+  await page.keyboard.type("hello");
+  await expect(name).toHaveValue("hello");
+  await expect(name).toBeFocused();
+
+  await page.keyboard.press("Home");
+  await page.keyboard.press("ArrowRight");
+  await page.keyboard.insertText("X");
+  await expect(name).toHaveValue("hXello");
+  await expect(name).toBeFocused();
+
+  await page.keyboard.press("Control+A");
+  await page.keyboard.insertText("pasted text");
+  await expect(name).toHaveValue("pasted text");
+  await expect(name).toBeFocused();
+
+  await page.keyboard.press("Tab");
+  await expect(email).toBeFocused();
+
+  await page.getByRole("button", { name: /create account/i }).last().click();
+  await expect(page.getByText(/valid email is required/i).first()).toBeVisible();
+  await email.fill("hello@example.com");
+  await expect(email).toBeFocused();
+  await page.keyboard.type("2");
+  await expect(email).toHaveValue("hello@example.com2");
+  await expect(email).toBeFocused();
+});
+
 test("protected routes redirect to login", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login$/);

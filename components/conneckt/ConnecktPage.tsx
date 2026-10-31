@@ -11,6 +11,7 @@ import { SearchInput } from "@/components/ui/Pagination";
 import { SelectField } from "@/components/ui/Fields";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
+import Image from "next/image";
 
 interface Connection {
   id: string;
@@ -47,9 +48,13 @@ function ConnectionRow({
     <li className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 p-3">
       <Link
         href={ROUTES.profileById(item.other.shortId)}
-        className="font-medium text-brand-700 hover:underline"
+        className="flex min-w-0 items-center gap-2 font-medium text-brand-700 hover:underline"
       >
-        {item.other.name} <span className="font-mono text-xs">({item.other.shortId})</span>
+        <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-neutral-100">
+          <Image src={`/api/profile/media?shortId=${encodeURIComponent(item.other.shortId)}&kind=avatar`} alt="" fill unoptimized className="object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+          <span className="flex h-full w-full items-center justify-center text-xs text-neutral-500">{item.other.name.slice(0, 1)}</span>
+        </span>
+        <span className="truncate">{item.other.name} <span className="font-mono text-xs">({item.other.shortId})</span></span>
       </Link>
       {onDecide ? (
         <div className="flex gap-2">
@@ -274,11 +279,17 @@ export function ConnecktPage() {
                     <ul className="flex flex-col gap-2">
                       {providers.map((p) => (
                         <li key={p.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 p-3">
-                          <div>
+                          <div className="flex items-center gap-2">
+                            <span className="relative h-9 w-9 shrink-0 overflow-hidden rounded-full bg-neutral-100">
+                              <Image src={`/api/profile/media?shortId=${encodeURIComponent(p.shortId)}&kind=avatar`} alt="" fill unoptimized className="object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                              <span className="flex h-full w-full items-center justify-center text-xs text-neutral-500">{p.name.slice(0, 1)}</span>
+                            </span>
+                            <span>
                             <Link href={ROUTES.profileById(p.shortId)} className="font-medium text-brand-700 hover:underline">
                               {p.name} <span className="font-mono text-xs">({p.shortId})</span>
                             </Link>
                             <p className="text-sm text-neutral-600">{p.country ?? "Provider"}</p>
+                            </span>
                           </div>
                           <Button size="sm" variant="secondary" onClick={() => setLinkModal(p)}>
                             Request connection

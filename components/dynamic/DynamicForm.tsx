@@ -12,6 +12,8 @@ import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
  */
 
 export interface CustomField {
+  /** Stable client identity; intentionally excluded from submitted field data. */
+  id: string;
   key: string;
   value: string;
 }
@@ -146,7 +148,7 @@ export function DynamicForm({
   function addCustomField() {
     const key = newKey.trim();
     if (!key) return;
-    onCustomFieldsChange([...customFields, { key, value: newValue }]);
+    onCustomFieldsChange([...customFields, { id: crypto.randomUUID(), key, value: newValue }]);
     setNewKey("");
     setNewValue("");
   }
@@ -166,8 +168,9 @@ export function DynamicForm({
       {customFields.length > 0 ? (
         <div className="flex flex-col gap-3 rounded-lg border border-neutral-200 p-3">
           <p className="text-sm font-semibold text-black">Additional context</p>
+          {/* Stable row identity preserves focus if a neighboring field is removed. */}
           {customFields.map((f, i) => (
-            <div key={`${f.key}-${i}`} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
+            <div key={f.id} className="grid gap-2 sm:grid-cols-[1fr_2fr_auto]">
               <TextField
                 label="Field name"
                 value={f.key}

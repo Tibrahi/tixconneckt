@@ -33,16 +33,17 @@ export const profiles = pgTable("profiles", {
     .$onUpdate(() => new Date()),
 });
 
-const profileImageBytes = customType<{ data: Buffer; driverData: Buffer }>({
+const profileImageBytes = customType<{ data: Buffer | null; driverData: Buffer | null }>({
   dataType: () => "bytea",
 });
 
-/** Small, user-owned avatar and cover images stored as binary data. */
+/** Media bytes move to private object storage; nullable data supports old rows during rollout. */
 export const profileMedia = pgTable("profile_media", {
   userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
   kind: text("kind").notNull(),
   contentType: text("content_type").notNull(),
-  data: profileImageBytes("data").notNull(),
+  data: profileImageBytes("data"),
+  storageKey: text("storage_key"),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => [uniqueIndex("profile_media_user_kind_unique").on(t.userId, t.kind)]);
 
@@ -87,6 +88,15 @@ export const groups = pgTable(
   },
   (t) => [index("groups_owner_idx").on(t.ownerId)],
 );
+
+/** Private group avatar/cover object keys; binaries stay outside PostgreSQL. */
+export const groupMedia = pgTable("group_media", {
+  groupId: text("group_id").notNull().references(() => groups.id, { onDelete: "cascade" }),
+  kind: text("kind").notNull(),
+  contentType: text("content_type").notNull(),
+  storageKey: text("storage_key").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [uniqueIndex("group_media_group_kind_unique").on(t.groupId, t.kind)]);
 
 export const groupMembers = pgTable(
   "group_members",

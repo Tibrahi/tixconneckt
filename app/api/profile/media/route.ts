@@ -3,7 +3,7 @@ import { getDb } from "@/db";
 import { connections, profileMedia, profiles, users } from "@/db/schema";
 import { apiError } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
-import { sniffContentKind } from "@/lib/storage";
+import { buildStorageKey, deletePrivateObject, downloadPrivateObject, sniffContentKind, uploadPrivateObject } from "@/lib/storage";
 
 const MAX_PROFILE_IMAGE_BYTES = 2 * 1024 * 1024;
 const ALLOWED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
@@ -31,21 +31,22 @@ export async function GET(request: Request) {
       if (!accepted) return new Response(null, { status: 404 });
     }
   }
-  const [media] = await db.select({ data: profileMedia.data, contentType: profileMedia.contentType, updatedAt: profileMedia.updatedAt })
+  const [media] = await db.select({ data: profileMedia.data, storageKey: profileMedia.storageKey, contentType: profileMedia.contentType, updatedAt: profileMedia.updatedAt })
     .from(profileMedia)
     .where(and(eq(profileMedia.userId, owner.id), eq(profileMedia.kind, kind)))
     .limit(1);
   if (!media) return new Response(null, { status: 404 });
-  const imageBody = media.data.buffer.slice(
-    media.data.byteOffset,
-    media.data.byteOffset + media.data.byteLength,
-  ) as ArrayBuffer;
+  const storedObject = media.storageKey ? await downloadPrivateObject(media.storageKey) : null;
+  if (media.storageKey && !storedObject) return new Response(null, { status: 404 });
+  const bytes = storedObject?.body ?? media.data;
+  if (!bytes) return new Response(null, { status: 404 });
+  const imageBody = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer;
   return new Response(imageBody, {
     headers: {
-      "Content-Type": media.contentType,
-      "Content-Length": String(media.data.byteLength),
+      "Content-Type": storedObject?.contentType ?? media.contentType,
+      "Content-Length": String(bytes.byteLength),
       "Cache-Control": "private, max-age=300",
-      ETag: `W/"${media.updatedAt.getTime()}-${media.data.byteLength}"`,
+      ETag: `W/"${media.updatedAt.getTime()}-${bytes.byteLength}"`,
       "X-Content-Type-Options": "nosniff",
     },
   });
@@ -65,11 +66,24 @@ export async function PUT(request: Request) {
   }
   const data = Buffer.from(await file.arrayBuffer());
   if (sniffContentKind(data) !== file.type) return apiError("The image content does not match its file type.", 400);
-  await getDb().insert(profileMedia).values({ userId: session.user.id, kind, contentType: file.type, data })
-    .onConflictDoUpdate({
-      target: [profileMedia.userId, profileMedia.kind],
-      set: { contentType: file.type, data, updatedAt: new Date() },
-    });
+  const key = buildStorageKey(session.user.id, "profile", `${kind}.webp`);
+  const uploaded = await uploadPrivateObject(key, data, file.type);
+  if (!uploaded.ok) return apiError("Profile media storage is unavailable. Please try again later.", 503);
+  const db = getDb();
+  let previous: { storageKey: string | null } | undefined;
+  try {
+    [previous] = await db.select({ storageKey: profileMedia.storageKey }).from(profileMedia)
+      .where(and(eq(profileMedia.userId, session.user.id), eq(profileMedia.kind, kind))).limit(1);
+    await db.insert(profileMedia).values({ userId: session.user.id, kind, contentType: file.type, data: null, storageKey: key })
+      .onConflictDoUpdate({
+        target: [profileMedia.userId, profileMedia.kind],
+        set: { contentType: file.type, data: null, storageKey: key, updatedAt: new Date() },
+      });
+  } catch (error) {
+    await deletePrivateObject(key).catch(() => undefined);
+    throw error;
+  }
+  if (previous?.storageKey) await deletePrivateObject(previous.storageKey).catch(() => undefined);
   return Response.json({ ok: true });
 }
 
@@ -78,6 +92,10 @@ export async function DELETE(request: Request) {
   if (!session) return apiError("Sign in required.", 401);
   const kind = new URL(request.url).searchParams.get("kind");
   if (kind !== "avatar" && kind !== "cover") return apiError("Choose a valid image type.", 400);
-  await getDb().delete(profileMedia).where(and(eq(profileMedia.userId, session.user.id), eq(profileMedia.kind, kind)));
+  const db = getDb();
+  const [previous] = await db.select({ storageKey: profileMedia.storageKey }).from(profileMedia)
+    .where(and(eq(profileMedia.userId, session.user.id), eq(profileMedia.kind, kind))).limit(1);
+  await db.delete(profileMedia).where(and(eq(profileMedia.userId, session.user.id), eq(profileMedia.kind, kind)));
+  if (previous?.storageKey) await deletePrivateObject(previous.storageKey).catch(() => undefined);
   return Response.json({ ok: true });
 }

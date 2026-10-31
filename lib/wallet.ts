@@ -6,6 +6,7 @@ import {
   memberAccounts,
   savingsGoals,
   wallets,
+  withdrawals,
   type MemberAccount,
 } from "@/db/schema";
 
@@ -24,23 +25,42 @@ export async function ensureWallet(
   currency = "USD",
 ): Promise<{ id: string; balanceMinor: number; currency: string }> {
   const db = getDb();
-  const [existing] = await db
-    .select()
-    .from(wallets)
-    .where(
-      and(
-        eq(wallets.ownerType, ownerType),
-        eq(wallets.ownerId, ownerId),
-        eq(wallets.currency, currency.toUpperCase()),
-      ),
-    )
-    .limit(1);
-  if (existing) return existing;
   const [created] = await db
     .insert(wallets)
     .values({ ownerType, ownerId, currency: currency.toUpperCase() })
+    .onConflictDoNothing({ target: [wallets.ownerType, wallets.ownerId, wallets.currency] })
     .returning();
-  return created;
+  if (created) return created;
+  const [existing] = await db
+    .select()
+    .from(wallets)
+    .where(and(
+      eq(wallets.ownerType, ownerType),
+      eq(wallets.ownerId, ownerId),
+      eq(wallets.currency, currency.toUpperCase()),
+    ))
+    .limit(1);
+  if (!existing) throw new Error("Could not create or retrieve the wallet.");
+  return existing;
+}
+
+/** Lock the wallet row before checking reservations or recomputing its balance. */
+async function lockWalletAndGetAvailable(tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0], walletId: string) {
+  const [wallet] = await tx
+    .select({ id: wallets.id })
+    .from(wallets)
+    .where(eq(wallets.id, walletId))
+    .for("update")
+    .limit(1);
+  if (!wallet) throw new Error("Wallet not found.");
+  const [totals] = await tx
+    .select({
+      balance: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.status} IN ('approved', 'credited') AND ${ledgerEntries.direction} = 'credit' THEN ${ledgerEntries.amountMinor} WHEN ${ledgerEntries.status} IN ('approved', 'credited') AND ${ledgerEntries.direction} = 'debit' THEN -${ledgerEntries.amountMinor} ELSE 0 END), 0)`,
+      reserved: sql<number>`COALESCE(SUM(CASE WHEN ${ledgerEntries.direction} = 'debit' AND ${ledgerEntries.status} IN ('pending', 'needs_evidence') THEN ${ledgerEntries.amountMinor} ELSE 0 END), 0)`,
+    })
+    .from(ledgerEntries)
+    .where(eq(ledgerEntries.walletId, walletId));
+  return Number(totals?.balance ?? 0) - Number(totals?.reserved ?? 0);
 }
 
 /**
@@ -126,6 +146,10 @@ export async function recordPendingEntry(input: RecordEntryInput): Promise<{ id:
   const db = getDb();
   const reference = await generateReference();
   const result = await db.transaction(async (tx) => {
+    if (input.direction === "debit") {
+      const available = await lockWalletAndGetAvailable(tx, input.walletId);
+      if (available < input.amountMinor) throw new Error("Insufficient available balance for this transaction.");
+    }
     const [entry] = await tx
       .insert(ledgerEntries)
       .values({
@@ -154,6 +178,69 @@ export async function recordPendingEntry(input: RecordEntryInput): Promise<{ id:
     return entry;
   });
   return { id: result.id, reference };
+}
+
+/** Create a reserved debit and its withdrawal row atomically, under a wallet lock. */
+export async function createPendingWithdrawal(input: {
+  walletId: string;
+  requesterId: string;
+  amountMinor: number;
+  currency: string;
+  idempotencyKey?: string;
+}): Promise<{ withdrawalId: string; entryId: string; reference: string; deduplicated: boolean }> {
+  if (!Number.isInteger(input.amountMinor) || input.amountMinor <= 0) {
+    throw new Error("Amount must be a positive integer in minor units.");
+  }
+  const db = getDb();
+  const reference = await generateReference();
+  return db.transaction(async (tx) => {
+    const available = await lockWalletAndGetAvailable(tx, input.walletId);
+    if (input.idempotencyKey) {
+      const [existing] = await tx.select({
+        id: withdrawals.id,
+        ledgerEntryId: withdrawals.ledgerEntryId,
+      }).from(withdrawals).where(eq(withdrawals.idempotencyKey, input.idempotencyKey)).limit(1);
+      if (existing) {
+        if (!existing.ledgerEntryId) throw new Error("Existing withdrawal has no ledger entry.");
+        const [entry] = await tx.select({ reference: ledgerEntries.reference }).from(ledgerEntries)
+          .where(eq(ledgerEntries.id, existing.ledgerEntryId)).limit(1);
+        if (!entry) throw new Error("Existing withdrawal ledger entry was not found.");
+        return { withdrawalId: existing.id, entryId: existing.ledgerEntryId, reference: entry.reference, deduplicated: true };
+      }
+    }
+    if (available < input.amountMinor) throw new Error("Insufficient available balance for this withdrawal.");
+    const [entry] = await tx.insert(ledgerEntries).values({
+      walletId: input.walletId,
+      direction: "debit",
+      amountMinor: input.amountMinor,
+      currency: input.currency.toUpperCase(),
+      reference,
+      status: "pending",
+      kind: "withdrawal",
+      relatedType: "withdrawal",
+      createdBy: input.requesterId,
+    }).returning({ id: ledgerEntries.id });
+    await tx.insert(ledgerTransitions).values({
+      entryId: entry.id,
+      fromStatus: null,
+      toStatus: "pending",
+      actorId: input.requesterId,
+      reason: "Withdrawal requested, awaiting review",
+    });
+    const [draw] = await tx.insert(withdrawals).values({
+      walletId: input.walletId,
+      requesterId: input.requesterId,
+      amountMinor: input.amountMinor,
+      currency: input.currency.toUpperCase(),
+      ledgerEntryId: entry.id,
+      status: "pending",
+      idempotencyKey: input.idempotencyKey,
+      provider: "tixlpay",
+      providerStatus: "awaiting_review",
+    }).returning({ id: withdrawals.id });
+    await tx.update(ledgerEntries).set({ relatedId: draw.id }).where(eq(ledgerEntries.id, entry.id));
+    return { withdrawalId: draw.id, entryId: entry.id, reference, deduplicated: false };
+  });
 }
 
 /** Find an entry already using a provider reference (duplicate detection). */
@@ -225,21 +312,14 @@ export async function decideEntry(input: DecideEntryInput): Promise<{ balanceMin
     return { balanceMinor: wallet?.balanceMinor ?? 0 };
   }
 
-  // Approval path with overspend + duplicate protection.
-  const [wallet] = await db.select().from(wallets).where(eq(wallets.id, entry.walletId)).limit(1);
-  if (!wallet) throw new Error("Wallet not found.");
-  if (entry.direction === "debit") {
-    const { availableMinor } = await availableBalance(entry.walletId);
-    // This entry's own reservation counts against availability; add it back
-    // so the check compares the balance against other reservations + this entry.
-    const spendableForThisEntry = availableMinor + entry.amountMinor;
-    if (spendableForThisEntry < entry.amountMinor) {
-      throw new Error("Insufficient available balance for this transaction.");
-    }
-  }
-
+  // Approval path. Serialize by wallet so parallel debits cannot both spend
+  // the same balance based on stale reservation snapshots.
   const reason = input.reason?.trim() || "Approved";
   await db.transaction(async (tx) => {
+    const available = await lockWalletAndGetAvailable(tx, entry.walletId);
+    if (entry.direction === "debit" && available < 0) {
+      throw new Error("Insufficient available balance for this transaction.");
+    }
     const updated = await tx
       .update(ledgerEntries)
       .set({ status: "approved", decidedBy: input.actorId, decidedAt: new Date() })

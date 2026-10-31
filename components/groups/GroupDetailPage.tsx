@@ -10,6 +10,8 @@ import { LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Fields";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
+import { GroupProfileMedia } from "@/components/groups/GroupProfileMedia";
+import Image from "next/image";
 
 interface GroupDetail {
   group: { id: string; name: string; description: string | null; objective: string | null };
@@ -190,13 +192,21 @@ export function GroupDetailPage({ groupId }: { groupId: string }) {
           </>
         }
       />
+      <div className="mb-4 rounded-lg border border-neutral-200 p-3">
+        <GroupProfileMedia groupId={groupId} editable={isAdmin} />
+        {detail.group.description ? <p className="mt-3 max-w-3xl text-sm text-neutral-700">{detail.group.description}</p> : null}
+      </div>
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title={`Members (${detail.members.length})`}>
           <ul className="flex flex-col gap-2">
             {detail.members.map((m) => (
               <li key={m.userId} className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 p-2.5 text-sm">
-                <Link href={ROUTES.profileById(m.shortId)} className="font-medium text-brand-700 hover:underline">
-                  {m.name} <span className="font-mono text-xs">({m.shortId})</span>
+                <Link href={ROUTES.profileById(m.shortId)} className="flex min-w-0 items-center gap-2 font-medium text-brand-700 hover:underline">
+                  <span className="relative h-8 w-8 shrink-0 overflow-hidden rounded-full bg-neutral-100">
+                    <Image src={`/api/profile/media?shortId=${encodeURIComponent(m.shortId)}&kind=avatar`} alt="" fill unoptimized className="object-cover" onError={(event) => { event.currentTarget.style.display = "none"; }} />
+                    <span className="flex h-full w-full items-center justify-center text-xs text-neutral-500">{m.name.slice(0, 1)}</span>
+                  </span>
+                  <span className="truncate">{m.name} <span className="font-mono text-xs">({m.shortId})</span></span>
                 </Link>
                 <Badge tone={m.role === "admin" ? "info" : "neutral"}>{m.role}</Badge>
               </li>
