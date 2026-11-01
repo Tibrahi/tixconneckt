@@ -27,8 +27,10 @@ interface RequestRow {
   providerName?: string;
 }
 
-export function RequestsPage({ accountRole = "user" }: { accountRole?: string }) {
+export function RequestsPage({ accountRole = "user", accountCategory = "individual" }: { accountRole?: string; accountCategory?: string }) {
   const isProvider = accountRole === "provider";
+  const isUniversity = accountCategory === "university";
+  const isGovernment = accountCategory === "government";
   const router = useRouter();
   const { success } = useToast();
   const [data, setData] = useState<{ outgoing: RequestRow[]; incoming: RequestRow[] } | null>(null);
@@ -126,10 +128,14 @@ export function RequestsPage({ accountRole = "user" }: { accountRole?: string })
         title={isProvider ? "Provider workspace" : "Request"}
         description={isProvider
           ? "Review project funding requests assigned to your account, prepare responses and agreements, and decide provider connection requests."
-          : "Create and follow funding requests for projects you own or manage."}
+          : isUniversity
+            ? "Prepare and track funding requests for campus and research projects owned or managed by your institution."
+            : isGovernment
+              ? "Prepare and track program funding requests for projects owned or managed by your agency."
+              : "Create and follow funding requests for projects you own or manage."}
         actions={isProvider ? undefined : (
           <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
-            New request
+            {isUniversity ? "New campus request" : isGovernment ? "New program request" : "New request"}
           </Button>
         )}
       />
@@ -174,7 +180,7 @@ export function RequestsPage({ accountRole = "user" }: { accountRole?: string })
         </Card>
       ) : null}
       {!isProvider && open ? (
-        <Modal title="New funding request" onClose={() => setOpen(false)}>
+        <Modal title={isUniversity ? "New campus funding request" : isGovernment ? "New program funding request" : "New funding request"} onClose={() => setOpen(false)}>
           <div className="flex flex-col gap-3">
             <p className="text-sm text-neutral-600">
               Requests share project documents with the provider, so they are prepared inside the

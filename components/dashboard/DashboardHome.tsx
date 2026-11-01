@@ -68,6 +68,64 @@ function StatCard({ label, value, href, icon }: { label: string; value: number; 
   );
 }
 
+function EducationDashboard({ summary, category, refreshing }: {
+  summary: Summary;
+  category: "university" | "government";
+  refreshing: boolean;
+}) {
+  const university = category === "university";
+  const projectsHeading = university ? "Campus project portfolio" : "Public program portfolio";
+  return (
+    <>
+      <PageHeader
+        title={university ? "University workspace" : "Government coordination workspace"}
+        description={university
+          ? "Coordinate institutional projects, research groups, funding requests, and external partnerships."
+          : "Coordinate public initiatives, funding requests, partner organizations, and inter-agency groups."}
+        actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>}
+      />
+      <div className="grid gap-3 md:grid-cols-3">
+        <Link href={ROUTES.projects} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{university ? "Research & campus" : "Public initiatives"}</p>
+          <h2 className="mt-2 text-lg font-semibold">{projectsHeading}</h2>
+          <p className="mt-1 text-sm text-neutral-600">Review project workspaces, stages, and shared contributions.</p>
+          <span className="mt-4 inline-block text-sm font-medium text-brand-700">Open projects →</span>
+        </Link>
+        <Link href={ROUTES.groups} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{university ? "Academic collaboration" : "Inter-agency coordination"}</p>
+          <h2 className="mt-2 text-lg font-semibold">{university ? "Research groups" : "Coordination groups"}</h2>
+          <p className="mt-1 text-sm text-neutral-600">{summary.groupCount} active group{summary.groupCount === 1 ? "" : "s"} · {summary.pendingApprovals} pending group approval{summary.pendingApprovals === 1 ? "" : "s"}</p>
+          <span className="mt-4 inline-block text-sm font-medium text-brand-700">Manage groups →</span>
+        </Link>
+        <Link href={ROUTES.requests} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
+          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Funding workflow</p>
+          <h2 className="mt-2 text-lg font-semibold">{summary.openFunding} open request{summary.openFunding === 1 ? "" : "s"}</h2>
+          <p className="mt-1 text-sm text-neutral-600">Track funding requests attached to projects you own or manage.</p>
+          <span className="mt-4 inline-block text-sm font-medium text-brand-700">Review requests →</span>
+        </Link>
+      </div>
+      <div className={`mt-5 grid items-start gap-5 ${university ? "lg:grid-cols-[1.5fr_1fr]" : "lg:grid-cols-[1fr_1.5fr]"}`}>
+        <Card title={projectsHeading} actions={<Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">View all</Link>}>
+          {summary.recentProjects.length === 0 ? (
+            <EmptyState icon="diagram-project" title={university ? "No campus projects yet" : "No public initiatives yet"} message="Projects created by your account or its groups will appear here." action={<Link href={ROUTES.projects} className="font-medium text-brand-700 hover:underline">Create a project</Link>} />
+          ) : (
+            <ul className="flex flex-col gap-2">{summary.recentProjects.map((project) => <li key={project.id}><Link href={ROUTES.projectById(project.id)} className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 p-3 hover:border-brand-300"><span className="truncate text-sm font-medium">{project.title}</span><Badge>{project.stage}</Badge></Link></li>)}</ul>
+          )}
+        </Card>
+        <div className="flex flex-col gap-5">
+          <Card title={university ? "Institution identity" : "Agency identity"} actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage profile</Link>}>
+            <p className="text-sm text-neutral-600">Maintain the organization profile, visibility, and verification materials associated with your account.</p>
+          </Card>
+          <Card title={university ? "Partnership workspace" : "Partner coordination"} actions={<Link href={ROUTES.conneckt} className="text-sm font-medium text-brand-700 hover:underline">Open partners</Link>}>
+            <p className="text-sm text-neutral-600">Coordinate provider and member connections, then continue approved conversations in chat.</p>
+            <Link href={ROUTES.chat} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Open collaboration chat</Link>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
 export function DashboardHome() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failed, setFailed] = useState(false);
@@ -156,6 +214,10 @@ export function DashboardHome() {
       : isEducation
         ? "Organization"
         : "Member";
+
+  if (isEducation && (actorCategory === "university" || actorCategory === "government")) {
+    return <EducationDashboard summary={summary} category={actorCategory} refreshing={refreshing} />;
+  }
 
   return (
     <>

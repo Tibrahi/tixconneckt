@@ -159,10 +159,20 @@ export function DashboardShell({
   const sidebarWidth = collapsed ? "lg:w-16" : "lg:w-60";
   // Navigation reflects the work each account is assigned. The APIs remain
   // responsible for their resource ownership and permission checks.
+  const institutionNav = category === "university"
+    ? [ROUTES.dashboard, ROUTES.organizations, ROUTES.projects, ROUTES.groups, ROUTES.requests, ROUTES.conneckt, ROUTES.chat, ROUTES.actions, ROUTES.notifications, ROUTES.profile, ROUTES.settings]
+    : [ROUTES.dashboard, ROUTES.projects, ROUTES.requests, ROUTES.organizations, ROUTES.groups, ROUTES.conneckt, ROUTES.notifications, ROUTES.chat, ROUTES.actions, ROUTES.profile, ROUTES.settings];
+  const institutionLabels: Record<string, string> = category === "university"
+    ? { [ROUTES.organizations]: "Institution profile", [ROUTES.projects]: "Campus projects", [ROUTES.groups]: "Research groups", [ROUTES.requests]: "Funding requests", [ROUTES.conneckt]: "Partners", [ROUTES.chat]: "Collaboration", [ROUTES.actions]: "Scheduled actions" }
+    : { [ROUTES.organizations]: "Agency profile", [ROUTES.projects]: "Public programs", [ROUTES.groups]: "Coordination groups", [ROUTES.requests]: "Program funding", [ROUTES.conneckt]: "Partners & providers", [ROUTES.chat]: "Partner communications", [ROUTES.actions]: "Scheduled actions" };
+  const educationNav = institutionNav
+    .map((href) => DASHBOARD_NAV.find((item) => item.href === href))
+    .filter((item): item is NavItem => Boolean(item))
+    .map((item) => ({ ...item, label: institutionLabels[item.href] ?? item.label }));
   const roleNav = isAdmin ? DASHBOARD_NAV : accountRole === "provider"
     ? DASHBOARD_NAV.filter((item) => [ROUTES.dashboard, ROUTES.profile, ROUTES.chat, ROUTES.requests, ROUTES.organizations, ROUTES.notifications, ROUTES.plans, ROUTES.settings].includes(item.href as never))
     : category === "university" || category === "government"
-      ? DASHBOARD_NAV.filter((item) => ![ROUTES.wallet, ROUTES.plans].includes(item.href as never))
+      ? educationNav
       : DASHBOARD_NAV;
 
   return (

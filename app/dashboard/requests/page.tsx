@@ -5,5 +5,5 @@ export const instant = false;
 
 export default async function RequestsRoute() {
   const user = await requireUser();
-  return <RequestsPage accountRole={user.role} />;
+  return <RequestsPage accountRole={user.role} accountCategory={user.category} />;
 }

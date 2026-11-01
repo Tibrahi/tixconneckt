@@ -10,5 +10,5 @@ export const instant = false;
 export default async function ProjectsRoute() {
   const user = await requireUser();
   if (user.role === "provider") redirect(ROUTES.requests);
-  return <ProjectsPage />;
+  return <ProjectsPage accountCategory={user.category} />;
 }

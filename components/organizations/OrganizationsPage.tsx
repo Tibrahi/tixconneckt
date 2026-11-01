@@ -34,7 +34,10 @@ function StatusBadge({ status }: { status: string }) {
   );
 }
 
-export function OrganizationsPage() {
+export function OrganizationsPage({ accountCategory = "individual" }: { accountCategory?: string }) {
+  const isUniversity = accountCategory === "university";
+  const isGovernment = accountCategory === "government";
+  const profileName = isUniversity ? "Institution profile" : isGovernment ? "Agency profile" : "Organization profile";
   const [orgs, setOrgs] = useState<OrgRow[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -94,22 +97,26 @@ export function OrganizationsPage() {
   return (
     <>
       <PageHeader
-        title="Organizations"
-        description="Company and provider profiles. A logo alone never means verified — only administrators grant verification."
+        title={isUniversity ? "Institution profile" : isGovernment ? "Agency profile" : "Organizations"}
+        description={isUniversity
+          ? "Maintain your university identity, public visibility, and verification materials for institutional partnerships."
+          : isGovernment
+            ? "Maintain your agency identity, public visibility, and verification materials for program partnerships."
+            : "Organization profiles support discovery and partner verification. Only administrators grant verified status."}
         actions={
           <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
-            New organization
+            {isUniversity ? "Create institution profile" : isGovernment ? "Create agency profile" : "New organization"}
           </Button>
         }
       />
       {orgs.length === 0 ? (
         <EmptyState
           icon="building"
-          title="No organizations yet"
-          message="Create a professional profile with a logo, then submit verification evidence."
+          title={`No ${profileName.toLowerCase()} yet`}
+          message="Create the profile, choose its visibility, and submit verification evidence when ready."
           action={
             <Button size="sm" onClick={() => setOpen(true)}>
-              Create organization
+              {isUniversity ? "Create institution profile" : isGovernment ? "Create agency profile" : "Create organization"}
             </Button>
           }
         />
@@ -146,6 +153,7 @@ export function OrganizationsPage() {
       )}
       {open ? (
         <OrganizationForm
+          accountCategory={accountCategory}
           onClose={() => setOpen(false)}
           onDone={() => {
             setOpen(false);
@@ -158,7 +166,9 @@ export function OrganizationsPage() {
   );
 }
 
-export function OrganizationForm({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+export function OrganizationForm({ onClose, onDone, accountCategory = "individual" }: { onClose: () => void; onDone: () => void; accountCategory?: string }) {
+  const isUniversity = accountCategory === "university";
+  const isGovernment = accountCategory === "government";
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -213,12 +223,12 @@ export function OrganizationForm({ onClose, onDone }: { onClose: () => void; onD
   }
 
   return (
-    <Modal title="New organization" onClose={onClose} wide>
+    <Modal title={isUniversity ? "Create institution profile" : isGovernment ? "Create agency profile" : "New organization"} onClose={onClose} wide>
       <div className="flex flex-col gap-3">
-        <TextField label="Organization or company name" value={name} onChange={(e) => setName(e.target.value)} />
-        <TextAreaField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
+        <TextField label={isUniversity ? "University or institution name" : isGovernment ? "Agency name" : "Organization or company name"} value={name} onChange={(e) => setName(e.target.value)} />
+        <TextAreaField label={isUniversity ? "Institution profile" : isGovernment ? "Agency mandate" : "Description"} value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="grid gap-3 sm:grid-cols-2">
-          <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} placeholder="e.g. Lender, NGO, Supplier" />
+          <TextField label={isUniversity ? "Institution type" : isGovernment ? "Agency area" : "Category"} value={category} onChange={(e) => setCategory(e.target.value)} placeholder={isUniversity ? "e.g. University, college" : isGovernment ? "e.g. Ministry, district" : "e.g. Lender, NGO, Supplier"} />
           <TextField label="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
@@ -243,7 +253,7 @@ export function OrganizationForm({ onClose, onDone }: { onClose: () => void; onD
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
         <Button disabled={name.trim().length < 2 || saving || uploading} loading={saving} onClick={submit}>
-          Create organization
+          {isUniversity ? "Save institution profile" : isGovernment ? "Save agency profile" : "Create organization"}
         </Button>
       </div>
     </Modal>

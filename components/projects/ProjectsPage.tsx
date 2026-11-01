@@ -23,7 +23,11 @@ interface ProjectItem {
   updatedAt: string;
 }
 
-export function ProjectsPage() {
+export function ProjectsPage({ accountCategory = "individual" }: { accountCategory?: string }) {
+  const isUniversity = accountCategory === "university";
+  const isGovernment = accountCategory === "government";
+  const pageTitle = isUniversity ? "Campus projects" : isGovernment ? "Public programs" : "Project";
+  const itemLabel = isGovernment ? "program" : "project";
   const router = useRouter();
   const [items, setItems] = useState<ProjectItem[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -73,7 +77,7 @@ export function ProjectsPage() {
   if (failed) {
     return (
       <>
-        <PageHeader title="Project" />
+        <PageHeader title={pageTitle} />
         <LoadError onRetry={() => load()} />
       </>
     );
@@ -81,7 +85,7 @@ export function ProjectsPage() {
   if (!items) {
     return (
       <>
-        <PageHeader title="Project" />
+        <PageHeader title={pageTitle} />
         <SkeletonList rows={4} />
       </>
     );
@@ -90,15 +94,19 @@ export function ProjectsPage() {
   return (
     <>
       <PageHeader
-        title="Project"
-        description="Submit ideas, gather contributions, and develop them with structured analysis."
+        title={pageTitle}
+        description={isUniversity
+          ? "Create and coordinate campus or research projects with structured documents, collaborators, and funding requests."
+          : isGovernment
+            ? "Coordinate public initiatives through project workspaces, shared documents, partners, and funding requests."
+            : "Submit ideas, gather contributions, and develop them with structured analysis."}
         actions={
           <>
             <Button size="sm" variant={mineOnly ? "primary" : "secondary"} onClick={() => { setMineOnly(!mineOnly); setPage(1); }}>
               {mineOnly ? "My projects" : "All visible"}
             </Button>
             <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
-              New project
+              {isGovernment ? "New program" : isUniversity ? "New campus project" : "New project"}
             </Button>
           </>
         }
@@ -106,11 +114,11 @@ export function ProjectsPage() {
       {items.length === 0 ? (
         <EmptyState
           icon="lightbulb"
-          title="No ideas yet"
-          message="Be the first to submit an idea. Contributions and analysis build on it from here."
+          title={isUniversity ? "No campus projects yet" : isGovernment ? "No public programs yet" : "No ideas yet"}
+          message={`Create a ${itemLabel} workspace to coordinate contributors, documents, and related funding requests.`}
           action={
             <Button size="sm" onClick={() => setOpen(true)}>
-              Create your project
+              {isGovernment ? "Create a program" : isUniversity ? "Create a campus project" : "Create your project"}
             </Button>
           }
         />
