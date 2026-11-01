@@ -63,7 +63,7 @@ updates are unavailable.
 
 | Key | Production value |
 | --- | --- |
-| `CRON_SECRET` | Random 32+ chars; the scheduler calls `GET /api/cron/actions` with `Authorization: Bearer <value>` every minute |
+| `CRON_SECRET` | Random 32+ chars (set in the Vercel dashboard, all environments). Vercel Cron sends it as `Authorization: Bearer <value>` automatically; the external scheduler below needs the same header configured manually |
 | `TIXLPAY_WEBHOOK_SECRET` | Webhook secret from the TixLPay dashboard (only if payments are enabled) |
 
 ## Optional integrations
@@ -87,8 +87,19 @@ updates are unavailable.
 
 1. Apply schema and seed data once, from any machine with the production
    `DATABASE_URL`: `npm run db:migrate && npm run db:seed`.
-2. Schedule the action worker every minute against
-   `https://<your-domain>/api/cron/actions` with the `CRON_SECRET` bearer
-   token (Vercel Cron or any external scheduler).
+2. Trigger the action worker. `vercel.json` schedules a daily backstop run
+   automatically (Hobby plans allow one Vercel cron run per day), but timely
+   pre-action reminders need a tick every 1–5 minutes. On a free plan, add a
+   free external scheduler (e.g. cron-job.org):
+   - URL: `GET https://<your-domain>/api/cron/actions`
+   - Schedule: every 1 minute (5 minutes also works with the 15-minute
+     reminder window)
+   - Header: `Authorization: Bearer <CRON_SECRET>`
+   Without this, actions still execute on the daily backstop run, but
+   reminders arrive late and same-day actions wait until 06:00 UTC. (On Pro,
+   change the `vercel.json` schedule to `*/5 * * * *` and skip this step.)
+   Verify with `curl -H "Authorization: Bearer $CRON_SECRET"
+   https://<your-domain>/api/cron/actions` — the JSON includes
+   `overduePending`, which stays `0` while the scheduler is healthy.
 3. Create the admin account by registering normally, then setting
    `role = 'admin'` on that user row before signing in.

@@ -261,14 +261,21 @@ async function executeWorkflow(
 /**
  * Durable worker entry: sends pre-execution reminders, claims due actions
  * atomically (idempotent), recovers crashed claims, executes, records
- * attempts, and notifies outcomes. Runs via /api/cron/actions on a schedule
- * — never in the browser.
+ * attempts, and notifies outcomes. Runs via /api/cron/actions, triggered by
+ * the daily Vercel cron backstop plus an external every-minute scheduler
+ * (see README) — never in the browser.
  */
 export async function runDueActions(limit = 25): Promise<{
   reminded: number;
   executed: number;
   failed: number;
   recovered: number;
+  /**
+   * Confirmed actions still past due after this run. Stays above zero when
+   * the scheduler ticks too rarely (or not at all) — the cron response and
+   * server logs surface it so a silent scheduler is noticed.
+   */
+  overduePending: number;
 }> {
   const db = getDb();
   const now = new Date();
@@ -447,7 +454,25 @@ export async function runDueActions(limit = 25): Promise<{
     }
   }
 
-  return { reminded, executed, failed, recovered };
+  // Scheduler health signal: anything still confirmed-and-overdue after this
+  // run means ticks are too rare (or this is the first tick in a long time).
+  // The daily Vercel cron is only a backstop on Hobby — timely reminders
+  // need the external every-minute scheduler from the README.
+  const overdueRows = await db
+    .select({ id: scheduledActions.id })
+    .from(scheduledActions)
+    .where(
+      and(eq(scheduledActions.status, "confirmed"), lte(scheduledActions.scheduledFor, new Date())),
+    )
+    .limit(limit + 1);
+  const overduePending = Math.min(overdueRows.length, limit + 1);
+  if (overduePending > 0) {
+    console.warn(
+      `[actions:cron] ${overduePending >= limit + 1 ? `${limit}+` : overduePending} confirmed action(s) still past due after this run.`,
+    );
+  }
+
+  return { reminded, executed, failed, recovered, overduePending };
 }
 
 /** Completion/failure notice via in-app alert plus email per member prefs. */

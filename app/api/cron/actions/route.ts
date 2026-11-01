@@ -3,7 +3,8 @@ import { apiError, apiOk } from "@/lib/api-response";
 
 /**
  * Cron entry for the durable action worker. Protected by CRON_SECRET bearer
- * token — configure your scheduler (e.g. every minute) with the secret.
+ * token — Vercel Cron sends it automatically when CRON_SECRET is set;
+ * external schedulers must send `Authorization: Bearer <CRON_SECRET>`.
  */
 async function authorized(req: Request): Promise<boolean> {
   const secret = process.env.CRON_SECRET;
