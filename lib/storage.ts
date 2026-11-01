@@ -1,5 +1,5 @@
 import "server-only";
-import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { getStorageConfig, objectStorageConfigured, type StorageConfig } from "./storage-config";
 
@@ -241,6 +241,50 @@ export async function deletePrivateObject(key: string): Promise<void> {
   const s3 = getS3Client();
   if (!s3) return;
   await s3.client.send(new DeleteObjectCommand({ Bucket: s3.config.bucket, Key: key }));
+}
+
+export interface BucketObject {
+  key: string;
+  sizeBytes: number;
+  lastModified: string | null;
+}
+
+/**
+ * Read-only bucket inventory for storage reconciliation (role-aware §A4).
+ * Paginated with a hard cap — reports `truncated` instead of loading an
+ * unbounded keyspace. Never reads object contents.
+ */
+export async function listBucketKeys(
+  maxKeys = 5000,
+): Promise<{ objects: BucketObject[]; truncated: boolean; error?: string }> {
+  const s3 = getS3Client();
+  if (!s3) return { objects: [], truncated: false, error: "Neon Object Storage is not configured" };
+  const objects: BucketObject[] = [];
+  let token: string | undefined;
+  try {
+    for (;;) {
+      const page = await s3.client.send(
+        new ListObjectsV2Command({
+          Bucket: s3.config.bucket,
+          ContinuationToken: token,
+          MaxKeys: Math.min(1000, Math.max(1, maxKeys - objects.length)),
+        }),
+      );
+      for (const item of page.Contents ?? []) {
+        if (!item.Key) continue;
+        objects.push({
+          key: item.Key,
+          sizeBytes: item.Size ?? 0,
+          lastModified: item.LastModified ? item.LastModified.toISOString() : null,
+        });
+        if (objects.length >= maxKeys) return { objects, truncated: true };
+      }
+      if (!page.IsTruncated || !page.NextContinuationToken) return { objects, truncated: false };
+      token = page.NextContinuationToken;
+    }
+  } catch {
+    return { objects: [], truncated: false, error: "Could not list Neon Object Storage" };
+  }
 }
 
 /** Short-lived signed URL — private objects are never publicly readable. */

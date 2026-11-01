@@ -3,7 +3,10 @@ import {
   connectionRequestSchema,
   loginSchema,
   messageSendSchema,
+  normalizeProfileProposal,
   otpVerifySchema,
+  profileProposalSchema,
+  profileUpdateSchema,
   projectInterestCopy,
   projectSubmitSchema,
   registerSchema,
@@ -122,6 +125,72 @@ describe("projectSubmitSchema", () => {
         summary: "A sufficiently detailed summary of the idea.",
       }).success,
     ).toBe(true);
+  });
+});
+
+describe("profileUpdateSchema countryCode", () => {
+  // Registration stores calling codes (+250); the profile form uses ISO (RW).
+  // Both must save, or existing accounts hit PATCH /api/profile 400.
+  it("accepts ISO letters, calling codes, and empty", () => {
+    expect(profileUpdateSchema.safeParse({ countryCode: "RW" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ countryCode: "rw" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ countryCode: "+250" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ countryCode: "" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({}).success).toBe(true);
+  });
+  it("rejects malformed codes", () => {
+    expect(profileUpdateSchema.safeParse({ countryCode: "R2" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ countryCode: "RWANDA" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ countryCode: "250" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ countryCode: "+250123" }).success).toBe(false);
+  });
+});
+
+describe("normalizeProfileProposal", () => {
+  it("maps aliases onto canonical fields", () => {
+    expect(
+      normalizeProfileProposal({
+        education: "BSc Computer Science",
+        goals: "Find collaborators",
+        technicalSkills: ["React", "SQL"],
+        sectors: "agritech, fintech",
+        about: "Builder in Kigali",
+        city: "Kigali",
+      }),
+    ).toEqual({
+      educationLevel: "BSc Computer Science",
+      objectives: "Find collaborators",
+      skills: ["React", "SQL"],
+      fields: ["agritech", "fintech"],
+      bio: "Builder in Kigali",
+      location: "Kigali",
+    });
+  });
+  it("unwraps one level of nesting", () => {
+    expect(normalizeProfileProposal({ profile: { major: "CS", bio: "Hi" } })).toEqual({
+      major: "CS",
+      bio: "Hi",
+    });
+  });
+  it("fills gaps from a wrapper when top-level fields exist", () => {
+    expect(normalizeProfileProposal({ bio: "Top", profile: { major: "CS" } })).toEqual({
+      bio: "Top",
+      major: "CS",
+    });
+  });
+  it("drops empty values and ignores unknown keys", () => {
+    expect(normalizeProfileProposal({ bio: "  ", skills: "", hacker: "x", major: "CS" })).toEqual({
+      major: "CS",
+    });
+  });
+  it("returns empty for non-objects", () => {
+    expect(normalizeProfileProposal(null)).toEqual({});
+    expect(normalizeProfileProposal("text")).toEqual({});
+    expect(normalizeProfileProposal([{ bio: "x" }])).toEqual({});
+  });
+  it("normalized output passes the proposal schema", () => {
+    const normalized = normalizeProfileProposal({ goals: "Ship it", technicalSkills: "a, b" });
+    expect(profileProposalSchema.safeParse(normalized).success).toBe(true);
   });
 });
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { callMuseSpark, transcribeWithMuseVoice } from "@/lib/ai";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
-import { profileUpdateSchema } from "@/lib/validation";
+import { normalizeProfileProposal, profileProposalSchema } from "@/lib/validation";
 import { retainVoiceAudio } from "@/lib/voice-capture";
 
 const textProposalSchema = z.object({ text: z.string().min(1).max(8000) });
@@ -22,7 +22,7 @@ export async function POST(req: Request) {
     const form = await req.formData();
     const audio = form.get("audio");
     if (!(audio instanceof Blob)) return apiError("No audio provided.", 400);
-    const file = new File([audio], (audio as File).name || "profile.webm", {
+    const file = new File([audio], (audio as File).name || (audio.type.includes("wav") ? "profile.wav" : "profile.webm"), {
       type: audio.type || "audio/webm",
     });
     const retained = await retainVoiceAudio(session.user.id, "profile", file);
@@ -63,8 +63,13 @@ export async function POST(req: Request) {
     return apiError(spark.error ?? "Interpretation failed.", 502);
   }
 
-  // Validate the AI proposal — untrusted until it passes the schema.
-  const proposal = profileUpdateSchema.safeParse(spark.data);
+  // Map the AI proposal onto canonical fields, then validate — untrusted
+  // until it passes the schema. Unknown mappings stay out for manual review.
+  const normalized = normalizeProfileProposal(spark.data);
+  if (Object.keys(normalized).length === 0) {
+    return apiError("The assistant found no profile details in that text. Please edit the fields manually.", 502);
+  }
+  const proposal = profileProposalSchema.safeParse(normalized);
   if (!proposal.success) {
     return apiError("The assistant returned an unusable proposal. Please edit the fields manually.", 502);
   }

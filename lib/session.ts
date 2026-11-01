@@ -16,6 +16,7 @@ export interface SessionUser {
   role: string;
   status: string;
   category: string;
+  providerKind: string | null;
   emailVerified: boolean;
 }
 
@@ -49,6 +50,7 @@ export async function getSession(options: { throwOnDatabaseUnavailable?: boolean
           role: users.role,
           status: users.status,
           category: users.category,
+          providerKind: users.providerKind,
           emailVerified: users.emailVerified,
         })
         .from(sessions)
@@ -66,6 +68,7 @@ export async function getSession(options: { throwOnDatabaseUnavailable?: boolean
         role: row.role,
         status: row.status,
         category: row.category,
+        providerKind: row.providerKind,
         emailVerified: row.emailVerified,
       },
       session: {

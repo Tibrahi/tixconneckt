@@ -1,5 +1,7 @@
 import {
+  boolean,
   index,
+  integer,
   jsonb,
   pgTable,
   text,
@@ -235,7 +237,7 @@ export const calls = pgTable(
       .references(() => users.id, { onDelete: "cascade" }),
     /** audio | video */
     kind: text("kind").notNull(),
-    /** ringing | accepted | declined | ended | missed */
+    /** ringing | accepted | declined | ended | missed | failed */
     status: text("status").notNull().default("ringing"),
     /** Honest failure reason (network failed, unreachable, ...). */
     failureReason: text("failure_reason"),
@@ -253,3 +255,84 @@ export const calls = pgTable(
 );
 
 export type Call = typeof calls.$inferSelect;
+
+/**
+ * Per-call transcription consent (role-aware §B). Transcription is active
+ * only while EVERY participant holds a consented=true row; either party
+ * flipping to false stops further persistence immediately. Rows record
+ * participant + timestamp + call; every change is also audited.
+ * No raw call audio/video is ever stored — segments hold text only.
+ */
+export const callTranscriptConsents = pgTable(
+  "call_transcript_consents",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    callId: text("call_id")
+      .notNull()
+      .references(() => calls.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    consented: boolean("consented").notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("call_consent_call_user_unique").on(t.callId, t.userId),
+    index("call_consent_call_idx").on(t.callId),
+  ],
+);
+
+/**
+ * Transcript segments for one call. segmentIndex is the idempotency key:
+ * reconnects and duplicate deliveries overwrite the same index instead of
+ * corrupting history. Speaker attribution is stored only when supplied by
+ * a reliable diarization path and is always labeled as attributed.
+ */
+export const callTranscripts = pgTable(
+  "call_transcripts",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    callId: text("call_id")
+      .notNull()
+      .references(() => calls.id, { onDelete: "cascade" }),
+    segmentIndex: integer("segment_index").notNull(),
+    speaker: text("speaker"),
+    text: text("text").notNull(),
+    final: boolean("final").notNull().default(true),
+    turnId: integer("turn_id"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("call_transcript_segment_unique").on(t.callId, t.segmentIndex),
+    index("call_transcript_call_idx").on(t.callId),
+  ],
+);
+
+/** Per-user hide state for ended/accepted calls (the history toggle). */
+export const callHides = pgTable(
+  "call_hides",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    callId: text("call_id")
+      .notNull()
+      .references(() => calls.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    hiddenAt: timestamp("hidden_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [uniqueIndex("call_hide_call_user_unique").on(t.callId, t.userId)],
+);

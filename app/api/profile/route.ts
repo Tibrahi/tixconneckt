@@ -27,7 +27,12 @@ export async function PATCH(req: Request) {
   }
   const parsed = profileUpdateSchema.safeParse(body);
   if (!parsed.success) {
-    return apiError("Please correct the highlighted fields.", 400);
+    const details: Record<string, string[]> = {};
+    for (const issue of parsed.error.issues) {
+      const key = issue.path.join(".") || "form";
+      (details[key] ??= []).push(issue.message);
+    }
+    return apiError("Please correct the highlighted fields.", 400, details);
   }
   const input = parsed.data;
   const db = getDb();
@@ -36,15 +41,25 @@ export async function PATCH(req: Request) {
     return apiError("Only provider accounts set a provider category.", 403);
   }
 
+  // ISO codes normalize to uppercase; legacy calling codes (+250) pass through.
+  const normalizedCountryCode =
+    input.countryCode === undefined || input.countryCode === ""
+      ? input.countryCode === ""
+        ? null
+        : undefined
+      : input.countryCode.startsWith("+")
+        ? input.countryCode
+        : input.countryCode.toUpperCase();
+
   await db.transaction(async (tx) => {
-    if (input.name || input.phone !== undefined || input.country !== undefined || input.countryCode !== undefined || input.providerKind !== undefined) {
+    if (input.name || input.phone !== undefined || input.country !== undefined || normalizedCountryCode !== undefined || input.providerKind !== undefined) {
       await tx
         .update(users)
         .set({
           ...(input.name ? { name: input.name } : {}),
           ...(input.phone !== undefined ? { phone: input.phone || null } : {}),
           ...(input.country !== undefined ? { country: input.country || null } : {}),
-          ...(input.countryCode !== undefined ? { countryCode: input.countryCode.toUpperCase() || null } : {}),
+          ...(normalizedCountryCode !== undefined ? { countryCode: normalizedCountryCode } : {}),
           ...(input.providerKind !== undefined ? { providerKind: input.providerKind } : {}),
         })
         .where(eq(users.id, session.user.id));

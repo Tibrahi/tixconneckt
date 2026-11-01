@@ -76,7 +76,10 @@ export const profileUpdateSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),
   phone: z.string().trim().max(32).refine((value) => value === "" || value.length >= 4, "Phone number is too short").optional(),
   country: z.string().trim().max(120).refine((value) => value === "" || value.length >= 2, "Country is too short").optional(),
-  countryCode: z.string().trim().max(3).refine((value) => value === "" || /^[A-Za-z]{2,3}$/.test(value), "Enter a valid country code").optional(),
+  countryCode: z.string().trim().max(6).refine(
+    (value) => value === "" || /^[A-Za-z]{2,3}$/.test(value) || /^\+[0-9]{1,5}$/.test(value),
+    "Enter a valid country code (e.g. RW or +250)",
+  ).optional(),
   educationLevel: z.string().trim().max(120).optional(),
   objectives: z.string().trim().max(2000).optional(),
   major: z.string().trim().max(200).optional(),
@@ -545,3 +548,98 @@ export const aiImageGenerateSchema = z.object({
   prompt: z.string().trim().min(10, "Describe the image in at least a few words.").max(2000),
   style: z.enum(["natural", "photographic", "illustration", "minimal"]).default("natural"),
 });
+
+/** Profile-assistant proposal: the reviewable subset of profileUpdateSchema. */
+export const profileProposalSchema = z.object({
+  educationLevel: z.string().trim().max(120).optional(),
+  objectives: z.string().trim().max(2000).optional(),
+  major: z.string().trim().max(200).optional(),
+  skills: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+  strengths: z.array(z.string().trim().min(1).max(60)).max(30).optional(),
+  fields: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
+  bio: z.string().trim().max(2000).optional(),
+  location: z.string().trim().max(200).optional(),
+});
+
+export type ProfileProposal = z.infer<typeof profileProposalSchema>;
+
+/** Canonical profile field names accepted in an AI proposal. */
+const PROFILE_PROPOSAL_FIELDS = [
+  "educationLevel",
+  "objectives",
+  "major",
+  "skills",
+  "strengths",
+  "fields",
+  "bio",
+  "location",
+] as const;
+
+/** Explicit alias map: legacy/provider names → canonical profile field. */
+const PROFILE_PROPOSAL_ALIASES: Record<string, string[]> = {
+  educationLevel: ["education", "education_level", "qualification"],
+  objectives: ["objective", "goals", "goal", "careerObjectives", "career_objectives", "ambitions"],
+  major: ["degree", "program", "programme", "specialization"],
+  skills: ["technicalSkills", "technical_skills", "capabilities", "expertise"],
+  strengths: ["personalStrengths", "personal_strengths"],
+  fields: ["sectors", "sector", "industries", "industry", "domains", "domain"],
+  bio: ["biography", "summary", "about", "aboutMe", "description"],
+  location: ["city", "address", "basedIn", "based_in", "country"],
+};
+
+/** Wrapper keys unwrapped when the model nests the proposal one level deep. */
+const PROFILE_PROPOSAL_WRAPPERS = ["profile", "proposal", "fields", "values", "data", "result"];
+
+const PROFILE_LIST_FIELDS = new Set(["skills", "strengths", "fields"]);
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function coerceStringList(value: unknown): string[] | undefined {
+  const items = Array.isArray(value) ? value : typeof value === "string" ? value.split(/[,;\n]+/) : [];
+  const cleaned = items
+    .filter((item): item is string => typeof item === "string")
+    .map((item) => item.trim())
+    .filter(Boolean);
+  return cleaned.length > 0 ? cleaned : undefined;
+}
+
+/**
+ * Map an AI profile proposal onto canonical field names. Resolves documented
+ * aliases, fills gaps from one level of nesting, coerces delimited strings
+ * to lists, and drops empty values so the assistant never blanks a field.
+ * Unknown keys are rejected for manual review — never silently persisted.
+ */
+export function normalizeProfileProposal(raw: unknown): Record<string, unknown> {
+  if (!isRecord(raw)) return {};
+  const sources = [raw];
+  for (const wrapper of PROFILE_PROPOSAL_WRAPPERS) {
+    const nested = raw[wrapper];
+    if (isRecord(nested)) sources.push(nested);
+  }
+  const normalized: Record<string, unknown> = {};
+  for (const field of PROFILE_PROPOSAL_FIELDS) {
+    const candidates = [field, ...(PROFILE_PROPOSAL_ALIASES[field] ?? [])];
+    for (const source of sources) {
+      let found = false;
+      for (const key of candidates) {
+        if (!(key in source)) continue;
+        const value = source[key];
+        if (PROFILE_LIST_FIELDS.has(field)) {
+          const list = coerceStringList(value);
+          if (list) {
+            normalized[field] = list;
+            found = true;
+          }
+        } else if (typeof value === "string" && value.trim()) {
+          normalized[field] = value.trim();
+          found = true;
+        }
+        break;
+      }
+      if (found) break;
+    }
+  }
+  return normalized;
+}

@@ -249,7 +249,7 @@ export function OwnProfilePage() {
               <TextField label="Full name" value={draft.name ?? ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
               <TextField label="Phone" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
               <TextField label="Country" value={draft.country ?? ""} onChange={(e) => setDraft({ ...draft, country: e.target.value })} />
-              <TextField label="Country code" value={draft.countryCode ?? ""} onChange={(e) => setDraft({ ...draft, countryCode: e.target.value.toUpperCase().slice(0, 3) })} placeholder="e.g. RW" />
+              <TextField label="Country code" value={draft.countryCode ?? ""} maxLength={6} onChange={(e) => setDraft({ ...draft, countryCode: e.target.value.trim().toUpperCase() })} placeholder="e.g. RW or +250" hint="ISO letters (RW) or calling code (+250)." />
               <TextField label="Location" value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
               {profile.role === "provider" ? (
                 <SelectField

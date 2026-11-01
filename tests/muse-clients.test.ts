@@ -287,4 +287,52 @@ describe("generateImage", () => {
     expect(result.error).toContain("Describe");
     expect(fetchMock).not.toHaveBeenCalled();
   });
+  it("fetches bytes server-side when the provider returns a url", async () => {
+    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
+    const png = Buffer.from(PNG_1PX, "base64");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/images/generations")) {
+          return jsonRes({ data: [{ url: "https://cdn.example.com/tmp/img.png" }] });
+        }
+        return new Response(new Uint8Array(png), { status: 200, headers: { "Content-Type": "image/png" } });
+      }),
+    );
+    const result = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
+    expect(result.mimeType).toBe("image/png");
+    expect(result.bytes?.length).toBe(png.length);
+  });
+  it("fails safely when the provider url cannot be loaded", async () => {
+    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/images/generations")) {
+          return jsonRes({ data: [{ url: "https://cdn.example.com/tmp/missing.png" }] });
+        }
+        return new Response("gone", { status: 404 });
+      }),
+    );
+    const result = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
+    expect(result.bytes).toBeUndefined();
+    expect(result.error).toContain("could not be loaded");
+  });
+  it("rejects non-image bytes from a provider url and non-https urls", async () => {
+    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/images/generations")) {
+          return jsonRes({ data: [{ url: "https://cdn.example.com/tmp/evil.html" }] });
+        }
+        return new Response("<html>nope</html>", { status: 200 });
+      }),
+    );
+    const nonImage = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
+    expect(nonImage.error).toContain("unusable");
+    vi.stubGlobal("fetch", vi.fn(async () => jsonRes({ data: [{ url: "http://insecure.example/img.png" }] })));
+    const insecure = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
+    expect(insecure.error).toContain("no image");
+  });
 });

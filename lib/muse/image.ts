@@ -44,6 +44,53 @@ function sniffImage(bytes: Buffer): "image/png" | "image/jpeg" | null {
   return null;
 }
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+/**
+ * Fetch a provider-hosted image URL server-side and verify its bytes. Used
+ * only when the provider ignores `response_format: b64_json`. The temporary
+ * URL is never returned to the client — only verified bytes become a
+ * data-URL preview, and only the user's applied upload is persisted.
+ */
+async function fetchRemoteImage(url: string): Promise<GenerateImageResult> {
+  let res: Response;
+  try {
+    res = await fetch(url, { signal: AbortSignal.timeout(30000) });
+  } catch {
+    return { error: "Image generation returned a preview that could not be loaded. Please try again." };
+  }
+  if (!res.ok) {
+    console.error("[muse:image]", `preview fetch HTTP ${res.status}`);
+    return { error: "Image generation returned a preview that could not be loaded. Please try again." };
+  }
+  const declared = Number(res.headers.get("content-length"));
+  if (Number.isFinite(declared) && declared > MAX_IMAGE_BYTES) {
+    return { error: "Image generation returned an unusable result." };
+  }
+  const reader = res.body?.getReader();
+  if (!reader) return { error: "Image generation returned an unusable result." };
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_IMAGE_BYTES) return { error: "Image generation returned an unusable result." };
+      chunks.push(value);
+    }
+  } catch {
+    return { error: "Image generation returned a preview that could not be loaded. Please try again." };
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = Buffer.concat(chunks);
+  if (bytes.length === 0) return { error: "Image generation returned an unusable result." };
+  const mimeType = sniffImage(bytes);
+  if (!mimeType) return { error: "Image generation returned an unusable result." };
+  return { bytes, mimeType };
+}
+
 export async function generateImage(request: {
   prompt: string;
   size: ImageSize;
@@ -101,18 +148,32 @@ export async function generateImage(request: {
   } catch {
     return { error: "Image generation returned an unusable result." };
   }
-  const b64 = body.data?.[0]?.b64_json;
-  if (!b64) return { error: "Image generation returned no image." };
+  const first = body.data?.[0];
+  const b64 = first?.b64_json;
+  if (!b64) {
+    // Some providers ignore response_format and return a temporary URL.
+    // Fetch its bytes server-side so the client never sees the temp URL.
+    const remoteUrl = first?.url;
+    if (typeof remoteUrl === "string" && remoteUrl.startsWith("https://")) {
+      console.warn("[muse:image] provider returned url instead of b64_json; fetching bytes");
+      const remote = await fetchRemoteImage(remoteUrl);
+      if (remote.bytes && remote.mimeType) {
+        return { ...remote, revisedPrompt: first?.revised_prompt };
+      }
+      return remote;
+    }
+    return { error: "Image generation returned no image." };
+  }
   let bytes: Buffer;
   try {
     bytes = Buffer.from(b64, "base64");
   } catch {
     return { error: "Image generation returned an unusable result." };
   }
-  if (bytes.length === 0 || bytes.length > 10 * 1024 * 1024) {
+  if (bytes.length === 0 || bytes.length > MAX_IMAGE_BYTES) {
     return { error: "Image generation returned an unusable result." };
   }
   const mimeType = sniffImage(bytes);
   if (!mimeType) return { error: "Image generation returned an unusable result." };
-  return { bytes, mimeType, revisedPrompt: body.data?.[0]?.revised_prompt };
+  return { bytes, mimeType, revisedPrompt: first?.revised_prompt };
 }
