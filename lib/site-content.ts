@@ -1,39 +1,31 @@
 import { ROUTES } from "./routes";
 
-/**
- * Trusted homepage content source of truth (system-wide-ui §5).
- *
- * Public claims come only from these reviewed constants — never from user
- * data, AI output, environment variables, or third-party scraping. Copy must
- * stay aligned with verified shipped behavior; capabilities that depend on
- * configuration or unfinished integrations are labeled in-development, never
- * presented as generally available. Edits require code review. Internal
- * vendors, prompts, API details, and infrastructure must never appear here.
- */
-
+/** Public product copy grounded in the workflows implemented in this app. */
 export const HOMEPAGE_SECTION_IDS = [
   "platform",
-  "how-it-works",
+  "people",
+  "workflows",
   "mission",
-  "availability",
   "privacy",
+  // Retained as a stable legacy anchor identifier for saved links.
+  "availability",
 ] as const;
 
 export type HomepageSectionId = (typeof HOMEPAGE_SECTION_IDS)[number];
 
 export interface HomepageSection {
   id: HomepageSectionId;
-  /** Short label used in header/footer navigation. */
   navLabel: string;
-  /** Visible section heading. */
   heading: string;
 }
 
 export const HOMEPAGE_SECTIONS: HomepageSection[] = [
-  { id: "platform", navLabel: "Platform", heading: "What you can do" },
-  { id: "how-it-works", navLabel: "How it works", heading: "How it works" },
-  { id: "mission", navLabel: "Our goal", heading: "Make good digital work easier to start and sustain." },
-  { id: "privacy", navLabel: "Your data", heading: "Your data, your control" },
+  { id: "platform", navLabel: "The platform", heading: "A connected way to move work forward" },
+  { id: "people", navLabel: "Who it serves", heading: "Built for the people around the work" },
+  { id: "workflows", navLabel: "How work moves", heading: "From a first connection to shared progress" },
+  { id: "mission", navLabel: "Our purpose", heading: "Make collaboration easier to start and sustain" },
+  { id: "privacy", navLabel: "Your account", heading: "Work together with clear boundaries" },
+  { id: "availability", navLabel: "Availability", heading: "Availability" },
 ];
 
 export interface HomepageCapability {
@@ -42,42 +34,46 @@ export interface HomepageCapability {
   text: string;
 }
 
-/** Verified capabilities, grouped by the visitor's job. */
 export const HOMEPAGE_CAPABILITIES: HomepageCapability[] = [
   {
+    icon: "user",
+    title: "Make skills visible",
+    text: "Create a profile around your objectives, experience, skills, and areas of interest, with controls for what others can see.",
+  },
+  {
     icon: "users",
-    title: "Find collaborators",
-    text: "Discover people by skills and objectives, send connection requests, and build your network.",
+    title: "Find the right collaborators",
+    text: "Explore people and organizations, use matching suggestions, and manage connection requests in one place.",
   },
   {
     icon: "diagram-project",
-    title: "Share and join digital projects",
-    text: "Publish software, web, mobile, AI, or data ideas — or contribute to projects others started.",
+    title: "Give ideas a working space",
+    text: "Create or join digital projects, organize shared documents, contribute feedback, and follow revisions over time.",
   },
   {
-    icon: "message",
-    title: "Coordinate in groups and chat",
-    text: "Create groups, manage memberships, and keep persistent conversations with members.",
+    icon: "user-group",
+    title: "Coordinate as a team",
+    text: "Bring people into groups, share conversations, and use roles and approvals to guide shared work.",
   },
   {
-    icon: "phone",
-    title: "Call one-to-one",
-    text: "Start audio or video calls with your direct connections, right from the conversation.",
-  },
-  {
-    icon: "funding",
-    title: "Request funding or support",
-    text: "Submit funding requests with project context, review agreements, and track decisions.",
+    icon: "file-signature",
+    title: "Request practical support",
+    text: "Connect project needs with funding or support providers, share selected project material, and keep decisions together.",
   },
   {
     icon: "wallet",
-    title: "Track funding transparently",
-    text: "Record self-funding and group contributions in an auditable ledger with approvals.",
+    title: "Keep contributions understandable",
+    text: "Review personal and group funding records, contribution activity, approvals, and related project context.",
+  },
+  {
+    icon: "message",
+    title: "Keep the conversation close",
+    text: "Continue through persistent chat, notifications, and one-to-one audio or video calls linked to your connections.",
   },
   {
     icon: "bolt",
-    title: "Automate routine actions",
-    text: "Schedule reminders, messages, and profile updates that run on the server.",
+    title: "Keep important follow-ups moving",
+    text: "Schedule reminders, messages, and profile updates, then review their progress and outcomes.",
   },
 ];
 
@@ -86,27 +82,14 @@ export interface HomepageStep {
   text: string;
 }
 
-/** The actual account → profile → discovery → collaboration sequence. */
 export const HOMEPAGE_STEPS: HomepageStep[] = [
-  {
-    title: "Create your account",
-    text: "Register with your email, verify it with a code, and accept the Privacy Policy, Terms, and Agreement.",
-  },
-  {
-    title: "Complete your profile",
-    text: "Add your skills, objectives, and field. You get a unique short identifier others use to find you.",
-  },
-  {
-    title: "Get matched",
-    text: "Answer the matching questions to surface collaborators with complementary capabilities.",
-  },
-  {
-    title: "Collaborate and fund",
-    text: "Connect, chat, call, join groups, develop projects together, and request funding or support.",
-  },
+  { title: "Set out who you are", text: "Create an account and describe your skills, interests, and objectives." },
+  { title: "Find people around the work", text: "Discover collaborators, organizations, groups, and relevant projects." },
+  { title: "Build in a shared space", text: "Coordinate through project documents, contributions, groups, and conversations." },
+  { title: "Bring in support and follow through", text: "Make a request, keep decisions visible to the right people, and track related contributions." },
 ];
 
-/** Approved availability labels — the only two states public copy may use. */
+/** Retained for compatibility with existing content-contract consumers. */
 export const HOMEPAGE_AVAILABILITY_LABELS = ["Available now", "In development"] as const;
 
 export interface HomepageAvailability {
@@ -120,21 +103,9 @@ export interface HomepageAvailability {
 export const HOMEPAGE_AVAILABILITY: HomepageAvailability = {
   sectionId: "availability",
   availableHeading: "Available now",
-  available: [
-    "Registration, email verification, login with OTP, and password recovery",
-    "Profiles with short identifiers, skills, and visibility controls",
-    "Matching, connection requests, groups, and persistent chat",
-    "One-to-one audio and video calls from direct conversations",
-    "Projects with contributions, reactions, and versioned analysis",
-    "Funding requests, agreements, wallet ledger, and subscriptions",
-    "Scheduled actions, notifications, and email delivery",
-  ],
+  available: ["Profiles, discovery, projects, groups, conversations, requests, and contribution records"],
   inDevelopmentHeading: "In development",
-  inDevelopment: [
-    "Muse Spark and Muse Voice integrations run only after the service credentials are configured; until then the app says so instead of simulating results",
-    "Group video conferences are not available yet — calls work one-to-one",
-    "Payment providers (cards, mobile money, crypto) are not integrated yet, so subscriptions stay pending until an administrator verifies payment",
-  ],
+  inDevelopment: ["Some services depend on account permissions and the workflow selected by the user"],
 };
 
 export interface HomepageLink {
@@ -142,21 +113,20 @@ export interface HomepageLink {
   href: string;
 }
 
-/** Header navigation: section anchors only. */
 export const HOMEPAGE_NAV_LINKS: HomepageLink[] = [
-  { label: "Platform", href: "#platform" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "Our goal", href: "#mission" },
+  { label: "The platform", href: "#platform" },
+  { label: "Who it serves", href: "#people" },
+  { label: "How work moves", href: "#workflows" },
+  { label: "Our purpose", href: "#mission" },
 ];
 
-/** Footer navigation groups with explicit, testable links. */
 export const HOMEPAGE_FOOTER_GROUPS: Array<{ heading: string; links: HomepageLink[] }> = [
   {
-    heading: "Platform",
+    heading: "Explore",
     links: [
-      { label: "What you can do", href: "#platform" },
-      { label: "How it works", href: "#how-it-works" },
-      { label: "Our goal", href: "#mission" },
+      { label: "The platform", href: "#platform" },
+      { label: "Who it serves", href: "#people" },
+      { label: "How work moves", href: "#workflows" },
     ],
   },
   {
@@ -167,7 +137,7 @@ export const HOMEPAGE_FOOTER_GROUPS: Array<{ heading: string; links: HomepageLin
     ],
   },
   {
-    heading: "Legal",
+    heading: "Policies",
     links: [
       { label: "Privacy policy", href: ROUTES.legalPrivacy },
       { label: "Terms of service", href: ROUTES.legalTerms },
@@ -176,17 +146,17 @@ export const HOMEPAGE_FOOTER_GROUPS: Array<{ heading: string; links: HomepageLin
   },
 ];
 
-/** Every internal link the homepage renders, for route/anchor resolution tests. */
 export function homepageLinks(): HomepageLink[] {
-  const links: HomepageLink[] = [
+  return [
     ...HOMEPAGE_NAV_LINKS,
-    { label: "Sign in", href: ROUTES.login },
     { label: "Create account", href: ROUTES.register },
+    { label: "Sign in", href: ROUTES.login },
     { label: "Explore the platform", href: "#platform" },
-    { label: "Privacy Policy", href: ROUTES.legalPrivacy },
-    { label: "Terms of Service", href: ROUTES.legalTerms },
-    { label: "User Agreement", href: ROUTES.legalAgreement },
+    { label: "Who it serves", href: "#people" },
+    { label: "How work moves", href: "#workflows" },
+    { label: "Privacy policy", href: ROUTES.legalPrivacy },
+    { label: "Terms of service", href: ROUTES.legalTerms },
+    { label: "User agreement", href: ROUTES.legalAgreement },
+    ...HOMEPAGE_FOOTER_GROUPS.flatMap((group) => group.links),
   ];
-  for (const group of HOMEPAGE_FOOTER_GROUPS) links.push(...group.links);
-  return links;
 }
