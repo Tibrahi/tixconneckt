@@ -44,7 +44,7 @@ function EntryList({
           </div>
           <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
             <span className="capitalize">{e.kind.replace(/_/g, " ")}</span>
-            <span className={`font-mono font-semibold ${e.direction === "credit" ? "text-green-700" : "text-black"}`}>
+            <span className={`font-mono font-semibold ${e.direction === "credit" ? "text-blue-700" : "text-black"}`}>
               {e.direction === "credit" ? "+" : "−"}
               {formatMoney(e.amountMinor, e.currency)}
             </span>
@@ -86,7 +86,7 @@ interface IndividualData {
 
 function TixlPayMaintenanceNotice() {
   return (
-    <div role="status" className="mb-4 rounded-md border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950">
+    <div role="status" className="mb-4 rounded-md border border-blue-300 bg-blue-50 p-4 text-sm text-blue-950">
       <p className="font-semibold">TixlPay is under maintenance</p>
       <p className="mt-1">Withdrawals through TixlPay are temporarily unavailable. Your wallet balances remain safe.</p>
     </div>

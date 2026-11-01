@@ -240,7 +240,7 @@ export function OwnProfilePage() {
       <ProfilePhotos shortId={profile.shortId} editable />
 
       {saved ? (
-        <p role="status" className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+        <p role="status" className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
           Your profile was saved.
         </p>
       ) : null}

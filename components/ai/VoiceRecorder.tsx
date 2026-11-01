@@ -209,12 +209,12 @@ export function VoiceRecorder({
         <audio controls src={fileUrl} className="mt-1 w-full max-w-md" aria-label="Uploaded audio" />
       ) : null}
       {voice.error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-blue-700">
           {voice.error}
         </p>
       ) : null}
       {error ? (
-        <p role="alert" className="text-sm text-red-700">
+        <p role="alert" className="text-sm text-blue-700">
           {error}
         </p>
       ) : null}

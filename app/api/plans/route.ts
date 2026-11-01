@@ -59,8 +59,8 @@ const subscribeSchema = z.object({
 });
 
 /**
- * Subscribe: creates a PENDING subscription + payment record. Access activates
- * only after a verified payment event or authorized admin action — never here.
+ * Save a plan selection as pending. This endpoint never initiates or records a
+ * payment; payment capture and subscription activation are separate workflows.
  */
 export async function POST(req: Request) {
   const session = await getSession();
@@ -121,19 +121,11 @@ export async function POST(req: Request) {
       status: "pending",
     })
     .returning({ id: subscriptions.id });
-  await db.insert(payments).values({
-    subscriptionId: sub.id,
-    amountMinor: plan.priceMinor,
-    currency: plan.currency,
-    provider: "manual",
-    status: "pending",
-  });
-
   await notify({
     userId: session.user.id,
     type: "subscription",
-    title: "Subscription awaiting payment",
-    body: `${plan.category} ${plan.tier} — complete payment to activate.`,
+    title: "Plan selection saved",
+    body: `${plan.category} ${plan.tier} selection saved. No payment was processed.`,
     resourceType: "subscription",
     resourceId: sub.id,
   });

@@ -59,7 +59,7 @@ function AttachmentLink({ label, documentId }: { label: string; documentId: stri
       <Button size="sm" variant="secondary" loading={busy} onClick={reveal}>
         {url ? "Open again" : "Open securely"}
       </Button>
-      {failed ? <span className="text-xs text-red-700">Unavailable — you may lack access.</span> : null}
+      {failed ? <span className="text-xs text-blue-700">Unavailable — you may lack access.</span> : null}
     </span>
   );
 }
@@ -226,5 +226,5 @@ export function DynamicValue({
   if (typeof doc === "object" && doc !== null) {
     return <div className="flex flex-col gap-2">{renderNode(doc, "", 0)}</div>;
   }
-  return <p className="text-sm text-red-700">This data couldn&rsquo;t be displayed safely.</p>;
+  return <p className="text-sm text-blue-700">This data couldn&rsquo;t be displayed safely.</p>;
 }

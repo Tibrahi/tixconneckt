@@ -178,7 +178,7 @@ export function ShareDialog({
           Ask the provider to review these documents
         </label>
 
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
         <div className="flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose}>Cancel</Button>
           <Button

@@ -218,7 +218,7 @@ export function DashboardHome() {
         </div>
       ) : null}
 
-      <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      {!isProvider ? <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Unread messages" value={summary.unreadChat} href={ROUTES.chat} icon="message" />
         <StatCard
           label="Pending requests"
@@ -238,11 +238,11 @@ export function DashboardHome() {
           href={ROUTES.notifications}
           icon="bell"
         />
-      </div>
+      </div> : null}
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
-        <Card
-          title="Profile"
+        {!isProvider ? <Card
+          title={isEducation ? "Institution profile" : "Profile"}
           actions={
             <Link href={ROUTES.profile} className="text-sm font-medium text-brand-700 hover:underline">
               Edit profile
@@ -272,9 +272,9 @@ export function DashboardHome() {
                 : `Member of ${summary.groupCount} group${summary.groupCount === 1 ? "" : "s"}: ${summary.groups.map((g) => g.name).join(", ")}`}
             </p>
           </div>
-        </Card>
+        </Card> : null}
 
-        <Card
+        {!isProvider && !isEducation ? <Card
           title="Wallet"
           actions={
             <Link href={ROUTES.wallet} className="text-sm font-medium text-brand-700 hover:underline">
@@ -305,10 +305,10 @@ export function DashboardHome() {
               ))}
             </ul>
           )}
-        </Card>
+        </Card> : null}
 
         <Card
-          title="Recent messages"
+          title={isProvider ? "Provider conversations" : "Recent messages"}
           actions={
             <Link href={ROUTES.chat} className="text-sm font-medium text-brand-700 hover:underline">
               Open chat
@@ -335,7 +335,7 @@ export function DashboardHome() {
         </Card>
 
         <Card
-          title="Projects & funding"
+          title={isProvider ? "Requests and project activity" : isEducation ? "Institution project activity" : "Projects & funding"}
           actions={
             <Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">
               Open projects

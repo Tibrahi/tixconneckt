@@ -78,7 +78,7 @@ export function LoadError({
 /** Banner for integrations that are not configured — pending, never fake. */
 export function PendingIntegration({ name, detail }: { name: string; detail?: string }) {
   return (
-    <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4">
+    <div className="flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 p-4">
       <span className="mt-0.5" aria-hidden="true">
         <Icon name="hourglass" />
       </span>

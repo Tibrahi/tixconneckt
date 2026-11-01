@@ -45,7 +45,7 @@ export function FolderDialog({
       <div className="flex flex-col gap-3">
         <TextField label="Folder name" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Budget drafts" />
         <TextAreaField label="Description (optional)" value={description} onChange={(e) => setDescription(e.target.value)} />
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -92,7 +92,7 @@ export function FileDialog({
       <div className="flex flex-col gap-3">
         <TextField label="Document title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Any name — e.g. Irrigation Plan v2" />
         <TextField label="Document type" value={documentType} onChange={(e) => setDocumentType(e.target.value)} placeholder="document, proposal, budget…" />
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -151,7 +151,7 @@ export function UploadDialog({
         />
         <TextField label="Display title (optional)" value={title} onChange={(e) => setTitle(e.target.value)} />
         <p className="text-xs text-neutral-600">PDF, DOCX, XLSX, TXT, Markdown, CSV, or images up to 10 MB. Content is verified on the server.</p>
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -198,7 +198,7 @@ export function RenameFolderDialog({
     <Modal title="Rename folder" onClose={onClose}>
       <div className="flex flex-col gap-3">
         <TextField label="Folder name" value={name} onChange={(e) => setName(e.target.value)} />
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -326,7 +326,7 @@ export function MembersDialog({
           </ul>
         )}
       </div>
-      {error ? <p role="alert" className="mt-3 text-sm font-medium text-red-700">{error}</p> : null}
+      {error ? <p role="alert" className="mt-3 text-sm font-medium text-blue-700">{error}</p> : null}
       <div className="mt-4 flex justify-end">
         <Button variant="secondary" onClick={onClose}>Done</Button>
       </div>
@@ -403,7 +403,7 @@ export function SettingsDialog({
             ]}
           />
         </div>
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>

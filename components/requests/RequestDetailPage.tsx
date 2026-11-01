@@ -383,7 +383,7 @@ export function RequestDetailPage({ requestId }: { requestId: string }) {
         <Card title="Project summary">
           <p className="text-sm">{detail.project.summary}</p>
           {detail.project.detailsHidden ? (
-            <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 p-3 text-sm">
+            <p className="mt-3 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm">
               Private project details are hidden at this stage. They become visible when an agreement
               is accepted.
             </p>

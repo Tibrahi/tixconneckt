@@ -28,8 +28,8 @@ export function useToast(): ToastContextValue {
 }
 
 const TONES: Record<ToastTone, { icon: string; classes: string }> = {
-  success: { icon: "check", classes: "border-green-300 bg-green-50 text-green-950" },
-  error: { icon: "warning", classes: "border-red-300 bg-red-50 text-red-950" },
+  success: { icon: "check", classes: "border-blue-300 bg-blue-50 text-blue-950" },
+  error: { icon: "warning", classes: "border-blue-300 bg-blue-50 text-blue-950" },
   info: { icon: "circle-info", classes: "border-neutral-300 bg-white text-black" },
 };
 

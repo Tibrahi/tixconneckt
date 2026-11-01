@@ -140,7 +140,7 @@ export function DepositIntake({
       subtitle="Upload proof or paste a transaction message. Extracted details are read-only and verified by a reviewer."
     >
       {done ? (
-        <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+        <div className="rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
           {done === "manual"
             ? "Your evidence was saved and queued for manual review. A reviewer will verify it against the original proof."
             : `Submitted for verification as ${done}. Your balance updates only after a reviewer approves it.`}{" "}
@@ -208,8 +208,8 @@ export function DepositIntake({
           ) : null}
 
           {extractionFailed ? (
-            <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3">
-              <p className="text-sm font-medium text-amber-800">{extractionFailed}</p>
+            <div className="flex flex-col gap-2 rounded-md border border-blue-200 bg-blue-50 p-3">
+              <p className="text-sm font-medium text-blue-800">{extractionFailed}</p>
               <p className="text-sm text-neutral-600">
                 Your evidence was saved. Submit it for manual review and a reviewer will verify the original proof.
               </p>
@@ -242,7 +242,7 @@ export function DepositIntake({
                 ) : null}
               </dl>
               {proposed.extractionConfidence !== undefined && proposed.extractionConfidence < 0.6 ? (
-                <p className="mt-2 text-xs font-medium text-amber-800">
+                <p className="mt-2 text-xs font-medium text-blue-800">
                   Low extraction confidence — a reviewer will verify this against the original proof.
                 </p>
               ) : null}

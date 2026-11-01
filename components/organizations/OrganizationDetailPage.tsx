@@ -331,7 +331,7 @@ function EditForm({
           {uploading ? <p className="mt-1 text-xs text-neutral-600">Uploading…</p> : null}
           {logoId ? <p className="mt-1 text-xs text-neutral-600">A logo is attached.</p> : null}
         </div>
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>
@@ -398,7 +398,7 @@ function VerifyForm({ orgId, onClose, onDone }: { orgId: string; onClose: () => 
                 <span className="truncate">{e.name}</span>
                 <button
                   type="button"
-                  className="text-sm font-medium text-red-700 hover:underline"
+                  className="text-sm font-medium text-blue-700 hover:underline"
                   onClick={() => setEvidence((list) => list.filter((x) => x.id !== e.id))}
                 >
                   Remove
@@ -408,7 +408,7 @@ function VerifyForm({ orgId, onClose, onDone }: { orgId: string; onClose: () => 
           </ul>
         ) : null}
         <TextAreaField label="Note for the reviewer (optional)" value={note} onChange={(e) => setNote(e.target.value)} />
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>

@@ -486,7 +486,7 @@ export function DocEditor({
       </div>
 
       {statusNote ? (
-        <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-800">
+        <p role="alert" className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-800">
           {statusNote}
         </p>
       ) : null}
@@ -820,7 +820,7 @@ function VersionsPanel({
           ))}
         </ul>
       )}
-      {error ? <p role="alert" className="mt-2 text-sm font-medium text-red-700">{error}</p> : null}
+      {error ? <p role="alert" className="mt-2 text-sm font-medium text-blue-700">{error}</p> : null}
     </Modal>
   );
 }
@@ -901,7 +901,7 @@ function BinaryPreview({
           </Button>
         ) : null}
       </div>
-      {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+      {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       <div className="rounded-lg border border-neutral-200 bg-white p-4">
         {!url ? (
           <p className="text-sm text-neutral-600">Loading preview…</p>

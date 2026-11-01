@@ -119,7 +119,7 @@ export function ProfilePhotos({
           />
         </div>
       ) : null}
-      {error ? <p className="px-4 pb-3 text-sm text-red-700" role="alert">{error}</p> : null}
+      {error ? <p className="px-4 pb-3 text-sm text-blue-700" role="alert">{error}</p> : null}
     </section>
   );
 }

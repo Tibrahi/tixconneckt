@@ -716,15 +716,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
               <p className="flex items-center gap-1.5 text-xs text-neutral-600">
                 <span
                   aria-hidden="true"
-                  className={`inline-block h-2 w-2 rounded-full ${micState === "live" ? "bg-green-600" : micState === "muted" ? "bg-amber-500" : "bg-red-600"}`}
+                  className={`inline-block h-2 w-2 rounded-full ${micState === "live" ? "bg-blue-600" : micState === "muted" ? "bg-blue-500" : "bg-blue-600"}`}
                 />
                 <span>
                   {micState === "live" ? "Microphone live" : micState === "muted" ? "Microphone muted" : "Microphone unavailable"}
                 </span>
               </p>
               {needsResume ? (
-                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
-                  <p className="text-xs text-amber-900">
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2">
+                  <p className="text-xs text-blue-900">
                     Your browser paused call audio. Tap resume to hear {active.peerName}.
                   </p>
                   <Button size="sm" icon="play" onClick={playRemote}>
@@ -803,7 +803,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
               </Button>
             </div>
             {callError ? (
-              <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+              <p role="alert" className="rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-xs text-blue-900">
                 {callError}
               </p>
             ) : null}

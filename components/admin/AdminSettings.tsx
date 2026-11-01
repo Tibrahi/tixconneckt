@@ -119,14 +119,14 @@ export function AdminSettings() {
         <Card title="Configuration">
           <p className="text-sm">
             Status:{" "}
-            <span className={`font-medium ${health.configured ? "text-green-700" : "text-amber-700"}`}>
+            <span className={`font-medium ${health.configured ? "text-blue-700" : "text-blue-700"}`}>
               {health.configured ? "Complete" : "Missing values"}
             </span>
           </p>
           {health.missing.length > 0 ? (
             <ul className="mt-2 flex flex-col gap-1">
               {health.missing.map((m) => (
-                <li key={m} className="font-mono text-xs text-amber-700">
+                <li key={m} className="font-mono text-xs text-blue-700">
                   {m}
                 </li>
               ))}

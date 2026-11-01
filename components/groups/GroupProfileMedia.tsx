@@ -53,7 +53,7 @@ export function GroupProfileMedia({ groupId, editable }: { groupId: string; edit
           <span className="flex h-full w-full items-center justify-center text-xl font-semibold text-neutral-500" aria-hidden="true">G</span>
         </div>
         {editable ? <label className="cursor-pointer rounded-md border border-neutral-300 px-3 py-2 text-xs font-semibold text-black hover:bg-neutral-50">{busy ? "Saving…" : "Change group photo"}<input className="sr-only" type="file" accept="image/jpeg,image/png,image/webp" disabled={busy} onChange={(event) => { void upload("avatar", event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} /></label> : null}
-        {error ? <span className="text-xs text-red-700" role="alert">{error}</span> : null}
+        {error ? <span className="text-xs text-blue-700" role="alert">{error}</span> : null}
       </div>
     </div>
   );

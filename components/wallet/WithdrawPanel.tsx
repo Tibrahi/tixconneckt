@@ -69,7 +69,7 @@ export function WithdrawPanel({
     <Card title="Withdraw" subtitle="Only your own available funds. Requests reserve funds until the payout provider confirms.">
       <div className="flex flex-col gap-3">
         {blocked ? (
-          <p role="alert" className="text-sm font-medium text-red-700">
+          <p role="alert" className="text-sm font-medium text-blue-700">
             Withdrawals are disabled while your account is {accountStatus}. Contact support for help.
           </p>
         ) : (
@@ -117,7 +117,7 @@ export function WithdrawPanel({
                   </p>
                 ) : null}
                 {w.failureReason ? (
-                  <p className="mt-1 text-xs font-medium text-red-700">{w.failureReason}</p>
+                  <p className="mt-1 text-xs font-medium text-blue-700">{w.failureReason}</p>
                 ) : null}
               </li>
             ))}

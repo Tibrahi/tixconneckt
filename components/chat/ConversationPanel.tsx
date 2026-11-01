@@ -302,7 +302,7 @@ export function ConversationPanel({
             <span className="flex items-center gap-1.5 text-xs text-neutral-600">
               <span
                 aria-hidden="true"
-                className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-600" : "bg-neutral-300"}`}
+                className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-blue-600" : "bg-neutral-300"}`}
               />
               {connected ? "Online" : "Auto-refresh"}
               <span className="font-mono">· {me.shortId}</span>

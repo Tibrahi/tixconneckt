@@ -617,7 +617,7 @@ export function ThreadView({
                 <span
                   title={peerOnline ? "Online now" : "Offline or unavailable"}
                   aria-label={peerOnline ? "Peer online" : "Peer offline"}
-                  className={`inline-block h-2 w-2 rounded-full ${peerOnline ? "bg-green-600" : "bg-neutral-300"}`}
+                  className={`inline-block h-2 w-2 rounded-full ${peerOnline ? "bg-blue-600" : "bg-neutral-300"}`}
                 />
               ) : null}
               <span>
@@ -639,7 +639,7 @@ export function ThreadView({
         </div>
 
         {!connected ? (
-          <p role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
+          <p role="status" className="border-b border-blue-200 bg-blue-50 px-4 py-1.5 text-xs text-blue-900">
             {realtimeAvailable === false
               ? "Live updates are unavailable — refreshing automatically."
               : "Reconnecting… new messages will appear automatically."}

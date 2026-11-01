@@ -24,7 +24,7 @@ function FieldWrapper({
       {children}
       {hint && !error ? <p className="text-xs text-neutral-600">{hint}</p> : null}
       {error ? (
-        <p role="alert" className="text-xs font-medium text-red-700">
+        <p role="alert" className="text-xs font-medium text-blue-700">
           {error}
         </p>
       ) : null}
@@ -50,7 +50,7 @@ export function TextField({ label, error, hint, id, required, ...rest }: TextFie
         id={fieldId}
         required={required}
         aria-invalid={Boolean(error)}
-        className={`${CONTROL} ${error ? "border-red-500" : ""}`}
+        className={`${CONTROL} ${error ? "border-blue-500" : ""}`}
         {...rest}
       />
     </FieldWrapper>
@@ -72,7 +72,7 @@ export function TextAreaField({ label, error, hint, id, required, ...rest }: Tex
         id={fieldId}
         required={required}
         aria-invalid={Boolean(error)}
-        className={`${CONTROL} min-h-24 ${error ? "border-red-500" : ""}`}
+        className={`${CONTROL} min-h-24 ${error ? "border-blue-500" : ""}`}
         {...rest}
       />
     </FieldWrapper>
@@ -95,7 +95,7 @@ export function SelectField({ label, error, hint, id, required, options, ...rest
         id={fieldId}
         required={required}
         aria-invalid={Boolean(error)}
-        className={`${CONTROL} ${error ? "border-red-500" : ""}`}
+        className={`${CONTROL} ${error ? "border-blue-500" : ""}`}
         {...rest}
       >
         {options.map((o) => (

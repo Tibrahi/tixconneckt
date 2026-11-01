@@ -54,7 +54,7 @@ export function FileUpload({
         </span>
       </div>
       {localError || error ? (
-        <p role="alert" className="text-xs font-medium text-red-700">
+        <p role="alert" className="text-xs font-medium text-blue-700">
           {localError ?? error}
         </p>
       ) : null}

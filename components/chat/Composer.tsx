@@ -218,9 +218,9 @@ export function Composer({
         </div>
       ) : null}
       {voiceBusy ? (
-        <div className="mb-2 flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-xs" role="status">
-          <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-red-600" />
-          <span className="font-medium text-red-700">
+        <div className="mb-2 flex items-center gap-2 rounded-md bg-blue-50 px-3 py-1.5 text-xs" role="status">
+          <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-blue-600" />
+          <span className="font-medium text-blue-700">
             {voice.state === "paused" ? "Paused" : "Recording"} · {voice.durationLabel}
           </span>
           {voice.state === "recording" ? (
@@ -309,7 +309,7 @@ export function Composer({
           aria-label={voiceBusy ? "Stop recording" : voice.state === "preview" ? "Discard voice note" : "Record a voice note"}
           title={voiceBusy ? "Stop recording" : voice.state === "preview" ? "Discard voice note" : "Record a voice note"}
           onClick={toggleRecording}
-          className={`rounded-md border px-2.5 py-2 ${voiceBusy ? "border-red-300 bg-red-100 text-red-700" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}
+          className={`rounded-md border px-2.5 py-2 ${voiceBusy ? "border-blue-300 bg-blue-100 text-blue-700" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}
         >
           <Icon name={voiceBusy ? "microphone-slash" : "microphone"} />
         </button>

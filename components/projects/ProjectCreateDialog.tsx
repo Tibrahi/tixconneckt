@@ -96,7 +96,7 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
                 {attributes.map((field) => (
                   <li key={field.key} className="rounded bg-neutral-100 px-2 py-1 text-xs">
                     <strong>{field.key}:</strong> {field.value}
-                    <button type="button" className="ml-2 text-red-700 underline" aria-label={`Remove ${field.key}`} onClick={() => setAttributes((items) => items.filter((item) => item.key !== field.key))}>Remove</button>
+                    <button type="button" className="ml-2 text-blue-700 underline" aria-label={`Remove ${field.key}`} onClick={() => setAttributes((items) => items.filter((item) => item.key !== field.key))}>Remove</button>
                   </li>
                 ))}
               </ul>
@@ -169,7 +169,7 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
                     <span className="font-mono">{c.shortId} <span className="font-sans text-neutral-600">· {c.role === "editor" ? "can edit" : "view-only"}</span></span>
                     <button
                       type="button"
-                      className="text-sm font-medium text-red-700 hover:underline"
+                      className="text-sm font-medium text-blue-700 hover:underline"
                       onClick={() => setCollaborators((list) => list.filter((x) => x.shortId !== c.shortId))}
                     >
                       Remove
@@ -179,7 +179,7 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
               </ul>
             ) : null}
           </div>
-          {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setStep("details")}>Back</Button>
             <Button disabled={!ownershipValid} onClick={() => setStep("preview")}>Preview</Button>
@@ -235,7 +235,7 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
           ) : (
             <p className="text-sm text-neutral-600">No collaborators invited — you can invite them later.</p>
           )}
-          {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setStep("ownership")}>Back</Button>
             <Button icon="check" loading={saving} onClick={submit}>Confirm and create</Button>

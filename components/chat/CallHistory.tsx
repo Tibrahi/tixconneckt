@@ -230,7 +230,7 @@ export function CallHistory({
                   </span>
                 </div>
                 {call.failureReason ? (
-                  <p className="mt-1.5 text-sm text-red-700">{call.failureReason}</p>
+                  <p className="mt-1.5 text-sm text-blue-700">{call.failureReason}</p>
                 ) : null}
                 <div className="mt-2 flex flex-wrap gap-2">
                   <Button size="sm" variant="secondary" onClick={() => openDetail(call.id)}>
@@ -315,7 +315,7 @@ function CallDetail({
           </Button>
         </div>
         {live && !detail.active ? (
-          <p className="mt-2 text-xs text-amber-800">This call is live but transcription is off — nothing is being saved.</p>
+          <p className="mt-2 text-xs text-blue-800">This call is live but transcription is off — nothing is being saved.</p>
         ) : null}
       </div>
 

@@ -498,7 +498,7 @@ export function ActionsPage() {
               {proposalNotes.length > 0 ? (
                 <ul className="mb-2 flex flex-col gap-0.5">
                   {proposalNotes.map((n, i) => (
-                    <li key={i} className="text-xs font-medium text-amber-800">
+                    <li key={i} className="text-xs font-medium text-blue-800">
                       {n}
                     </li>
                   ))}
@@ -619,7 +619,7 @@ export function ActionsPage() {
                     {a.kind} · {formatDateTime(a.scheduledFor, a.timezone)} ({a.timezone}) · attempts: {a.attempts}
                     {a.executedAt ? ` · ran ${formatDateTime(a.executedAt, a.timezone)}` : ""}
                   </p>
-                  {a.lastError ? <p className="mt-1 text-sm text-red-700">{a.lastError}</p> : null}
+                  {a.lastError ? <p className="mt-1 text-sm text-blue-700">{a.lastError}</p> : null}
                   {a.history.length > 0 ? (
                     <ul className="mt-1 flex flex-col gap-0.5">
                       {a.history.map((t, i) => (

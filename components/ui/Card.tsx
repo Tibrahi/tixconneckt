@@ -34,9 +34,9 @@ type BadgeTone = "neutral" | "info" | "success" | "warning" | "danger";
 const TONES: Record<BadgeTone, string> = {
   neutral: "bg-neutral-100 text-black border-neutral-300",
   info: "bg-brand-50 text-brand-800 border-brand-200",
-  success: "bg-green-50 text-green-800 border-green-200",
-  warning: "bg-amber-50 text-amber-800 border-amber-200",
-  danger: "bg-red-50 text-red-800 border-red-200",
+  success: "bg-blue-50 text-blue-800 border-blue-200",
+  warning: "bg-blue-50 text-blue-800 border-blue-200",
+  danger: "bg-blue-50 text-blue-800 border-blue-200",
 };
 
 export function Badge({

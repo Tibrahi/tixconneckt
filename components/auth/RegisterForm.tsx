@@ -221,7 +221,7 @@ export function RegisterForm() {
           {form.formState.errors.acceptPrivacy ||
           form.formState.errors.acceptTerms ||
           form.formState.errors.acceptAgreement ? (
-            <p role="alert" className="text-xs font-medium text-red-700">
+            <p role="alert" className="text-xs font-medium text-blue-700">
               Reading and accepting all three documents is required.
             </p>
           ) : null}

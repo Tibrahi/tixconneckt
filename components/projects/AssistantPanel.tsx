@@ -43,9 +43,9 @@ function DiffView({ ops }: { ops: WordDiffOp[] }) {
           key={i}
           className={
             op.type === "add"
-              ? "rounded bg-green-100 text-green-900"
+              ? "rounded bg-blue-100 text-blue-900"
               : op.type === "del"
-                ? "rounded bg-red-100 text-red-900 line-through"
+                ? "rounded bg-blue-100 text-blue-900 line-through"
                 : undefined
           }
         >
@@ -105,7 +105,7 @@ function ReportView({
       {Array.isArray(report.gaps) && report.gaps.length > 0 ? (
         <ul className="flex flex-col gap-1">
           {(report.gaps as Array<{ area?: string; question?: string }>).map((g, i) => (
-            <li key={i} className="rounded bg-amber-50 px-2 py-1 text-xs text-amber-900">
+            <li key={i} className="rounded bg-blue-50 px-2 py-1 text-xs text-blue-900">
               <span className="font-medium">{g.area ?? "Gap"}:</span> {g.question ?? ""}
             </li>
           ))}
@@ -339,7 +339,7 @@ export function AssistantPanel({
         </fieldset>
       ) : null}
 
-      {error ? <p role="alert" className="text-xs font-medium text-red-700">{error}</p> : null}
+      {error ? <p role="alert" className="text-xs font-medium text-blue-700">{error}</p> : null}
       <Button
         icon="wand-magic-sparkles"
         loading={running}

@@ -30,6 +30,7 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
   const [type, setType] = useState<PaymentMethodType>("card");
   const [label, setLabel] = useState("");
   const [reference, setReference] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
@@ -50,8 +51,8 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
   async function bind() {
     setBusy(true);
     try {
-      const res = await fetch("/api/payment-methods", {
-        method: "POST",
+      const res = await fetch(editingId ? `/api/payment-methods/${encodeURIComponent(editingId)}` : "/api/payment-methods", {
+        method: editingId ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ type, displayLabel: label.trim(), providerRef: reference.trim() || undefined }),
       });
@@ -59,6 +60,7 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
       if (!res.ok || !body.ok) throw new Error(body.error ?? "Could not save this payment method.");
       setLabel("");
       setReference("");
+      setEditingId(null);
       load();
     } catch (error) {
       onError(error instanceof Error ? error.message : "Could not save this payment method.");
@@ -99,8 +101,11 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
                 </span>
                 <span className="flex items-center gap-2">
                   <StatusBadge status={m.status} />
+                  <Button size="sm" variant="ghost" onClick={() => { setEditingId(m.id); setType(m.type as PaymentMethodType); setLabel(m.displayLabel); setReference(m.providerRef ?? ""); }}>
+                    Edit
+                  </Button>
                   <Button size="sm" variant="ghost" onClick={() => remove(m.id)}>
-                    Remove
+                    Delete
                   </Button>
                 </span>
               </span>
@@ -120,21 +125,22 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
           label="Masked label"
           value={label}
           onChange={(e) => setLabel(e.target.value)}
-          placeholder="Visa •• 4242"
-          hint="Last digits or nickname only."
+          placeholder={type === "mobile_money" ? "MTN •• 123" : type === "crypto" ? "Wallet nickname" : type === "bank" ? "Bank account •• 1234" : "Visa •• 4242"}
+          hint={type === "mobile_money" ? "Provider and masked number only; never enter your PIN." : type === "crypto" ? "Wallet nickname only; never enter a private key." : type === "bank" ? "Bank name and masked account only." : "Card brand and last digits only; never enter a full card number or CVV."}
           maxLength={60}
         />
         <TextField
-          label="Provider reference (optional)"
+          label={type === "mobile_money" ? "Provider token/reference (optional)" : type === "crypto" ? "Public wallet reference (optional)" : type === "bank" ? "Provider reference (optional)" : "Processor token/reference (optional)"}
           value={reference}
           onChange={(e) => setReference(e.target.value)}
-          placeholder="Token or reference from your provider"
+          placeholder="Non-sensitive reference issued by your provider"
           maxLength={120}
         />
         <div>
           <Button size="sm" loading={busy} disabled={label.trim().length < 2} onClick={bind}>
-            Save method
+            {editingId ? "Update method" : "Save method"}
           </Button>
+          {editingId ? <Button size="sm" variant="ghost" onClick={() => { setEditingId(null); setLabel(""); setReference(""); }}>Cancel</Button> : null}
         </div>
       </div>
     </Card>

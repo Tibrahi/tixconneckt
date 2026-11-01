@@ -140,7 +140,7 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
   const slide = slides[index];
 
   return (
-    <main className="flex min-h-screen flex-col bg-neutral-50 lg:flex-row">
+    <main className="flex min-h-screen flex-col bg-brand-50 lg:flex-row">
       {/* Form region first in DOM so keyboard and screen-reader users reach it
           immediately; visually right on desktop, top on small screens. */}
       <div className="order-1 flex flex-1 items-center justify-center px-4 py-10 lg:order-2">

@@ -33,7 +33,6 @@ export const HOMEPAGE_SECTIONS: HomepageSection[] = [
   { id: "platform", navLabel: "Platform", heading: "What you can do" },
   { id: "how-it-works", navLabel: "How it works", heading: "How it works" },
   { id: "mission", navLabel: "Our goal", heading: "Make good digital work easier to start and sustain." },
-  { id: "availability", navLabel: "Availability", heading: "Availability" },
   { id: "privacy", navLabel: "Your data", heading: "Your data, your control" },
 ];
 

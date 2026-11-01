@@ -496,7 +496,7 @@ export function MessageBubble({
                 {canDeleteEveryone ? (
                   <button
                     type="button"
-                    className={`${item} text-red-700`}
+                    className={`${item} text-blue-700`}
                     onClick={() => {
                       setMenuOpen(false);
                       onDelete(message, "everyone");

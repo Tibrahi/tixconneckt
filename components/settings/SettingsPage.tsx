@@ -141,7 +141,7 @@ export function SettingsPage() {
     <>
       <PageHeader title="Settings" description="Profile, security, sessions, and account lifecycle." />
       {notice ? (
-        <p role="status" className="mb-4 rounded-md border border-green-200 bg-green-50 p-3 text-sm text-green-800">
+        <p role="status" className="mb-4 rounded-md border border-blue-200 bg-blue-50 p-3 text-sm text-blue-800">
           {notice}
         </p>
       ) : null}

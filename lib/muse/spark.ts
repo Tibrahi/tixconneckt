@@ -35,13 +35,22 @@ const TASK_INSTRUCTIONS: Record<string, string> = {
     "Extract the decisions made in the conversation, who made them, and what is still pending.",
   extract_action_items:
     "Extract concrete action items with owners and due hints. Skip vague statements that commit to nothing.",
+  project_summarize: "Summarize the supplied project document faithfully. Return a concise summary, key points, assumptions, and questions grounded only in supplied files.",
+  project_missing_info: "Identify missing information needed to make the supplied project document complete. Return concrete gaps, why each matters, and questions; do not invent answers.",
+  project_improve: "Improve grammar and clarity while preserving meaning and facts. Return editable document nodes and a brief note describing the edit.",
+  project_rewrite_selection: "Rewrite only the supplied selected text for clarity while preserving its meaning. Return editable document nodes and flag uncertainty.",
+  project_generate_section: "Draft the requested project-document section using only supplied context. Clearly label assumptions and return editable document nodes.",
+  project_proposal: "Draft a project proposal grounded in supplied context. Flag assumptions, missing evidence, and follow-up questions; return editable document nodes.",
+  project_budget: "Prepare a draft budget structure from supplied evidence. Never invent prices or funding; mark unknown amounts and return editable document nodes.",
+  project_research: "Organize supplied research notes and sources. Do not claim to browse or add facts not present; flag verification needs.",
+  project_loan_request: "Prepare a loan request draft from project context. Do not invent amounts, terms, or provider commitments; return editable nodes and gaps.",
+  project_support_request: "Prepare a support request draft from project context. Do not invent needs or commitments; return editable nodes and gaps.",
+  project_analyze_responses: "Compare supplied provider responses against the request. Keep each provider's statements attributed and identify unanswered items.",
+  project_ask: "Answer the question using only supplied project files. Cite which supplied file supports each point and state when the answer is unavailable.",
 };
 
-function instructionFor(task: string): string {
-  return (
-    TASK_INSTRUCTIONS[task] ??
-    "Process the input for the requested task and return the result as a JSON object."
-  );
+function instructionFor(task: string): string | null {
+  return TASK_INSTRUCTIONS[task] ?? null;
 }
 
 export interface SparkTaskResult {
@@ -75,8 +84,12 @@ export async function runSparkTask(request: {
   if (!url || !key) {
     return { model, error: "Muse Spark is not configured" };
   }
+  const taskInstruction = instructionFor(request.task);
+  if (!taskInstruction) {
+    return { model, error: "This assistant task is not registered. Choose a supported task and retry." };
+  }
   const system =
-    `${instructionFor(request.task)} Respond with a single JSON object and nothing else.` +
+    `${taskInstruction} Respond with a single JSON object and nothing else.` +
     (request.schemaHint ? ` Shape: ${request.schemaHint}` : "");
   let res: Response;
   try {

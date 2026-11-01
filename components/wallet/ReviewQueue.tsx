@@ -119,7 +119,7 @@ function QueueCard({
           {entry.uploaderShortId ? ` · ${entry.uploaderShortId}` : ""} ·{" "}
           {new Date(entry.createdAt).toLocaleString("en-US")}
         </span>
-        <span className="font-mono font-semibold text-green-700">
+        <span className="font-mono font-semibold text-blue-700">
           +{formatMoney(entry.amountMinor, entry.currency)}
         </span>
       </div>
@@ -132,7 +132,7 @@ function QueueCard({
         {typeof confidence === "number" ? <div>Confidence: <span className="text-black">{Math.round(confidence * 100)}%</span></div> : null}
       </dl>
       {Array.isArray(missing) && missing.length > 0 ? (
-        <p className="mt-1 text-xs font-medium text-amber-800">
+        <p className="mt-1 text-xs font-medium text-blue-800">
           Missing from extraction: {missing.join(", ")} — verify against the proof.
         </p>
       ) : null}
@@ -219,7 +219,7 @@ function ManualCreditCard({
   }
 
   return (
-    <li className="rounded-md border border-amber-200 bg-amber-50/40 p-3 text-sm">
+    <li className="rounded-md border border-blue-200 bg-blue-50/40 p-3 text-sm">
       <p className="font-medium text-black">
         {job.uploaderName ?? "Member"}
         {job.uploaderShortId ? ` · ${job.uploaderShortId}` : ""} · {new Date(job.createdAt).toLocaleString("en-US")}

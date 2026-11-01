@@ -192,7 +192,7 @@ export function RequestDialog({
             </fieldset>
           </div>
           <TextField label="Access duration (days, blank = no expiry)" value={accessDays} inputMode="numeric" onChange={(e) => setAccessDays(e.target.value.replace(/[^0-9]/g, "").slice(0, 3))} />
-          {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={onClose}>Cancel</Button>
             <Button disabled={!valid} onClick={() => setStep("preview")}>Preview provider view</Button>
@@ -244,7 +244,7 @@ export function RequestDialog({
           <p className="text-xs text-neutral-600">
             The provider sees the summary, the shared documents, and a negotiation thread — never your private files, wallet, or other projects.
           </p>
-          {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+          {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
           <div className="flex justify-end gap-2">
             <Button variant="secondary" onClick={() => setStep("form")}>Back</Button>
             <Button icon="send" loading={saving} onClick={submit}>Confirm and submit</Button>

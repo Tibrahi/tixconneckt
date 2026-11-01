@@ -9,10 +9,10 @@ export const instant = false;
 
 async function AuthenticatedAdmin({ children }: { children: React.ReactNode }) {
   await connection();
-  await requireAdmin();
+  const user = await requireAdmin();
   return (
     <AblyProvider>
-      <DashboardShell isAdmin>{children}</DashboardShell>
+      <DashboardShell isAdmin accountRole={user.role} category={user.category} providerKind={user.providerKind}>{children}</DashboardShell>
     </AblyProvider>
   );
 }

@@ -114,7 +114,7 @@ export function PlansPage() {
     <>
       <PageHeader
         title="Plan"
-        description={`Plans for ${data.category} accounts. Prices are proposed and configurable — access activates only after verified payment.`}
+        description={`Plans for ${data.category} accounts. Selecting a plan saves your preference only. No payment is taken.`}
       />
       <div className="grid gap-4 md:grid-cols-2">
         {data.catalog.map((plan) => (
@@ -134,7 +134,7 @@ export function PlansPage() {
             </ul>
             <div className="mt-4">
               <Button size="sm" onClick={() => setConfirmPlan(plan)}>
-                Choose {plan.tier}
+                Save {plan.tier} selection
               </Button>
             </div>
           </Card>
@@ -144,7 +144,7 @@ export function PlansPage() {
       <div className="mt-4 grid gap-4 lg:grid-cols-2">
         <Card title="My subscriptions">
           {data.subscriptions.length === 0 ? (
-            <EmptyState icon="credit-card" title="No subscriptions" message="Choose a plan above to get started." />
+            <EmptyState icon="credit-card" title="No subscriptions" message="Save a plan selection to keep it with your account." />
           ) : (
             <ul className="flex flex-col gap-2">
               {data.subscriptions.map((s) => (
@@ -188,9 +188,9 @@ export function PlansPage() {
 
       {confirmPlan ? (
         <ConfirmDialog
-          title={`Choose ${confirmPlan.tier}?`}
-          message={`This starts a ${confirmPlan.category} ${confirmPlan.tier} subscription (${formatMoney(confirmPlan.priceMinor, confirmPlan.currency)}). Access activates only after your payment is verified.`}
-          confirmLabel={busy ? "Starting…" : "Start subscription"}
+          title={`Save ${confirmPlan.tier} selection?`}
+          message={`This saves the ${confirmPlan.category} ${confirmPlan.tier} plan selection (${formatMoney(confirmPlan.priceMinor, confirmPlan.currency)}). No payment will be processed.`}
+          confirmLabel={busy ? "Saving…" : "Save selection"}
           onConfirm={() => subscribe(confirmPlan.id)}
           onCancel={() => setConfirmPlan(null)}
         />

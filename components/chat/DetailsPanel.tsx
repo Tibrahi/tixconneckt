@@ -297,7 +297,7 @@ export function DetailsPanel({
                     <DynamicValue doc={r.resultJson} />
                   </div>
                 ) : (
-                  <p className="mt-1 text-red-700">{r.error ?? r.status}</p>
+                  <p className="mt-1 text-blue-700">{r.error ?? r.status}</p>
                 )}
               </li>
             ))}

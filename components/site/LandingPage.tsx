@@ -2,7 +2,6 @@ import Image from "next/image";
 import Link from "next/link";
 import { ROUTES } from "@/lib/routes";
 import {
-  HOMEPAGE_AVAILABILITY,
   HOMEPAGE_CAPABILITIES,
   HOMEPAGE_FOOTER_GROUPS,
   HOMEPAGE_NAV_LINKS,
@@ -28,8 +27,8 @@ function sectionHeading(id: HomepageSectionId): string {
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-[#f7f8f6] text-[#14201e]">
-      <header className="sticky top-0 z-50 border-b border-[#dfe5e1] bg-[#f7f8f6]/95 backdrop-blur">
+    <div className="min-h-screen bg-[#f8fbff] text-[#172033]">
+      <header className="sticky top-0 z-50 border-b border-[#cffafe] bg-[#f8fbff]/95 backdrop-blur">
         <div className="mx-auto flex h-[4.5rem] w-full max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <Link href="#top" className="flex items-center gap-2.5" aria-label="TIXCONNECKT home">
             <Image
@@ -44,7 +43,7 @@ export function LandingPage() {
           </Link>
           <nav aria-label="Main" className="hidden items-center gap-7 text-sm font-medium lg:flex">
             {HOMEPAGE_NAV_LINKS.map((link) => (
-              <Link key={link.href} href={link.href} className="text-neutral-700 hover:text-[#155e4b]">
+              <Link key={link.href} href={link.href} className="text-neutral-700 hover:text-[#0891b2]">
                 {link.label}
               </Link>
             ))}
@@ -52,13 +51,13 @@ export function LandingPage() {
           <nav aria-label="Account" className="flex items-center gap-1.5 sm:gap-3">
             <Link
               href={ROUTES.login}
-              className="rounded-md px-3 py-2 text-sm font-semibold hover:text-[#155e4b] sm:px-4"
+              className="rounded-md px-3 py-2 text-sm font-semibold hover:text-[#0891b2] sm:px-4"
             >
               Sign in
             </Link>
             <Link
               href={ROUTES.register}
-              className="rounded-md bg-[#155e4b] px-3 py-2 text-sm font-semibold text-white hover:bg-[#104637] sm:px-4"
+              className="rounded-md bg-[#0891b2] px-3 py-2 text-sm font-semibold text-white hover:bg-[#0e7490] sm:px-4"
             >
               <span className="hidden sm:inline">Create account</span>
               <span className="sm:hidden">Join</span>
@@ -68,31 +67,15 @@ export function LandingPage() {
       </header>
 
       <main id="top">
-        <section className="border-b border-[#dfe5e1] bg-[#eef4ef]">
-          <div className="mx-auto w-full max-w-7xl px-4 py-3 sm:px-6 lg:px-8">
-            <p className="flex items-start gap-2 text-sm">
-              <span aria-hidden="true" className="mt-0.5 text-[#155e4b]">
-                <Icon name="circle-info" />
-              </span>
-              <span>
-                <span className="font-semibold">TIXCONNECKT is being built.</span> The core
-                collaboration features below work today; integrations marked{" "}
-                <span className="font-medium">in development</span> further down this page are not
-                operational yet.
-              </span>
-            </p>
-          </div>
-        </section>
-
         <section className="mx-auto grid w-full max-w-7xl items-center gap-12 px-4 py-14 sm:px-6 sm:py-20 lg:grid-cols-[1.05fr_0.95fr] lg:gap-16 lg:px-8 lg:py-24">
           <div>
-            <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#155e4b]">
+            <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#0891b2]">
               A home for digital collaboration
             </p>
             <h1 className="mt-5 max-w-3xl text-4xl font-bold leading-[1.08] sm:text-5xl lg:text-[3.5rem]">
               Turn skills and ideas into work that moves forward.
             </h1>
-            <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#4c5a55] sm:text-lg">
+            <p className="mt-6 max-w-2xl text-base leading-relaxed text-[#526078] sm:text-lg">
               TIXCONNECKT brings people, digital projects, and practical support into one
               collaborative system. Find the right team, do meaningful work together, and make
               progress visible.
@@ -100,13 +83,13 @@ export function LandingPage() {
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <Link
                 href={ROUTES.register}
-                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#155e4b] px-6 py-3 text-sm font-semibold text-white hover:bg-[#104637]"
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-[#0891b2] px-6 py-3 text-sm font-semibold text-white hover:bg-[#0e7490]"
               >
                 Start collaborating <span aria-hidden="true">&#8594;</span>
               </Link>
               <Link
                 href="#platform"
-                className="inline-flex items-center justify-center gap-2 rounded-md border border-[#bdc9c2] px-6 py-3 text-sm font-semibold hover:border-[#155e4b]"
+                className="inline-flex items-center justify-center gap-2 rounded-md border border-[#a5f3fc] px-6 py-3 text-sm font-semibold hover:border-[#0891b2]"
               >
                 Explore the platform
               </Link>
@@ -115,39 +98,39 @@ export function LandingPage() {
               Built for individuals, teams, providers, and people backing digital work.
             </p>
           </div>
-          <div className="relative overflow-hidden rounded-lg bg-[#172923] p-6 text-white sm:p-8">
+          <div className="relative overflow-hidden rounded-lg bg-[#083344] p-6 text-white sm:p-8">
             <div className="flex items-center justify-between border-b border-white/15 pb-5">
               <div className="flex items-center gap-3">
                 <Image src="/logo.png" alt="" width={44} height={44} className="h-11 w-11 rounded-md" />
                 <div>
                   <p className="text-sm font-semibold">One connected workflow</p>
-                  <p className="mt-0.5 text-xs text-[#b8c9c1]">From first connection to shared progress</p>
+                  <p className="mt-0.5 text-xs text-[#a5f3fc]">From first connection to shared progress</p>
                 </div>
               </div>
-              <span className="h-2.5 w-2.5 rounded-full bg-[#b8d84b]" aria-hidden="true" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#67e8f9]" aria-hidden="true" />
             </div>
             <ol className="mt-6 space-y-3">
               <li className="flex items-center gap-4 rounded-md border border-white/10 bg-white/[0.06] p-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#dce9b2] text-[#172923]" aria-hidden="true"><Icon name="users" /></span>
-                <span><span className="block text-sm font-semibold">Discover people</span><span className="mt-1 block text-xs text-[#b8c9c1]">Match skills, goals, and complementary experience</span></span>
-                <span className="ml-auto font-mono text-xs text-[#b8d84b]">01</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#cffafe] text-[#083344]" aria-hidden="true"><Icon name="users" /></span>
+                <span><span className="block text-sm font-semibold">Discover people</span><span className="mt-1 block text-xs text-[#a5f3fc]">Match skills, goals, and complementary experience</span></span>
+                <span className="ml-auto font-mono text-xs text-[#67e8f9]">01</span>
               </li>
               <li className="flex items-center gap-4 rounded-md border border-white/10 bg-white/[0.06] p-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#f2c3a9] text-[#172923]" aria-hidden="true"><Icon name="diagram-project" /></span>
-                <span><span className="block text-sm font-semibold">Build together</span><span className="mt-1 block text-xs text-[#b8c9c1]">Organize projects, groups, conversations, and calls</span></span>
-                <span className="ml-auto font-mono text-xs text-[#f2c3a9]">02</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#a5f3fc] text-[#083344]" aria-hidden="true"><Icon name="diagram-project" /></span>
+                <span><span className="block text-sm font-semibold">Build together</span><span className="mt-1 block text-xs text-[#a5f3fc]">Organize projects, groups, conversations, and calls</span></span>
+                <span className="ml-auto font-mono text-xs text-[#a5f3fc]">02</span>
               </li>
               <li className="flex items-center gap-4 rounded-md border border-white/10 bg-white/[0.06] p-4">
-                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#a9d8ce] text-[#172923]" aria-hidden="true"><Icon name="funding" /></span>
-                <span><span className="block text-sm font-semibold">Move work forward</span><span className="mt-1 block text-xs text-[#b8c9c1]">Request support and track contributions transparently</span></span>
-                <span className="ml-auto font-mono text-xs text-[#a9d8ce]">03</span>
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md bg-[#67e8f9] text-[#083344]" aria-hidden="true"><Icon name="funding" /></span>
+                <span><span className="block text-sm font-semibold">Move work forward</span><span className="mt-1 block text-xs text-[#a5f3fc]">Request support and track contributions transparently</span></span>
+                <span className="ml-auto font-mono text-xs text-[#67e8f9]">03</span>
               </li>
             </ol>
-            <p className="mt-5 text-xs text-[#b8c9c1]">A practical system for turning collaboration into progress.</p>
+            <p className="mt-5 text-xs text-[#a5f3fc]">A practical system for turning collaboration into progress.</p>
           </div>
         </section>
 
-        <section id="platform" aria-label="What you can do" className="border-y border-[#dfe5e1] bg-white">
+        <section id="platform" aria-label="What you can do" className="border-y border-[#cffafe] bg-white">
           <div className="mx-auto w-full max-w-7xl px-4 py-14 sm:px-6 sm:py-16 lg:px-8">
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">{sectionHeading("platform")}</h2>
             <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -179,62 +162,23 @@ export function LandingPage() {
           </ol>
         </section>
 
-        <section id="mission" aria-label="Our goal" className="border-y border-[#dfe5e1] bg-[#e8f0eb]">
+        <section id="mission" aria-label="Our goal" className="border-y border-[#cffafe] bg-[#ecfeff]">
           <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 py-14 sm:px-6 sm:py-16 lg:grid-cols-[0.7fr_1.3fr] lg:items-start lg:px-8">
             <div>
-              <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#155e4b]">Our goal</p>
+              <p className="font-mono text-xs font-semibold uppercase tracking-[0.16em] text-[#0891b2]">Our goal</p>
               <h2 className="mt-3 max-w-sm text-2xl font-bold leading-tight sm:text-3xl">{sectionHeading("mission")}</h2>
             </div>
             <div className="max-w-3xl">
-              <p className="text-base leading-relaxed text-[#34443e] sm:text-lg">
+              <p className="text-base leading-relaxed text-[#334155] sm:text-lg">
                 Too often, capable people, promising ideas, and useful support exist in separate
                 places. TIXCONNECKT is being built to bring them together: help people find one
                 another, form accountable teams, coordinate the work, and see how contributions
                 and funding move a project forward.
               </p>
-              <p className="mt-4 text-sm leading-relaxed text-[#52615b]">
+              <p className="mt-4 text-sm leading-relaxed text-[#526078]">
                 The platform supports individuals and groups while keeping access, decisions, and
                 financial records tied to clear user roles and permissions.
               </p>
-            </div>
-          </div>
-        </section>
-
-        <section
-          id={HOMEPAGE_AVAILABILITY.sectionId}
-          aria-label="Availability"
-          className="border-y border-[#dfe5e1] bg-white"
-        >
-          <div className="mx-auto grid w-full max-w-7xl gap-8 px-4 py-14 sm:px-6 sm:py-16 lg:grid-cols-2 lg:px-8">
-            <div>
-              <h2 className="flex items-center gap-2 text-xl font-bold">
-                <Icon name="check" /> {HOMEPAGE_AVAILABILITY.availableHeading}
-              </h2>
-              <ul className="mt-4 space-y-2.5">
-                {HOMEPAGE_AVAILABILITY.available.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-neutral-800">
-                    <span aria-hidden="true" className="mt-0.5">
-                      <Icon name="check" />
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
-            </div>
-            <div>
-              <h2 className="flex items-center gap-2 text-xl font-bold">
-                <Icon name="hourglass" /> {HOMEPAGE_AVAILABILITY.inDevelopmentHeading}
-              </h2>
-              <ul className="mt-4 space-y-2.5">
-                {HOMEPAGE_AVAILABILITY.inDevelopment.map((item) => (
-                  <li key={item} className="flex items-start gap-2.5 text-sm text-neutral-800">
-                    <span aria-hidden="true" className="mt-0.5">
-                      <Icon name="hourglass" />
-                    </span>
-                    {item}
-                  </li>
-                ))}
-              </ul>
             </div>
           </div>
         </section>
@@ -269,22 +213,22 @@ export function LandingPage() {
         </section>
       </main>
 
-      <footer className="bg-[#172923] text-white">
+      <footer className="bg-[#083344] text-white">
         <div className="mx-auto grid w-full max-w-7xl gap-10 px-4 py-12 sm:px-6 md:grid-cols-2 lg:grid-cols-[1.5fr_1fr_1fr_1fr] lg:px-8">
           <div>
             <Link href="#top" className="flex w-fit items-center gap-3">
               <Image src="/logo.png" alt="" width={40} height={40} className="h-10 w-10 rounded-md" />
               <span className="text-base font-bold">TIXCONNECKT</span>
             </Link>
-            <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#c0cdc7]">
+            <p className="mt-4 max-w-sm text-sm leading-relaxed text-[#a5f3fc]">
               A digital collaboration platform for finding people, building projects, and moving
               useful work forward together.
             </p>
           </div>
           {HOMEPAGE_FOOTER_GROUPS.map((group) => (
             <nav key={group.heading} aria-label={`${group.heading} links`}>
-              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-[#b8d84b]">{group.heading}</h2>
-              <ul className="mt-4 space-y-3 text-sm text-[#e2e9e5]">
+              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-[#67e8f9]">{group.heading}</h2>
+              <ul className="mt-4 space-y-3 text-sm text-[#cffafe]">
                 {group.links.map((link) => (
                   <li key={link.href}>
                     <Link href={link.href} className="hover:text-white">
@@ -297,9 +241,9 @@ export function LandingPage() {
           ))}
         </div>
         <div className="border-t border-white/15">
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-[#c0cdc7] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+          <div className="mx-auto flex w-full max-w-7xl flex-col gap-2 px-4 py-4 text-xs text-[#a5f3fc] sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
             <p>TIXCONNECKT is in active development. Feature availability is stated on this page.</p>
-            <Link href="#top" className="font-medium text-white hover:text-[#b8d84b]">Back to top <span aria-hidden="true">&#8593;</span></Link>
+            <Link href="#top" className="font-medium text-white hover:text-[#67e8f9]">Back to top <span aria-hidden="true">&#8593;</span></Link>
           </div>
         </div>
       </footer>

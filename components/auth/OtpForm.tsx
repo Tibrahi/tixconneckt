@@ -151,7 +151,7 @@ export function OtpForm({
               />
             ))}
           </div>
-          {fieldError ? <p className="mt-1 text-sm text-red-700" role="alert">{fieldError}</p> : null}
+          {fieldError ? <p className="mt-1 text-sm text-blue-700" role="alert">{fieldError}</p> : null}
         </fieldset>
         <Button type="submit" loading={submitting} className="w-full">
           {submitLabel}

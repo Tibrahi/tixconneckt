@@ -20,15 +20,15 @@ const FAINT = "#788397";
 const BORDER = "#e5e9f0";
 const CANVAS = "#f3f5f8";
 const BRAND = "#1d4ed8";
-const SUCCESS_BG = "#f0fdf4";
-const SUCCESS_BD = "#bbf7d0";
-const SUCCESS_TX = "#15803d";
-const WARN_BG = "#fffbeb";
-const WARN_BD = "#fde68a";
-const WARN_TX = "#b45309";
-const DANGER_BG = "#fef2f2";
-const DANGER_BD = "#fecaca";
-const DANGER_TX = "#b91c1c";
+const SUCCESS_BG = "#eff6ff";
+const SUCCESS_BD = "#bfdbfe";
+const SUCCESS_TX = "#1d4ed8";
+const WARN_BG = "#eff6ff";
+const WARN_BD = "#bfdbfe";
+const WARN_TX = "#1d4ed8";
+const DANGER_BG = "#eff6ff";
+const DANGER_BD = "#bfdbfe";
+const DANGER_TX = "#1d4ed8";
 
 /** Escape every dynamic value interpolated into email HTML. */
 export function escapeHtml(value: string): string {

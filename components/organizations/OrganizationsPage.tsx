@@ -238,7 +238,7 @@ export function OrganizationForm({ onClose, onDone }: { onClose: () => void; onD
           {uploading ? <p className="mt-1 text-xs text-neutral-600">Uploading…</p> : null}
           {logoName ? <p className="mt-1 text-xs text-neutral-600">Attached: {logoName}</p> : null}
         </div>
-        {error ? <p role="alert" className="text-sm font-medium text-red-700">{error}</p> : null}
+        {error ? <p role="alert" className="text-sm font-medium text-blue-700">{error}</p> : null}
       </div>
       <div className="mt-4 flex justify-end gap-2">
         <Button variant="secondary" onClick={onClose}>Cancel</Button>

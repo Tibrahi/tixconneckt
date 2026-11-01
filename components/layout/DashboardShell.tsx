@@ -75,9 +75,15 @@ function NavList({
 export function DashboardShell({
   children,
   isAdmin,
+  accountRole,
+  category,
+  providerKind,
 }: {
   children: ReactNode;
   isAdmin: boolean;
+  accountRole: string;
+  category: string;
+  providerKind: string | null;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -153,6 +159,13 @@ export function DashboardShell({
   }
 
   const sidebarWidth = collapsed ? "lg:w-16" : "lg:w-60";
+  // Navigation reflects the work each account is assigned. The APIs remain
+  // responsible for their resource ownership and permission checks.
+  const roleNav = isAdmin ? DASHBOARD_NAV : accountRole === "provider"
+    ? DASHBOARD_NAV.filter((item) => [ROUTES.dashboard, ROUTES.profile, ROUTES.chat, ROUTES.projects, ROUTES.requests, ROUTES.notifications, ROUTES.plans, ROUTES.settings].includes(item.href as never) && !(providerKind === "loan" && item.href === ROUTES.wallet))
+    : category === "university" || category === "government"
+      ? DASHBOARD_NAV.filter((item) => ![ROUTES.wallet, ROUTES.plans].includes(item.href as never))
+      : DASHBOARD_NAV;
 
   return (
     <div className="min-h-screen bg-neutral-50 text-black">
@@ -187,7 +200,7 @@ export function DashboardShell({
             </button>
           </div>
           <nav id="tour-sidebar" className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
-            <NavList items={DASHBOARD_NAV} counts={counts} collapsed={collapsed} />
+            <NavList items={roleNav} counts={counts} collapsed={collapsed} />
             {isAdmin ? (
               <>
                 {!collapsed ? (
@@ -236,7 +249,7 @@ export function DashboardShell({
               </div>
               <nav className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
                 <NavList
-                  items={DASHBOARD_NAV}
+                  items={roleNav}
                   counts={counts}
                   collapsed={false}
                   onNavigate={() => setDrawerOpen(false)}
@@ -270,7 +283,7 @@ export function DashboardShell({
         {/* Right content area */}
         <main id="tour-main" className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           {countsError ? (
-            <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-3 rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-950" role="status">
+            <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-3 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950" role="status">
               <span>Some dashboard counts could not load. Please retry.</span>
               <button type="button" onClick={loadCounts} className="shrink-0 font-semibold underline">Retry</button>
             </div>
