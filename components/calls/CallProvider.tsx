@@ -18,6 +18,8 @@ import {
   createPeerConnection,
   getCallMedia,
   getIceServers,
+  getMicrophoneTrack,
+  micErrorMessage,
   setTrackEnabled,
   stopStream,
   turnConfigured,
@@ -108,6 +110,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [cameraOff, setCameraOff] = useState(false);
   const [peerMedia, setPeerMedia] = useState<{ muted: boolean; cameraOff: boolean }>({ muted: false, cameraOff: false });
   const [fullscreen, setFullscreen] = useState(false);
+  const [needsResume, setNeedsResume] = useState(false);
+  const [micState, setMicState] = useState<"live" | "muted" | "ended">("live");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -116,6 +120,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const localRef = useRef<MediaStream | null>(null);
   const activeRef = useRef<ActiveCall | null>(null);
   const incomingRef = useRef<IncomingCall | null>(null);
+  const mutedRef = useRef(false);
   const pendingOfferRef = useRef<RTCSessionDescriptionInit | null>(null);
   const pendingCandidatesRef = useRef<RTCIceCandidateInit[]>([]);
   const timersRef = useRef<number[]>([]);
@@ -130,6 +135,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     incomingRef.current = incoming;
   }, [incoming]);
+  useEffect(() => {
+    mutedRef.current = muted;
+    setMicState((prev) => {
+      if (prev === "ended") return prev;
+      return muted ? "muted" : "live";
+    });
+  }, [muted]);
 
   function later(fn: () => void, ms: number): void {
     const id = window.setTimeout(fn, ms);
@@ -158,6 +170,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setMuted(false);
     setCameraOff(false);
     setPeerMedia({ muted: false, cameraOff: false });
+    setNeedsResume(false);
+    setMicState("live");
   }, []);
 
   const endLocally = useCallback(
@@ -306,9 +320,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       let stream: MediaStream;
       try {
         stream = await getCallMedia(kind);
-      } catch {
+      } catch (error) {
         await decide(callId, "ended").catch(() => {});
-        endLocally("Microphone access was denied, so the call couldn't start.");
+        endLocally(micErrorMessage(error));
         return;
       }
       localRef.current = stream;
@@ -369,9 +383,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
     let stream: MediaStream;
     try {
       stream = await getCallMedia(inv.kind);
-    } catch {
+    } catch (error) {
       await decide(inv.callId, "ended").catch(() => {});
-      endLocally("Microphone access was denied, so the call couldn't start.");
+      endLocally(micErrorMessage(error));
       return;
     }
     localRef.current = stream;
@@ -502,14 +516,86 @@ export function CallProvider({ children }: { children: ReactNode }) {
     },
   });
 
-  // Attach media streams to elements.
+  // Attach media streams to elements. Remote playback is started
+  // explicitly: bare `autoPlay` is blocked when the browser's transient
+  // user activation expired while ICE connected, which silences calls
+  // with no visible error. A blocked play() surfaces a resume action.
+  const playRemote = useCallback(() => {
+    setNeedsResume(false);
+    const targets = [remoteVideoRef.current, remoteAudioRef.current].filter(
+      (el): el is HTMLVideoElement | HTMLAudioElement => el !== null,
+    );
+    for (const el of targets) {
+      const attempt = el.play();
+      if (attempt && typeof attempt.catch === "function") {
+        attempt.catch(() => setNeedsResume(true));
+      }
+    }
+  }, []);
+
   useEffect(() => {
     if (localVideoRef.current) localVideoRef.current.srcObject = localStream;
   }, [localStream, active?.callId]);
   useEffect(() => {
+    if (!remoteStream) return;
     if (remoteVideoRef.current) remoteVideoRef.current.srcObject = remoteStream;
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remoteStream;
-  }, [remoteStream, active?.callId]);
+    playRemote();
+  }, [remoteStream, active?.callId, playRemote]);
+
+  // Microphone device disconnect/reconnect: when the local audio track
+  // ends mid-call, re-acquire just the microphone and swap it onto the
+  // existing audio sender — no renegotiation needed.
+  useEffect(() => {
+    if (!active || typeof navigator === "undefined" || !navigator.mediaDevices) return;
+    let cancelled = false;
+    const recoverMic = async () => {
+      const stream = localRef.current;
+      const sender = pcRef.current?.getSenders().find((s) => s.track?.kind === "audio");
+      const track = stream?.getAudioTracks()[0];
+      if (!stream || !sender || (track && track.readyState === "live")) return;
+      try {
+        const fresh = await getMicrophoneTrack();
+        if (cancelled) {
+          fresh.stop();
+          return;
+        }
+        if (track) {
+          try {
+            stream.removeTrack(track);
+            track.stop();
+          } catch {
+            /* already gone */
+          }
+        }
+        stream.addTrack(fresh);
+        setTrackEnabled(stream, "audio", !mutedRef.current);
+        await sender.replaceTrack(fresh);
+        setMicState(mutedRef.current ? "muted" : "live");
+        setCallError(null);
+      } catch {
+        if (!cancelled) {
+          setMicState("ended");
+          setCallError("Your microphone disconnected and couldn't be recovered. Hang up and call again.");
+        }
+      }
+    };
+    const onDevices = () => {
+      void recoverMic();
+    };
+    navigator.mediaDevices.addEventListener("devicechange", onDevices);
+    const localTrack = localRef.current?.getAudioTracks()[0];
+    const onEnded = () => {
+      void recoverMic();
+    };
+    if (localTrack) localTrack.onended = onEnded;
+    return () => {
+      cancelled = true;
+      navigator.mediaDevices?.removeEventListener("devicechange", onDevices);
+      if (localTrack) localTrack.onended = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active?.callId]);
 
   // Elapsed timer + unmount cleanup.
   useEffect(() => {
@@ -627,6 +713,25 @@ export function CallProvider({ children }: { children: ReactNode }) {
                   {active.kind === "video" && peerMedia.cameraOff ? " · peer camera off" : ""}
                 </span>
               </p>
+              <p className="flex items-center gap-1.5 text-xs text-neutral-600">
+                <span
+                  aria-hidden="true"
+                  className={`inline-block h-2 w-2 rounded-full ${micState === "live" ? "bg-green-600" : micState === "muted" ? "bg-amber-500" : "bg-red-600"}`}
+                />
+                <span>
+                  {micState === "live" ? "Microphone live" : micState === "muted" ? "Microphone muted" : "Microphone unavailable"}
+                </span>
+              </p>
+              {needsResume ? (
+                <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2">
+                  <p className="text-xs text-amber-900">
+                    Your browser paused call audio. Tap resume to hear {active.peerName}.
+                  </p>
+                  <Button size="sm" icon="play" onClick={playRemote}>
+                    Resume sound
+                  </Button>
+                </div>
+              ) : null}
               <p className="font-mono text-xs text-neutral-500">
                 {active.role === "caller" ? "outgoing" : "incoming"} · peer-to-peer
               </p>

@@ -3,6 +3,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { formatInTimeZone, fromZonedTime } from "date-fns-tz";
 import { formatDateTime } from "@/lib/currency";
+import { convertToTranscribableWav } from "@/lib/audio-convert";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, StatusBadge } from "@/components/ui/Card";
 import { EmptyState, LoadError, PendingIntegration, SkeletonList } from "@/components/ui/Feedback";
@@ -62,7 +64,6 @@ export function ActionsPage() {
 
   const [instruction, setInstruction] = useState("");
   const [interpreting, setInterpreting] = useState(false);
-  const [recording, setRecording] = useState(false);
   const [transcript, setTranscript] = useState<string | null>(null);
   const [aiPending, setAiPending] = useState<string | null>(null);
   const [proposal, setProposal] = useState<Proposal | null>(null);
@@ -87,8 +88,7 @@ export function ActionsPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [conversations, setConversations] = useState<Array<{ id: string; title: string }>>([]);
   const idempotencyRef = useRef(crypto.randomUUID());
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const voice = useVoiceRecorder();
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -206,65 +206,68 @@ export function ActionsPage() {
     }
   }
 
-  async function toggleRecording() {
-    if (recording) {
-      mediaRef.current?.stop();
+  async function submitVoiceInstruction(blob: Blob) {
+    setInterpreting(true);
+    try {
+      const { wav } = await convertToTranscribableWav(blob);
+      const form = new FormData();
+      form.append("audio", wav, "instruction.wav");
+      form.append("timezone", browserTz);
+      const res = await fetch("/api/actions/interpret", { method: "POST", body: form });
+      const body = (await res.json()) as {
+        ok: boolean;
+        data?: {
+          pending?: boolean;
+          pendingReason?: string;
+          transcript?: string;
+          local?: boolean;
+          proposal?: Proposal;
+          notes?: string[];
+        };
+        error?: string;
+      };
+      if (res.ok && body.ok && body.data) {
+        if (body.data.pending) {
+          setAiPending(body.data.pendingReason ?? "Voice transcription is not configured");
+        } else {
+          setTranscript(body.data.transcript ?? null);
+          setProposal(body.data.proposal ?? null);
+          setProposalLocal(body.data.local === true);
+          setProposalNotes(body.data.notes ?? []);
+        }
+      } else {
+        setError(body.error ?? "Transcription failed.");
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Your connection was interrupted. Please try again.");
+    } finally {
+      setInterpreting(false);
+    }
+  }
+
+  // A finished recording interprets itself, with the audio kept for context.
+  useEffect(() => {
+    if (voice.state === "preview" && voice.audioBlob) {
+      void submitVoiceInstruction(voice.audioBlob);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.state]);
+
+  useEffect(() => {
+    if (voice.error) setError(voice.error);
+  }, [voice.error]);
+
+  function toggleRecording() {
+    if (voice.state === "recording" || voice.state === "paused") {
+      voice.stop();
       return;
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = async () => {
-        setRecording(false);
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (blob.size === 0) return;
-        setInterpreting(true);
-        try {
-          const form = new FormData();
-          form.append("audio", blob, "instruction.webm");
-          form.append("timezone", browserTz);
-          const res = await fetch("/api/actions/interpret", { method: "POST", body: form });
-          const body = (await res.json()) as {
-            ok: boolean;
-            data?: {
-              pending?: boolean;
-              pendingReason?: string;
-              transcript?: string;
-              local?: boolean;
-              proposal?: Proposal;
-              notes?: string[];
-            };
-            error?: string;
-          };
-          if (res.ok && body.ok && body.data) {
-            if (body.data.pending) {
-              setAiPending(body.data.pendingReason ?? "Voice transcription is not configured");
-            } else {
-              setTranscript(body.data.transcript ?? null);
-              setProposal(body.data.proposal ?? null);
-              setProposalLocal(body.data.local === true);
-              setProposalNotes(body.data.notes ?? []);
-            }
-          } else {
-            setError(body.error ?? "Transcription failed.");
-          }
-        } catch {
-          setError("Your connection was interrupted. Please try again.");
-        } finally {
-          setInterpreting(false);
-        }
-      };
-      mediaRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      setError("Microphone access was denied. Type your instruction instead.");
+    if (voice.state === "preview") {
+      voice.cancel();
+      return;
     }
+    setError("");
+    void voice.start();
   }
 
   function applyProposal() {
@@ -445,9 +448,30 @@ export function ActionsPage() {
             <Button size="sm" loading={interpreting} disabled={!instruction.trim()} onClick={interpret}>
               Interpret
             </Button>
-            <Button size="sm" variant="secondary" icon="microphone" onClick={toggleRecording}>
-              {recording ? "Stop recording" : "Record voice"}
+            <Button
+              size="sm"
+              variant="secondary"
+              icon="microphone"
+              loading={interpreting}
+              onClick={toggleRecording}
+            >
+              {voice.state === "recording" || voice.state === "paused"
+                ? `Stop (${voice.durationLabel})`
+                : "Record voice"}
             </Button>
+            {voice.state === "recording" ? (
+              <Button size="sm" variant="ghost" onClick={voice.pause}>
+                Pause
+              </Button>
+            ) : null}
+            {voice.state === "paused" ? (
+              <Button size="sm" variant="ghost" onClick={voice.resume}>
+                Resume
+              </Button>
+            ) : null}
+            {voice.audioUrl ? (
+              <audio controls src={voice.audioUrl} className="h-8 w-full max-w-xs" aria-label="Your instruction recording" />
+            ) : null}
           </div>
           <p className="mt-2 text-xs text-neutral-600">
             Recording asks for microphone access only to capture your instruction for transcription.

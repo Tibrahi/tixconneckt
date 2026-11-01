@@ -1,3 +1,5 @@
+import { access } from "node:fs/promises";
+import { join } from "node:path";
 import { Client, Pool } from "pg";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -49,9 +51,21 @@ export async function migrateOnBoot(): Promise<void> {
       .then((r) => r.rows[0]?.locked === true)
       .catch(() => false);
     if (!held) return;
+    const folder = join(process.cwd(), "db", "migrations");
+    try {
+      await access(join(folder, "meta", "_journal.json"));
+    } catch {
+      // Missing journal (pruned deploy output, wrong working directory):
+      // say exactly where we looked instead of a cryptic migrator error.
+      console.error(
+        `[db] automatic migration skipped (no migration journal at ${folder}). ` +
+          "Run `npm run db:migrate` from the project root once the database is reachable.",
+      );
+      return;
+    }
     const pool = new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 10_000 });
     try {
-      await migrate(drizzle(pool), { migrationsFolder: "./db/migrations" });
+      await migrate(drizzle(pool), { migrationsFolder: folder });
       console.log("[db] migrations are up to date");
     } catch (error) {
       console.error(

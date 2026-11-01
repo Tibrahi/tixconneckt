@@ -57,11 +57,73 @@ export function turnConfigured(): boolean {
 }
 
 export async function getCallMedia(kind: "audio" | "video"): Promise<MediaStream> {
-  return navigator.mediaDevices.getUserMedia(
+  const stream = await navigator.mediaDevices.getUserMedia(
     kind === "video"
-      ? { audio: true, video: { width: { ideal: 1280 }, height: { ideal: 720 } } }
-      : { audio: true, video: false },
+      ? {
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          video: { width: { ideal: 1280 }, height: { ideal: 720 } },
+        }
+      : {
+          audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          video: false,
+        },
   );
+  // Fail fast with a diagnosable error instead of a silent one-way call:
+  // some browsers/devices resolve getUserMedia without the requested track.
+  if (stream.getAudioTracks().length === 0) {
+    stopStream(stream);
+    throw new Error("no-microphone-track");
+  }
+  if (kind === "video" && stream.getVideoTracks().length === 0) {
+    stopStream(stream);
+    throw new Error("no-camera-track");
+  }
+  return stream;
+}
+
+/** Re-acquire just the microphone (device reconnect) without touching video. */
+export async function getMicrophoneTrack(): Promise<MediaStreamTrack> {
+  const stream = await navigator.mediaDevices.getUserMedia({
+    audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+  });
+  const [track] = stream.getAudioTracks();
+  if (!track) {
+    stopStream(stream);
+    throw new Error("no-microphone-track");
+  }
+  // Detach: the caller owns the track and stops the leftover stream tracks.
+  stream.getTracks().forEach((t) => {
+    if (t !== track) {
+      try {
+        t.stop();
+      } catch {
+        /* already stopped */
+      }
+    }
+  });
+  return track;
+}
+
+/** Honest, specific capture failures for UI display. */
+export function micErrorMessage(error: unknown): string {
+  const name = error instanceof DOMException || error instanceof Error ? error.name : "";
+  const message = error instanceof Error ? error.message : "";
+  if (message === "no-microphone-track") {
+    return "Your microphone produced no audio track, so the call couldn't start. Check your system input device and try again.";
+  }
+  if (message === "no-camera-track") {
+    return "Your camera produced no video track. Try an audio call instead.";
+  }
+  if (name === "NotAllowedError" || name === "SecurityError") {
+    return "Microphone access was denied, so the call couldn't start. Allow it in your browser settings and try again.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError" || name === "OverconstrainedError") {
+    return "No usable microphone was found on this device, so the call couldn't start.";
+  }
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Your microphone is busy in another app, so the call couldn't start. Close it and try again.";
+  }
+  return "Your microphone couldn't start, so the call couldn't start.";
 }
 
 export function createPeerConnection(

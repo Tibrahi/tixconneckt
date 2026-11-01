@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Icon } from "@/components/ui/Icon";
+import { extensionForMime, useVoiceRecorder } from "@/hooks/use-voice-recorder";
 import { EMOJI_PALETTE } from "./MessageBubble";
 import { readApi, type ChatMessage } from "./types";
 
@@ -31,7 +32,8 @@ function uploadWithProgress(file: File, onProgress: (pct: number) => void): Prom
 
 /**
  * Message composer: multiline input, emoji, file attachments with progress,
- * voice notes, reply context, and per-conversation draft preservation.
+ * voice notes (record, pause, preview, then send), reply context, and
+ * per-conversation draft preservation.
  * Enter sends, Shift+Enter adds a line, Escape clears pickers and replies.
  */
 export function Composer({
@@ -67,11 +69,10 @@ export function Composer({
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [uploadPct, setUploadPct] = useState<number | null>(null);
   const [attachment, setAttachment] = useState<{ documentId: string; name: string } | null>(null);
-  const [recording, setRecording] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const areaRef = useRef<HTMLTextAreaElement>(null);
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
+  const voice = useVoiceRecorder();
+  const voiceBusy = voice.state === "recording" || voice.state === "paused";
 
   useEffect(() => {
     try {
@@ -100,7 +101,25 @@ export function Composer({
 
   async function send() {
     const body = text.trim();
-    if ((!body && !attachment) || sending) return;
+    // A previewed voice note uploads first, then sends with the message.
+    let voiceAttachment = attachment;
+    if (voice.state === "preview" && voice.audioBlob) {
+      const ext = extensionForMime(voice.audioMime);
+      try {
+        const data = await uploadWithProgress(
+          new File([voice.audioBlob], `voice-note-${Date.now()}.${ext}`, { type: voice.audioBlob.type }),
+          setUploadPct,
+        );
+        voiceAttachment = { documentId: data.documentId, name: `voice-note.${ext}` };
+      } catch (error) {
+        onError(error instanceof Error ? error.message : "Voice note upload failed. Retry to try again.");
+        setUploadPct(null);
+        return;
+      } finally {
+        setUploadPct(null);
+      }
+    }
+    if ((!body && !voiceAttachment) || sending) return;
     const clientMessageId = crypto.randomUUID();
     setSending(true);
     onSending({ clientMessageId, body, replyTo });
@@ -112,12 +131,13 @@ export function Composer({
           body,
           clientMessageId,
           replyToId: replyTo?.id,
-          attachmentId: attachment?.documentId,
+          attachmentId: voiceAttachment?.documentId,
         }),
       });
       await readApi(res);
       setText("");
       setAttachment(null);
+      voice.cancel();
       onClearReply();
       try {
         localStorage.removeItem(draftKey);
@@ -135,6 +155,8 @@ export function Composer({
   }
 
   async function attach(file: File) {
+    // One attachment per message: a file replaces any voice preview.
+    if (voice.state === "preview") voice.cancel();
     setUploadPct(0);
     try {
       const data = await uploadWithProgress(file, setUploadPct);
@@ -147,32 +169,24 @@ export function Composer({
     }
   }
 
-  async function toggleRecording() {
-    if (recording) {
-      mediaRef.current?.stop();
+  function toggleRecording() {
+    if (voice.state === "recording" || voice.state === "paused") {
+      voice.stop();
       return;
     }
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = async () => {
-        setRecording(false);
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (blob.size === 0) return;
-        await attach(new File([blob], `voice-note-${Date.now()}.webm`, { type: "audio/webm" }));
-      };
-      mediaRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      onError("Microphone access was denied. Attach a file instead.");
+    if (voice.state === "preview") {
+      voice.cancel();
+      return;
     }
+    // One attachment per message: recording replaces any attached file.
+    setAttachment(null);
+    void voice.start();
   }
+
+  useEffect(() => {
+    if (voice.error) onError(voice.error);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [voice.error]);
 
   return (
     <div className="border-t border-neutral-200 bg-white p-3">
@@ -201,6 +215,38 @@ export function Composer({
             <div className="h-1.5 rounded-full bg-brand-600" style={{ width: `${uploadPct}%` }} />
           </div>
           <p className="mt-0.5 text-xs text-neutral-600">Uploading… {uploadPct}%</p>
+        </div>
+      ) : null}
+      {voiceBusy ? (
+        <div className="mb-2 flex items-center gap-2 rounded-md bg-red-50 px-3 py-1.5 text-xs" role="status">
+          <span aria-hidden="true" className="h-2 w-2 animate-pulse rounded-full bg-red-600" />
+          <span className="font-medium text-red-700">
+            {voice.state === "paused" ? "Paused" : "Recording"} · {voice.durationLabel}
+          </span>
+          {voice.state === "recording" ? (
+            <button type="button" onClick={voice.pause} aria-label="Pause recording" className="font-medium text-brand-700 hover:underline">
+              Pause
+            </button>
+          ) : (
+            <button type="button" onClick={voice.resume} aria-label="Resume recording" className="font-medium text-brand-700 hover:underline">
+              Resume
+            </button>
+          )}
+          <button type="button" onClick={voice.stop} aria-label="Finish recording" className="font-medium text-brand-700 hover:underline">
+            Finish
+          </button>
+          <button type="button" onClick={voice.cancel} aria-label="Discard recording" className="font-medium text-neutral-600 hover:underline">
+            Discard
+          </button>
+        </div>
+      ) : null}
+      {voice.state === "preview" && voice.audioUrl ? (
+        <div className="mb-2 flex items-center gap-2 rounded-md bg-brand-50 px-3 py-1.5 text-xs">
+          <audio controls src={voice.audioUrl} className="h-8 min-w-0 flex-1" aria-label="Voice note preview" />
+          <span className="shrink-0 font-mono text-neutral-600">{voice.durationLabel}</span>
+          <button type="button" onClick={voice.cancel} aria-label="Delete voice note" className="shrink-0 font-medium text-brand-700 hover:underline">
+            Delete
+          </button>
         </div>
       ) : null}
       <div className="flex items-end gap-1.5">
@@ -260,12 +306,12 @@ export function Composer({
         />
         <button
           type="button"
-          aria-label={recording ? "Stop recording" : "Record a voice note"}
-          title={recording ? "Stop recording" : "Record a voice note"}
+          aria-label={voiceBusy ? "Stop recording" : voice.state === "preview" ? "Discard voice note" : "Record a voice note"}
+          title={voiceBusy ? "Stop recording" : voice.state === "preview" ? "Discard voice note" : "Record a voice note"}
           onClick={toggleRecording}
-          className={`rounded-md border px-2.5 py-2 ${recording ? "border-red-300 bg-red-100 text-red-700" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}
+          className={`rounded-md border px-2.5 py-2 ${voiceBusy ? "border-red-300 bg-red-100 text-red-700" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}
         >
-          <Icon name={recording ? "microphone-slash" : "microphone"} />
+          <Icon name={voiceBusy ? "microphone-slash" : "microphone"} />
         </button>
         <textarea
           ref={areaRef}
@@ -285,14 +331,14 @@ export function Composer({
           }}
           rows={1}
           maxLength={8000}
-          placeholder={recording ? "Recording… tap stop, then send." : "Write a message… (Enter to send, Shift+Enter for a new line)"}
+          placeholder={voiceBusy ? "Recording… tap stop, then send." : "Write a message… (Enter to send, Shift+Enter for a new line)"}
           aria-label="Message text"
           className="max-h-40 min-h-10 flex-1 resize-none rounded-md border border-neutral-300 bg-white px-3 py-2 text-sm text-black"
         />
         <button
           type="button"
           onClick={send}
-          disabled={sending || (!text.trim() && !attachment)}
+          disabled={sending || (!text.trim() && !attachment && voice.state !== "preview")}
           aria-label={sending ? "Sending message" : "Send message"}
           title="Send (Enter)"
           className="shrink-0 rounded-md bg-brand-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-60"

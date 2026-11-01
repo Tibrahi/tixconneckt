@@ -19,8 +19,10 @@ const MODULES = ["wallet", "project", "request", "profile", "chat"] as const;
  * 1. Determine the requested voice task (only supported ops run).
  * 2. Capture/upload audio via multipart; validate type and size.
  * 3. Store audio in object storage; reference + metadata in PostgreSQL.
- * 4. Submit to the configured Muse Voice integration.
- * 5. Validate and persist the transcript as JSONB; render from the record.
+ * 4. Submit mono 16-bit PCM WAV (16/24 kHz) to Muse Voice Transcribe —
+ *    clients convert first (lib/audio-convert); anything else is refused
+ *    with an actionable error instead of being mis-sent.
+ * 5. Validate and persist the transcript + turns as JSONB; render from the record.
  */
 export async function POST(req: Request) {
   const session = await getSession();
@@ -70,7 +72,23 @@ export async function POST(req: Request) {
       .returning({ id: documents.id }),
   );
 
-  const result = await transcribeWithMuseVoice(audio, audio.name || "audio.webm");
+  const modeRaw = String(form.get("mode") ?? "PUSH_TO_TALK");
+  const mode = modeRaw === "ENDPOINTING" || modeRaw === "DIARIZATION" ? modeRaw : "PUSH_TO_TALK";
+  const languageBias = String(form.get("languageBias") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 8);
+  const keywords = String(form.get("keywords") ?? "")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .slice(0, 32);
+  const result = await transcribeWithMuseVoice(audio, audio.name || "audio.wav", {
+    mode,
+    languageBias: languageBias.length ? languageBias : undefined,
+    keywords: keywords.length ? keywords : undefined,
+  });
   if (!result.configured) {
     return apiOk({
       pending: true,
@@ -79,7 +97,10 @@ export async function POST(req: Request) {
     });
   }
   if (!result.transcript) {
-    return apiError(result.error ?? "Transcription failed. Your audio is saved — retry when ready.", 502);
+    return apiError(
+      result.error ?? "Transcription failed. Your audio is saved — retry when ready.",
+      result.error?.includes("Convert the recording") ? 400 : 502,
+    );
   }
 
   const [record] = await db
@@ -88,7 +109,7 @@ export async function POST(req: Request) {
       recordType: "voice_result",
       ownerId: session.user.id,
       visibility: "private",
-      doc: { transcript: result.transcript, task: taskId, module: docModule },
+      doc: { transcript: result.transcript, turns: result.turns ?? [], task: taskId, module: docModule },
       provenance: {
         source: "muse_voice",
         task: taskId,

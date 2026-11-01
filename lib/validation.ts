@@ -538,3 +538,10 @@ export const paginationSchema = z.object({
 });
 
 export type PaginationInput = z.infer<typeof paginationSchema>;
+
+/** AI profile/cover picture generation request. */
+export const aiImageGenerateSchema = z.object({
+  kind: z.enum(["avatar", "cover"]),
+  prompt: z.string().trim().min(10, "Describe the image in at least a few words.").max(2000),
+  style: z.enum(["natural", "photographic", "illustration", "minimal"]).default("natural"),
+});

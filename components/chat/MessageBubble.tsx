@@ -76,7 +76,7 @@ function AttachmentCard({
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={attachment.filename} className="max-h-64 w-full object-contain bg-neutral-100" />
       ) : null}
-      {url && isAudio ? <audio src={url} controls className="w-full" preload="metadata" /> : null}
+      {url && isAudio ? <AudioPlayer src={url} filename={attachment.filename} /> : null}
       {url && isVideo ? <video src={url} controls className="max-h-64 w-full bg-black" preload="metadata" /> : null}
       <div className="flex flex-wrap gap-2 p-2">
         {!url ? (
@@ -104,6 +104,61 @@ function AttachmentCard({
           {transcript}
         </p>
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * Voice-note player with duration and playback progress. The native
+ * controls stay for accessibility; the progress readout shows position
+ * even before metadata-heavy seeking.
+ */
+function AudioPlayer({ src, filename }: { src: string; filename: string }) {
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [position, setPosition] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  useEffect(() => {
+    const el = audioRef.current;
+    if (!el) return;
+    const onTime = () => setPosition(el.currentTime);
+    const onMeta = () => {
+      if (Number.isFinite(el.duration)) setDuration(el.duration);
+    };
+    el.addEventListener("timeupdate", onTime);
+    el.addEventListener("loadedmetadata", onMeta);
+    el.addEventListener("durationchange", onMeta);
+    return () => {
+      el.removeEventListener("timeupdate", onTime);
+      el.removeEventListener("loadedmetadata", onMeta);
+      el.removeEventListener("durationchange", onMeta);
+    };
+  }, [src]);
+
+  const fmt = (seconds: number) => {
+    if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${String(s).padStart(2, "0")}`;
+  };
+  const pct = duration > 0 ? Math.min(100, Math.round((position / duration) * 100)) : 0;
+
+  return (
+    <div className="border-t border-neutral-100 px-2 pt-2">
+      <audio ref={audioRef} src={src} controls className="h-9 w-full" preload="metadata" aria-label={`Play ${filename}`} />
+      <div
+        className="mt-1 h-1 w-full rounded-full bg-neutral-200"
+        role="progressbar"
+        aria-label="Playback progress"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div className="h-1 rounded-full bg-brand-600" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-0.5 font-mono text-[11px] text-neutral-500">
+        {fmt(position)} / {fmt(duration)}
+      </p>
     </div>
   );
 }

@@ -1,17 +1,19 @@
 import { aiSparkConfigured, aiVoiceConfigured } from "./config";
+import { sparkModel } from "./muse/endpoints";
+import { runSparkTask } from "./muse/spark";
+import { transcribeFile, type VoiceMode, type VoiceTurn } from "./muse/voice";
+import { parseWavHeader, transcribableWavProblem } from "./muse/wav";
 import { validateFieldValue } from "./flexible-records";
 
 /**
- * Muse Spark (structured AI processing) and Muse Voice (transcription).
+ * Muse Spark (structured AI processing) and Muse Voice (transcription)
+ * behind the Meta Model API (dev.meta.ai) — Chat Completions for Spark,
+ * multipart file upload for Voice.
  *
- * These clients call the configured service endpoints only. When credentials
- * are missing they report `configured: false` and callers must surface a
- * "pending integration" state — never a fabricated AI result.
- *
- * Task inputs are dynamic (see lib/ai-tasks.ts): each request carries the
- * task id plus the actually-collected input. Outputs are validated as
- * generic JSON and persisted to JSONB by the caller — no hardcoded output
- * schema is assumed here.
+ * Transport lives in lib/muse/*. These facades keep the historic
+ * call/validate shapes so every existing caller keeps working: when
+ * credentials are missing they report `configured: false` and callers
+ * surface a "pending integration" state — never a fabricated AI result.
  */
 
 export interface SparkRequest {
@@ -26,32 +28,23 @@ export interface SparkResponse {
   pendingReason?: string;
   data?: unknown;
   error?: string;
+  model?: string;
 }
 
 export async function callMuseSpark(request: SparkRequest): Promise<SparkResponse> {
   if (!aiSparkConfigured()) {
     return { configured: false, pendingReason: "Muse Spark is not configured" };
   }
-  try {
-    const res = await fetch(`${process.env.MUSE_SPARK_API_URL}/v1/process`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.MUSE_SPARK_API_KEY}`,
-      },
-      body: JSON.stringify(request),
-    });
-    if (!res.ok) {
-      return { configured: true, error: `Muse Spark returned HTTP ${res.status}` };
-    }
-    const data: unknown = await res.json();
-    return { configured: true, data };
-  } catch (error) {
-    return {
-      configured: true,
-      error: error instanceof Error ? error.message : "Muse Spark request failed",
-    };
+  const result = await runSparkTask(request);
+  if (result.error || result.data === undefined) {
+    return { configured: true, error: result.error ?? "AI request failed", model: result.model };
   }
+  return { configured: true, data: result.data, model: result.model };
+}
+
+/** The model id actually used for Spark tasks (for run provenance). */
+export function sparkModelId(): string {
+  return sparkModel();
 }
 
 /**
@@ -72,7 +65,14 @@ export interface VoiceResponse {
   configured: boolean;
   pendingReason?: string;
   transcript?: string;
+  turns?: VoiceTurn[];
   error?: string;
+}
+
+export interface VoiceTranscribeOptions {
+  mode?: VoiceMode;
+  languageBias?: string[];
+  keywords?: string[];
 }
 
 /** Voice tasks the configured service can actually perform. */
@@ -80,33 +80,31 @@ export function voiceTaskSupported(task: string): boolean {
   return task === "transcribe";
 }
 
+/**
+ * Transcribe mono 16-bit PCM WAV at 16/24 kHz. Callers capture in any
+ * browser format but MUST convert first (lib/audio-convert) — anything
+ * else is rejected with an actionable error, never silently mis-sent.
+ */
 export async function transcribeWithMuseVoice(
   audio: Blob,
-  filename = "instruction.webm",
+  filename = "instruction.wav",
+  options: VoiceTranscribeOptions = {},
 ): Promise<VoiceResponse> {
   if (!aiVoiceConfigured()) {
     return { configured: false, pendingReason: "Muse Voice is not configured" };
   }
-  try {
-    const form = new FormData();
-    form.append("audio", audio, filename);
-    const res = await fetch(`${process.env.MUSE_VOICE_API_URL}/v1/transcribe`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${process.env.MUSE_VOICE_API_KEY}` },
-      body: form,
-    });
-    if (!res.ok) {
-      return { configured: true, error: `Muse Voice returned HTTP ${res.status}` };
-    }
-    const data = (await res.json()) as { transcript?: string };
-    if (!data.transcript) {
-      return { configured: true, error: "Muse Voice returned no transcript" };
-    }
-    return { configured: true, transcript: data.transcript };
-  } catch (error) {
+  const bytes = new Uint8Array(await audio.arrayBuffer());
+  const info = parseWavHeader(bytes);
+  const problem = transcribableWavProblem(info);
+  if (problem) {
     return {
       configured: true,
-      error: error instanceof Error ? error.message : "Muse Voice request failed",
+      error: `${problem} Convert the recording to mono 16-bit WAV at 24 kHz first.`,
     };
   }
+  const result = await transcribeFile(audio, filename, options);
+  if (!result.transcript) {
+    return { configured: true, error: result.error ?? "Transcription failed." };
+  }
+  return { configured: true, transcript: result.transcript, turns: result.turns ?? [] };
 }

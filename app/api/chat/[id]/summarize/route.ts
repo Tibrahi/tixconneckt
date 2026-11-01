@@ -1,7 +1,7 @@
 import { and, desc, eq, notInArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import { aiTaskRuns, messageHides, messages, users } from "@/db/schema";
-import { callMuseSpark, validateSparkJson } from "@/lib/ai";
+import { callMuseSpark, sparkModelId, validateSparkJson } from "@/lib/ai";
 import { aiSparkConfigured } from "@/lib/config";
 import { apiError, apiOk } from "@/lib/api-response";
 import { requireConversationMembership } from "@/lib/chat";
@@ -123,7 +123,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (spark.error || !spark.data) {
     await db
       .update(aiTaskRuns)
-      .set({ status: "failed", error: spark.error ?? "AI request failed", finishedAt: new Date() })
+      .set({ status: "failed", error: spark.error ?? "AI request failed", model: sparkModelId(), finishedAt: new Date() })
       .where(eq(aiTaskRuns.id, run.id));
     return apiError(spark.error ?? "AI request failed. You can retry safely.", 502);
   }
@@ -137,7 +137,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
   await db
     .update(aiTaskRuns)
-    .set({ status: "succeeded", resultJson: validated.doc, model: "muse-spark", finishedAt: new Date() })
+    .set({ status: "succeeded", resultJson: validated.doc, model: sparkModelId(), finishedAt: new Date() })
     .where(eq(aiTaskRuns.id, run.id));
 
   return apiOk({ runId: run.id, status: "succeeded", result: validated.doc });

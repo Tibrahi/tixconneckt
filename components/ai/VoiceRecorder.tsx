@@ -1,14 +1,18 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/Button";
+import { convertToTranscribableWav } from "@/lib/audio-convert";
+import { useVoiceRecorder } from "@/hooks/use-voice-recorder";
 
 /**
  * Reusable voice capture (correction §4).
  * - Explains why microphone access is needed before requesting it.
- * - Records with MediaRecorder, or accepts an audio file instead.
- * - Posts to the given endpoint and surfaces transcript / honesty states.
- * - Never simulates a transcript; failures preserve the recording for retry.
+ * - Records with the shared capture hook (pause/resume, duration, preview),
+ *   or accepts an audio file instead.
+ * - Converts to transcribable WAV in-browser, then posts to the endpoint.
+ * - Surfaces transcript / honesty states; failures preserve audio for retry.
+ * - Never simulates a transcript.
  */
 
 export interface VoiceResultMeta {
@@ -30,21 +34,26 @@ export function VoiceRecorder({
   onTranscript: (transcript: string, meta: VoiceResultMeta) => void;
   disabled?: boolean;
 }) {
-  const [recording, setRecording] = useState(false);
+  const voice = useVoiceRecorder();
   const [busy, setBusy] = useState(false);
+  const [converting, setConverting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [recordedUrl, setRecordedUrl] = useState<string | null>(null);
-  const [hasRecording, setHasRecording] = useState(false);
-  const mediaRef = useRef<MediaRecorder | null>(null);
-  const chunksRef = useRef<Blob[]>([]);
-  const lastBlobRef = useRef<Blob | null>(null);
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [lastConvertible, setLastConvertible] = useState<Blob | null>(null);
+  const [submitted, setSubmitted] = useState(false);
 
   async function submitBlob(blob: Blob) {
+    setSubmitted(true);
     setBusy(true);
+    setConverting(true);
     setError(null);
     try {
+      // The transcription endpoint only accepts mono 16-bit PCM WAV:
+      // convert recordings and uploads alike before sending.
+      const { wav } = await convertToTranscribableWav(blob);
+      setConverting(false);
       const form = new FormData();
-      form.append("audio", blob, "recording.webm");
+      form.append("audio", wav, "recording.wav");
       form.append("task", task);
       form.append("module", docModule);
       const res = await fetch(endpoint, { method: "POST", body: form });
@@ -87,42 +96,21 @@ export function VoiceRecorder({
         audioRetained: body.data.audioRetained,
         audioNote: body.data.audioNote,
       });
-    } catch {
-      setError("Your connection was interrupted. Your recording is kept below — retry when ready.");
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "Your connection was interrupted. Your recording is kept below — retry when ready.",
+      );
     } finally {
+      setConverting(false);
       setBusy(false);
     }
   }
 
-  async function toggleRecording() {
-    if (recording) {
-      mediaRef.current?.stop();
-      return;
-    }
-    setError(null);
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      const recorder = new MediaRecorder(stream);
-      chunksRef.current = [];
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) chunksRef.current.push(e.data);
-      };
-      recorder.onstop = async () => {
-        setRecording(false);
-        stream.getTracks().forEach((t) => t.stop());
-        const blob = new Blob(chunksRef.current, { type: "audio/webm" });
-        if (blob.size === 0) return;
-        lastBlobRef.current = blob;
-        setRecordedUrl(URL.createObjectURL(blob));
-        setHasRecording(true);
-        await submitBlob(blob);
-      };
-      mediaRef.current = recorder;
-      recorder.start();
-      setRecording(true);
-    } catch {
-      setError("Microphone access was denied. You can upload an audio file instead.");
-    }
+  function retry() {
+    const blob = voice.audioBlob ?? lastConvertible;
+    if (blob) void submitBlob(blob);
   }
 
   return (
@@ -131,17 +119,46 @@ export function VoiceRecorder({
         The microphone is used only to capture your voice for transcription. You can also upload
         an audio file instead of recording.
       </p>
-      <div className="flex flex-wrap gap-2">
-        <Button
-          size="sm"
-          variant="secondary"
-          icon="microphone"
-          loading={busy}
-          disabled={disabled}
-          onClick={toggleRecording}
-        >
-          {recording ? "Stop recording" : "Record voice"}
-        </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        {voice.state === "idle" || voice.state === "preview" ? (
+          <Button
+            size="sm"
+            variant="secondary"
+            icon="microphone"
+            loading={busy}
+            disabled={disabled}
+            onClick={() => {
+              setError(null);
+              setFileUrl(null);
+              setLastConvertible(null);
+              setSubmitted(false);
+              void voice.start();
+            }}
+          >
+            Record voice
+          </Button>
+        ) : (
+          <>
+            <span role="status" className="text-sm font-medium text-brand-700">
+              {voice.state === "paused" ? "Paused" : "Recording"} · {voice.durationLabel}
+            </span>
+            {voice.state === "recording" ? (
+              <Button size="sm" variant="secondary" disabled={disabled} onClick={voice.pause}>
+                Pause
+              </Button>
+            ) : (
+              <Button size="sm" variant="secondary" disabled={disabled} onClick={voice.resume}>
+                Resume
+              </Button>
+            )}
+            <Button size="sm" disabled={disabled} onClick={voice.stop}>
+              Stop
+            </Button>
+            <Button size="sm" variant="ghost" disabled={disabled} onClick={voice.cancel}>
+              Cancel
+            </Button>
+          </>
+        )}
         <label className="inline-flex cursor-pointer items-center justify-center gap-2 rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium text-black transition-colors hover:border-black">
           Upload audio
           <input
@@ -152,31 +169,49 @@ export function VoiceRecorder({
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) {
-                lastBlobRef.current = file;
-                setRecordedUrl(URL.createObjectURL(file));
-                setHasRecording(true);
+                voice.cancel();
+                setLastConvertible(file);
+                setFileUrl(URL.createObjectURL(file));
+                setSubmitted(false);
                 submitBlob(file);
               }
               e.target.value = "";
             }}
           />
         </label>
-        {hasRecording && !busy ? (
-          <Button size="sm" variant="ghost" icon="refresh" disabled={disabled} onClick={() => {
-            const blob = lastBlobRef.current;
-            if (blob) submitBlob(blob);
-          }}>
-            Retry transcription
+        {(voice.state === "preview" || lastConvertible) && !busy ? (
+          <Button
+            size="sm"
+            variant={submitted ? "ghost" : "primary"}
+            icon={submitted ? "refresh" : undefined}
+            disabled={disabled}
+            onClick={() => {
+              if (voice.state === "preview" && voice.audioBlob) {
+                setLastConvertible(voice.audioBlob);
+                submitBlob(voice.audioBlob);
+              } else {
+                retry();
+              }
+            }}
+          >
+            {submitted ? "Retry transcription" : "Transcribe recording"}
           </Button>
         ) : null}
       </div>
-      {recording ? (
-        <p role="status" className="text-sm font-medium text-brand-700">
-          Recording… speak now, then press Stop.
+      {converting ? (
+        <p role="status" className="text-sm text-neutral-600">
+          Preparing audio for transcription…
         </p>
       ) : null}
-      {recordedUrl ? (
-        <audio controls src={recordedUrl} className="mt-1 w-full max-w-md" aria-label="Your recording" />
+      {voice.audioUrl ? (
+        <audio controls src={voice.audioUrl} className="mt-1 w-full max-w-md" aria-label="Your recording" />
+      ) : fileUrl ? (
+        <audio controls src={fileUrl} className="mt-1 w-full max-w-md" aria-label="Uploaded audio" />
+      ) : null}
+      {voice.error ? (
+        <p role="alert" className="text-sm text-red-700">
+          {voice.error}
+        </p>
       ) : null}
       {error ? (
         <p role="alert" className="text-sm text-red-700">

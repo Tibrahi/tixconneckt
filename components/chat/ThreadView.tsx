@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { convertToTranscribableWav } from "@/lib/audio-convert";
 import { ROUTES } from "@/lib/routes";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
 import { Button, IconButton } from "@/components/ui/Button";
@@ -516,16 +517,32 @@ export function ThreadView({
   }
 
   async function transcribeMessage(m: ChatMessage) {
+    if (!m.attachment) {
+      onError("Only voice notes can be transcribed.");
+      return;
+    }
+    setAnalyzingId(m.id);
     try {
+      // Convert in-browser to transcribable WAV so stored WebM/MP4 notes
+      // transcribe without server-side ffmpeg.
+      const urlRes = await fetch(`/api/documents/${encodeURIComponent(m.attachment.id)}/url`);
+      const { url } = await readApi<{ url: string }>(urlRes);
+      const audioRes = await fetch(url);
+      if (!audioRes.ok) throw new Error("The voice note couldn't be loaded. Retry to try again.");
+      const { wav } = await convertToTranscribableWav(await audioRes.blob());
+      const form = new FormData();
+      form.append("audio", wav, "note.wav");
       const res = await fetch(
         `/api/chat/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(m.id)}/analyze`,
-        { method: "PUT" },
+        { method: "PUT", body: form },
       );
       const data = await readApi<{ transcript: string }>(res);
       setTranscripts((prev) => ({ ...prev, [m.id]: data.transcript }));
       setComposerSeed({ text: data.transcript, nonce: Date.now() });
     } catch (error) {
       onError(error instanceof Error ? error.message : "Transcription failed. You can retry safely.");
+    } finally {
+      setAnalyzingId(null);
     }
   }
 
