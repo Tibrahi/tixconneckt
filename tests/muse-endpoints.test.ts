@@ -1,14 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
-  imageEndpoint,
-  imageModel,
   sparkChatEndpoint,
   sparkModel,
   voiceFileEndpoint,
   voiceModel,
   voiceRealtimeEndpoint,
 } from "@/lib/muse/endpoints";
-import { aiImageConfigured } from "@/lib/config";
 
 const KEYS = [
   "MUSE_SPARK_API_URL",
@@ -17,8 +14,6 @@ const KEYS = [
   "MUSE_VOICE_API_URL",
   "MUSE_VOICE_API_KEY",
   "MUSE_VOICE_MODEL",
-  "MUSE_IMAGE_API_URL",
-  "MUSE_IMAGE_MODEL",
 ] as const;
 
 const saved = new Map<string, string | undefined>();
@@ -39,14 +34,6 @@ afterEach(() => {
 });
 
 describe("Muse endpoint resolution", () => {
-  it("configures Image from its explicit URL or the shared Spark URL and key", () => {
-    setEnv({ MUSE_IMAGE_API_URL: "https://images.example.com", MUSE_SPARK_API_KEY: "k" });
-    expect(aiImageConfigured()).toBe(true);
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    expect(aiImageConfigured()).toBe(true);
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1" });
-    expect(aiImageConfigured()).toBe(false);
-  });
   it("does not double the /v1 segment for the configured Spark root (production 404)", () => {
     setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1" });
     expect(sparkChatEndpoint()).toBe("https://api.meta.ai/v1/chat/completions");
@@ -73,32 +60,21 @@ describe("Muse endpoint resolution", () => {
     setEnv({ MUSE_VOICE_API_URL: "https://api.meta.ai" });
     expect(voiceFileEndpoint()).toBe("https://api.meta.ai/v1/asr/transcribe");
   });
-  it("resolves the image endpoint from the shared Model API base", () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1" });
-    expect(imageEndpoint()).toBe("https://api.meta.ai/v1/images/generations");
-  });
-  it("prefers an explicit image base when configured", () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_IMAGE_API_URL: "https://images.example.com/v2/" });
-    expect(imageEndpoint()).toBe("https://images.example.com/v2/images/generations");
-  });
   it("returns null when unconfigured", () => {
     setEnv({});
     expect(sparkChatEndpoint()).toBeNull();
     expect(voiceFileEndpoint()).toBeNull();
     expect(voiceRealtimeEndpoint()).toBeNull();
-    expect(imageEndpoint()).toBeNull();
   });
 });
 
 describe("Muse model IDs", () => {
-  it("uses documented defaults with env overrides", () => {
+  it("uses the documented defaults and configured overrides", () => {
     setEnv({});
     expect(sparkModel()).toBe("muse-spark-1.3");
     expect(voiceModel()).toBe("muse-voice-transcribe-1.0");
-    expect(imageModel()).toBe("muse-image-1.0");
-    setEnv({ MUSE_SPARK_MODEL: "muse-spark-1.1", MUSE_VOICE_MODEL: "custom-voice", MUSE_IMAGE_MODEL: "custom-image" });
+    setEnv({ MUSE_SPARK_MODEL: "muse-spark-1.1", MUSE_VOICE_MODEL: "custom-voice" });
     expect(sparkModel()).toBe("muse-spark-1.1");
     expect(voiceModel()).toBe("custom-voice");
-    expect(imageModel()).toBe("custom-image");
   });
 });

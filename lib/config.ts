@@ -14,8 +14,6 @@ const envSchema = z.object({
   MUSE_VOICE_API_URL: z.string().default(""),
   MUSE_VOICE_API_KEY: z.string().default(""),
   MUSE_VOICE_MODEL: z.string().default(""),
-  MUSE_IMAGE_API_URL: z.string().default(""),
-  MUSE_IMAGE_MODEL: z.string().default(""),
   UPSTASH_REDIS_REST_URL: z.string().default(""),
   UPSTASH_REDIS_REST_TOKEN: z.string().default(""),
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
@@ -74,11 +72,6 @@ export function aiSparkConfigured(): boolean {
 
 export function aiVoiceConfigured(): boolean {
   return Boolean(process.env.MUSE_VOICE_API_URL?.trim() && process.env.MUSE_VOICE_API_KEY?.trim());
-}
-
-/** Muse Image shares the Model API key, but may use its own endpoint. */
-export function aiImageConfigured(): boolean {
-  return Boolean((process.env.MUSE_IMAGE_API_URL?.trim() || process.env.MUSE_SPARK_API_URL?.trim()) && process.env.MUSE_SPARK_API_KEY?.trim());
 }
 
 export function redisConfigured(): boolean {

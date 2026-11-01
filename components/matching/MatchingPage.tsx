@@ -9,6 +9,7 @@ import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
+import { useToast } from "@/components/ui/Toast";
 
 interface Suggestion {
   id: string;
@@ -61,6 +62,7 @@ export function MatchingPage() {
   const [groupOpen, setGroupOpen] = useState(false);
   const [groupName, setGroupName] = useState("");
   const [approved, setApproved] = useState<string[]>([]);
+  const { success } = useToast();
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -111,7 +113,10 @@ export function MatchingPage() {
         return;
       }
       setAiPending(body.data?.aiPending ?? false);
-      load();
+      setStarted(true);
+      setStep(0);
+      success("Your matching answers were saved successfully.");
+      void load();
     } catch {
       setError("Your connection was interrupted. Your answers are still available. Please try again.");
     } finally {

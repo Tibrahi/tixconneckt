@@ -589,13 +589,6 @@ export const paymentMethodBindSchema = z.object({
 
 export type PaymentMethodBindInput = z.infer<typeof paymentMethodBindSchema>;
 
-/** AI profile/cover picture generation request. */
-export const aiImageGenerateSchema = z.object({
-  kind: z.enum(["avatar", "cover"]),
-  prompt: z.string().trim().min(10, "Describe the image in at least a few words.").max(2000),
-  style: z.enum(["natural", "photographic", "illustration", "minimal"]).default("natural"),
-});
-
 /** Profile-assistant proposal: the reviewable subset of profileUpdateSchema. */
 export const profileProposalSchema = z.object({
   name: z.string().trim().min(2).max(120).optional(),

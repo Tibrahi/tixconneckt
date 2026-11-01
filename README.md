@@ -74,7 +74,6 @@ updates are unavailable.
 | `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token |
 | `MUSE_SPARK_API_URL` / `MUSE_SPARK_API_KEY` | AI text endpoint + key (without them AI features show explicit pending states) |
 | `MUSE_VOICE_API_URL` / `MUSE_VOICE_API_KEY` | AI voice endpoint + key (same fallback) |
-| `MUSE_IMAGE_API_URL` / `MUSE_IMAGE_MODEL` | Optional image endpoint/model overrides. Image generation otherwise uses the Spark Model API base, shared `MUSE_SPARK_API_KEY`, and `muse-image-1.0` default |
 | `DATABASE_URL_DIRECT` | Neon **direct** (non-pooled) URL, used for schema migrations |
 | `DB_POOL_MAX` | `10` (default; one pool per serverless instance) |
 | `DB_CONNECT_TIMEOUT_MS` | `10000` |

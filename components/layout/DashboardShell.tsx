@@ -31,7 +31,6 @@ function NavList({
             <Link
               href={item.href}
               onClick={onNavigate}
-              data-tour-nav={item.href}
               title={collapsed ? item.label : undefined}
               aria-current={active ? "page" : undefined}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
@@ -207,7 +206,7 @@ export function DashboardShell({
               <Icon name={collapsed ? "chevron-right" : "chevron-left"} />
             </button>
           </div>
-          <nav id="tour-sidebar" className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
+          <nav className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
             <NavList items={roleNav} counts={counts} collapsed={collapsed} />
             {isAdmin ? (
               <>
@@ -289,7 +288,7 @@ export function DashboardShell({
         ) : null}
 
         {/* Right content area */}
-        <main id="tour-main" className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+        <main className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
           {countsError ? (
             <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-3 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950" role="status">
               <span>Some dashboard counts could not load. Please retry.</span>

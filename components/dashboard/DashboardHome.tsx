@@ -9,7 +9,6 @@ import { Badge } from "@/components/ui/Card";
 import { Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Icon } from "@/components/ui/Icon";
-import { TourButton } from "@/components/tour/TourButton";
 import { useAbly } from "@/components/realtime/AblyProvider";
 
 interface Summary {
@@ -88,7 +87,7 @@ function ProjectList({ summary, title, emptyTitle, emptyMessage }: {
 function UniversityDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader title="University research workspace" description="Develop campus and research projects, organize academic teams, and coordinate external support from the project record." actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>} />
+      <PageHeader title="University research workspace" description="Develop campus and research projects, organize academic teams, and coordinate external support from the project record." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
       <div className="grid gap-5 xl:grid-cols-[1.6fr_0.9fr]">
         <ProjectList summary={summary} title="Research and campus portfolio" emptyTitle="Start a campus project" emptyMessage="Create a research or campus workspace, then invite contributors and organize its documents." />
         <div className="flex flex-col gap-5">
@@ -117,7 +116,7 @@ function UniversityDashboard({ summary, refreshing }: { summary: Summary; refres
 function GovernmentDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader title="Government program workspace" description="Coordinate public initiatives across agency teams, manage program funding requests, and keep partner decisions connected to each project." actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>} />
+      <PageHeader title="Government program workspace" description="Coordinate public initiatives across agency teams, manage program funding requests, and keep partner decisions connected to each project." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
       <section aria-label="Program coordination actions" className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Public program portfolio</p>
@@ -160,7 +159,7 @@ function ProviderDashboard({ summary, providerKind, refreshing }: { summary: Sum
   const focus = providerKind === "loan" ? "funding requests" : providerKind === "support" ? "support requests" : "assigned requests";
   return (
     <>
-      <PageHeader title={providerKind === "loan" ? "Funding provider workspace" : providerKind === "support" ? "Support provider workspace" : "Provider workspace"} description={`Review ${focus}, respond to eligible projects, and manage the provider connections assigned to your account.`} actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>} />
+      <PageHeader title={providerKind === "loan" ? "Funding provider workspace" : providerKind === "support" ? "Support provider workspace" : "Provider workspace"} description={`Review ${focus}, respond to eligible projects, and manage the provider connections assigned to your account.`} actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
       <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Assigned work queue</p>
@@ -310,7 +309,6 @@ export function DashboardHome() {
                 Updating…
               </span>
             ) : null}
-            <TourButton />
           </>
         }
       />

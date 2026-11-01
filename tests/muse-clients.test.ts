@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runSparkTask } from "@/lib/muse/spark";
 import { transcribeFile } from "@/lib/muse/voice";
-import { generateImage } from "@/lib/muse/image";
 import { extractPcm16Frames, parseWavHeader, transcribableWavProblem } from "@/lib/muse/wav";
 import { runRealtimeSession, upsample16to24k, type RealtimeSocketLike } from "@/lib/muse/realtime";
 
@@ -263,91 +262,5 @@ describe("upsample16to24k", () => {
     expect(out[2]).toBe(3000);
     expect(out[1]).toBeGreaterThan(0);
     expect(upsample16to24k(new Int16Array(0)).length).toBe(0);
-  });
-});
-
-const PNG_1PX = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==";
-
-describe("generateImage", () => {
-  it("requests b64_json and returns verified bytes", async () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    let gotUrl = "";
-    let gotBody: Record<string, unknown> = {};
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string, init?: RequestInit) => {
-        gotUrl = url;
-        gotBody = JSON.parse(String(init?.body)) as Record<string, unknown>;
-        return jsonRes({ data: [{ b64_json: PNG_1PX }] });
-      }),
-    );
-    const result = await generateImage({ prompt: "a red rocket", size: "1024x1024", style: "minimal" });
-    expect(gotUrl).toBe("https://api.meta.ai/v1/images/generations");
-    expect(gotBody).toMatchObject({ model: "muse-image-1.0", size: "1024x1024", response_format: "b64_json", n: 1 });
-    expect(String(gotBody.prompt)).toContain("minimal");
-    expect(result.mimeType).toBe("image/png");
-    expect(result.bytes?.length).toBeGreaterThan(0);
-  });
-  it("rejects non-image bytes", async () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    vi.stubGlobal("fetch", vi.fn(async () => jsonRes({ data: [{ b64_json: Buffer.from("not-an-image").toString("base64") }] })));
-    const result = await generateImage({ prompt: "x", size: "1024x1024" });
-    expect(result.error).toContain("unusable");
-  });
-  it("validates the prompt before sending", async () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    const fetchMock = vi.fn();
-    vi.stubGlobal("fetch", fetchMock);
-    const result = await generateImage({ prompt: "   ", size: "1024x1024" });
-    expect(result.error).toContain("Describe");
-    expect(fetchMock).not.toHaveBeenCalled();
-  });
-  it("fetches bytes server-side when the provider returns a url", async () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    const png = Buffer.from(PNG_1PX, "base64");
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (String(url).includes("/images/generations")) {
-          return jsonRes({ data: [{ url: "https://cdn.example.com/tmp/img.png" }] });
-        }
-        return new Response(new Uint8Array(png), { status: 200, headers: { "Content-Type": "image/png" } });
-      }),
-    );
-    const result = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
-    expect(result.mimeType).toBe("image/png");
-    expect(result.bytes?.length).toBe(png.length);
-  });
-  it("fails safely when the provider url cannot be loaded", async () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (String(url).includes("/images/generations")) {
-          return jsonRes({ data: [{ url: "https://cdn.example.com/tmp/missing.png" }] });
-        }
-        return new Response("gone", { status: 404 });
-      }),
-    );
-    const result = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
-    expect(result.bytes).toBeUndefined();
-    expect(result.error).toContain("could not be loaded");
-  });
-  it("rejects non-image bytes from a provider url and non-https urls", async () => {
-    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (url: string) => {
-        if (String(url).includes("/images/generations")) {
-          return jsonRes({ data: [{ url: "https://cdn.example.com/tmp/evil.html" }] });
-        }
-        return new Response("<html>nope</html>", { status: 200 });
-      }),
-    );
-    const nonImage = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
-    expect(nonImage.error).toContain("unusable");
-    vi.stubGlobal("fetch", vi.fn(async () => jsonRes({ data: [{ url: "http://insecure.example/img.png" }] })));
-    const insecure = await generateImage({ prompt: "a red rocket", size: "1024x1024" });
-    expect(insecure.error).toContain("no image");
   });
 });

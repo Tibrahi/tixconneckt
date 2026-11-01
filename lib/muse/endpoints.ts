@@ -78,17 +78,6 @@ export function voiceRealtimeEndpoint(): string | null {
   return joinApiPath(base.replace(/^https:\/\//, "wss://"), "/v1/asr/realtime");
 }
 
-/** `POST …/images/generations` (OpenAI-compatible) or null when unconfigured. */
-export function imageEndpoint(): string | null {
-  const explicit = (process.env.MUSE_IMAGE_API_URL ?? "").trim();
-  const base = explicit ? stripSlash(explicit) : sparkBase();
-  if (!base) return null;
-  // An explicitly versioned base (…/v2) takes only the operation; otherwise
-  // the documented /v1 operation path is appended (deduped when present).
-  const versioned = /\/v\d+$/i.test(base);
-  return joinApiPath(base, versioned ? "/images/generations" : "/v1/images/generations");
-}
-
 /** Documented model IDs, overridable per deployment. */
 export function sparkModel(): string {
   return process.env.MUSE_SPARK_MODEL?.trim() || "muse-spark-1.3";
@@ -96,8 +85,4 @@ export function sparkModel(): string {
 
 export function voiceModel(): string {
   return process.env.MUSE_VOICE_MODEL?.trim() || "muse-voice-transcribe-1.0";
-}
-
-export function imageModel(): string {
-  return process.env.MUSE_IMAGE_MODEL?.trim() || "muse-image-1.0";
 }
