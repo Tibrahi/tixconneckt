@@ -1,11 +1,12 @@
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { Icon } from "./Icon";
 
-type Variant = "primary" | "secondary" | "danger" | "ghost";
+type Variant = "primary" | "auth" | "secondary" | "danger" | "ghost";
 type Size = "sm" | "md" | "lg";
 
 const VARIANTS: Record<Variant, string> = {
   primary: "bg-brand-600 text-white shadow-sm hover:bg-brand-700 focus-visible:outline-brand-600 border border-brand-600",
+  auth: "border border-[#1447e6] bg-[#1447e6] text-white shadow-sm hover:brightness-95 focus-visible:outline-[#1447e6]",
   secondary:
     "bg-white text-black border border-neutral-300 hover:border-black focus-visible:outline-brand-600",
   danger: "bg-white text-blue-700 border border-blue-300 hover:border-blue-700 focus-visible:outline-blue-700",

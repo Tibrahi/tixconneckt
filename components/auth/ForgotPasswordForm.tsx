@@ -66,7 +66,7 @@ export function ForgotPasswordForm({ onToken }: { onToken: (token: string) => vo
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Button type="submit" loading={sending} className="w-full">
+        <Button variant="auth" type="submit" loading={sending} className="w-full">
           Send verification code
         </Button>
       </form>

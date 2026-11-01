@@ -143,7 +143,7 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
     <main className="flex min-h-screen flex-col bg-neutral-50 lg:flex-row">
       {/* Carousel comes first on small screens and occupies the left region on desktop. */}
       <div
-        className="flex flex-1 flex-col justify-center bg-brand-950 px-6 py-10 text-white sm:px-10 lg:min-h-screen lg:py-0"
+        className="flex flex-1 flex-col justify-center bg-[#1447e6] px-6 py-10 text-white sm:px-10 lg:min-h-screen lg:py-0"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)}
@@ -164,7 +164,7 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
                 <Icon name={slide.icon} />
               </p>
               <h2 className="mt-4 text-2xl font-bold tracking-tight">{slide.title}</h2>
-              <p className="mt-2 text-sm leading-relaxed text-brand-100">{slide.text}</p>
+              <p className="mt-2 text-sm leading-relaxed text-white/85">{slide.text}</p>
             </div>
             <div className="mt-6 flex items-center gap-3">
               <button
@@ -200,7 +200,7 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
               </button>
             </div>
           </section>
-          <p className="mt-10 text-xs text-brand-100">
+          <p className="mt-10 text-xs text-white/85">
             Protected by server-side authorization. Read the{" "}
             <Link href={ROUTES.legalPrivacy} className="underline hover:text-white">Privacy Policy</Link>,{" "}
             <Link href={ROUTES.legalTerms} className="underline hover:text-white">Terms</Link>, and{" "}

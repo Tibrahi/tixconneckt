@@ -54,6 +54,26 @@ export async function GET(req: Request) {
     .orderBy(desc(providerLinks.createdAt))
     .limit(50);
 
+  const incomingLinks = session.user.role === "provider"
+    ? await db
+        .select({
+          id: providerLinks.id,
+          status: providerLinks.status,
+          providerId: providerLinks.providerId,
+          individualId: providerLinks.individualId,
+          groupId: providerLinks.groupId,
+          createdAt: providerLinks.createdAt,
+          individualName: users.name,
+          groupName: groups.name,
+        })
+        .from(providerLinks)
+        .leftJoin(users, eq(users.id, providerLinks.individualId))
+        .leftJoin(groups, eq(groups.id, providerLinks.groupId))
+        .where(and(eq(providerLinks.providerId, session.user.id), eq(providerLinks.status, "pending")))
+        .orderBy(desc(providerLinks.createdAt))
+        .limit(50)
+    : [];
+
   const myMemberships = await db
     .select({ groupId: groupMembers.groupId, role: groupMembers.role })
     .from(groupMembers)
@@ -118,6 +138,7 @@ export async function GET(req: Request) {
   return apiOk({
     providers: [...providers, ...linkedProviders],
     myLinks: mine,
+    incomingLinks,
     groupLinks,
     approvals,
     myGroupIds,

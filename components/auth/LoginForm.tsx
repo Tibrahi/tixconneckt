@@ -81,15 +81,15 @@ export function LoginForm() {
           {...form.register("password")}
           error={form.formState.errors.password?.message}
         />
-        <Button type="submit" loading={form.formState.isSubmitting} className="w-full">
+        <Button variant="auth" type="submit" loading={form.formState.isSubmitting} className="w-full">
           Continue
         </Button>
       </form>
       <div className="mt-4 flex items-center justify-between text-sm">
-        <Link href={ROUTES.forgotPassword} className="font-medium text-brand-700 hover:underline">
+        <Link href={ROUTES.forgotPassword} className="font-medium text-[#1447e6] hover:underline">
           Forgot password?
         </Link>
-        <Link href={ROUTES.register} className="font-medium text-brand-700 hover:underline">
+        <Link href={ROUTES.register} className="font-medium text-[#1447e6] hover:underline">
           Create account
         </Link>
       </div>

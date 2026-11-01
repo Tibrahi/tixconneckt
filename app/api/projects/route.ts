@@ -9,6 +9,7 @@ import {
   validateFieldValue,
 } from "@/lib/flexible-records";
 import { getSession } from "@/lib/session";
+import { requireCapability } from "@/lib/roles";
 import { projectSubmitSchema } from "@/lib/validation";
 
 /** Project feed with backend-enforced visibility (never leak private projects). */
@@ -72,6 +73,8 @@ export async function GET(req: Request) {
 
 /** Submit an idea. Private visibility requires Super access (backend-enforced). */
 export async function POST(req: Request) {
+  const access = await requireCapability("project.create");
+  if (access.response) return access.response;
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   let body: unknown;

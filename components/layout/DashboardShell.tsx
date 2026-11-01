@@ -77,13 +77,11 @@ export function DashboardShell({
   isAdmin,
   accountRole,
   category,
-  providerKind,
 }: {
   children: ReactNode;
   isAdmin: boolean;
   accountRole: string;
   category: string;
-  providerKind: string | null;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -162,7 +160,7 @@ export function DashboardShell({
   // Navigation reflects the work each account is assigned. The APIs remain
   // responsible for their resource ownership and permission checks.
   const roleNav = isAdmin ? DASHBOARD_NAV : accountRole === "provider"
-    ? DASHBOARD_NAV.filter((item) => [ROUTES.dashboard, ROUTES.profile, ROUTES.chat, ROUTES.projects, ROUTES.requests, ROUTES.notifications, ROUTES.plans, ROUTES.settings].includes(item.href as never) && !(providerKind === "loan" && item.href === ROUTES.wallet))
+    ? DASHBOARD_NAV.filter((item) => [ROUTES.dashboard, ROUTES.profile, ROUTES.chat, ROUTES.requests, ROUTES.organizations, ROUTES.notifications, ROUTES.plans, ROUTES.settings].includes(item.href as never))
     : category === "university" || category === "government"
       ? DASHBOARD_NAV.filter((item) => ![ROUTES.wallet, ROUTES.plans].includes(item.href as never))
       : DASHBOARD_NAV;

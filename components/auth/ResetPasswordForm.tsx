@@ -65,7 +65,7 @@ export function ResetPasswordForm({ token, onDone }: { token: string; onDone: ()
           value={confirm}
           onChange={(e) => setConfirm(e.target.value)}
         />
-        <Button type="submit" loading={saving} className="w-full">
+        <Button variant="auth" type="submit" loading={saving} className="w-full">
           Change password
         </Button>
       </form>

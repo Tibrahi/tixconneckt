@@ -14,7 +14,7 @@ async function AuthenticatedDashboard({ children }: { children: React.ReactNode 
   return (
     <AblyProvider>
       <CallProvider>
-        <DashboardShell isAdmin={user.role === "admin"} accountRole={user.role} category={user.category} providerKind={user.providerKind}>{children}</DashboardShell>
+        <DashboardShell isAdmin={user.role === "admin"} accountRole={user.role} category={user.category}>{children}</DashboardShell>
       </CallProvider>
     </AblyProvider>
   );

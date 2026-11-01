@@ -12,6 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { SelectField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
+import { apiFetch } from "@/lib/api-client";
+import { useToast } from "@/components/ui/Toast";
 
 interface RequestRow {
   id: string;
@@ -25,9 +27,12 @@ interface RequestRow {
   providerName?: string;
 }
 
-export function RequestsPage() {
+export function RequestsPage({ accountRole = "user" }: { accountRole?: string }) {
+  const isProvider = accountRole === "provider";
   const router = useRouter();
+  const { success } = useToast();
   const [data, setData] = useState<{ outgoing: RequestRow[]; incoming: RequestRow[] } | null>(null);
+  const [providerLinks, setProviderLinks] = useState<Array<{ id: string; status: string; individualId: string | null; groupId: string | null; createdAt: string; individualName: string | null; groupName: string | null }> | null>(null);
   const [failed, setFailed] = useState(false);
   const [open, setOpen] = useState(false);
   const [projects, setProjects] = useState<Array<{ id: string; title: string }>>([]);
@@ -48,13 +53,33 @@ export function RequestsPage() {
 
   useEffect(() => {
     load();
+    if (isProvider) {
+      apiFetch<{ incomingLinks: NonNullable<typeof providerLinks> }>("/api/providers?pageSize=50")
+        .then((body) => setProviderLinks(body.incomingLinks ?? []))
+        .catch(() => setProviderLinks([]));
+      return;
+    }
     fetch("/api/projects?mine=1", { cache: "no-store" })
       .then((r) => r.json())
       .then((b: { ok: boolean; data?: { items: Array<{ id: string; title: string }> } }) => {
         if (b.ok && b.data) setProjects(b.data.items);
       })
       .catch(() => {});
-  }, [load]);
+  }, [load, isProvider]);
+
+  async function decideProviderLink(linkId: string, decision: "approved" | "rejected") {
+    try {
+      await apiFetch("/api/providers", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ linkId, decision }),
+      });
+      setProviderLinks((current) => (current ?? []).filter((link) => link.id !== linkId));
+      success(decision === "approved" ? "Provider connection accepted." : "Provider connection declined.");
+    } catch {
+      setFailed(true);
+    }
+  }
 
   if (failed) {
     return (
@@ -98,33 +123,57 @@ export function RequestsPage() {
   return (
     <>
       <PageHeader
-        title="Request"
-        description="Formal funding requests with staged provider visibility and versioned agreements."
-        actions={
+        title={isProvider ? "Provider workspace" : "Request"}
+        description={isProvider
+          ? "Review project funding requests assigned to your account, prepare responses and agreements, and decide provider connection requests."
+          : "Create and follow funding requests for projects you own or manage."}
+        actions={isProvider ? undefined : (
           <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
             New request
           </Button>
-        }
+        )}
       />
       <Card title="">
         <Tabs
           tabs={[
-            {
+            ...(!isProvider ? [{
               id: "outgoing",
               label: `My requests (${data.outgoing.length})`,
               icon: "file-lines",
               content: list(data.outgoing, "No requests", "Submit a request for one of your projects."),
-            },
+            }] : []),
             {
               id: "incoming",
-              label: `Incoming (${data.incoming.length})`,
+              label: `${isProvider ? "Assigned" : "Incoming"} (${data.incoming.length})`,
               icon: "file-signature",
-              content: list(data.incoming, "Nothing assigned", "Providers see funding requests directed at them here."),
+              content: list(data.incoming, "Nothing assigned", "Requests directed to your provider account will appear here."),
             },
           ]}
         />
       </Card>
-      {open ? (
+      {isProvider ? (
+        <Card title={`Connection requests${providerLinks ? ` (${providerLinks.length})` : ""}`} className="mt-4">
+          {providerLinks === null ? <SkeletonList rows={2} /> : providerLinks.length === 0 ? (
+            <EmptyState icon="user-plus" title="No pending connections" message="Requests to connect with your provider account will appear here." />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {providerLinks.map((link) => (
+                <li key={link.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-200 p-3">
+                  <div>
+                  <p className="font-medium">{link.groupName ?? link.individualName ?? (link.groupId ? "Organization / group connection" : "Individual connection")}</p>
+                    <p className="text-xs text-neutral-600">Received {new Date(link.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button size="sm" variant="secondary" onClick={() => decideProviderLink(link.id, "rejected")}>Decline</Button>
+                    <Button size="sm" onClick={() => decideProviderLink(link.id, "approved")}>Accept</Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
+      ) : null}
+      {!isProvider && open ? (
         <Modal title="New funding request" onClose={() => setOpen(false)}>
           <div className="flex flex-col gap-3">
             <p className="text-sm text-neutral-600">

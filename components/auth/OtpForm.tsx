@@ -147,19 +147,19 @@ export function OtpForm({
                   if (event.key === "ArrowLeft" && index > 0) inputRefs.current[index - 1]?.focus();
                   if (event.key === "ArrowRight" && index < 5) inputRefs.current[index + 1]?.focus();
                 }}
-                className="h-10 w-10 shrink-0 rounded-md border border-neutral-300 text-center font-mono text-lg focus:border-brand-600 focus:outline-none focus:ring-2 focus:ring-brand-200 sm:h-11 sm:w-11 sm:text-xl"
+                className="h-10 w-10 shrink-0 rounded-md border border-neutral-300 text-center font-mono text-lg focus:border-[#1447e6] focus:outline-none focus:ring-2 focus:ring-[#1447e6]/20 sm:h-11 sm:w-11 sm:text-xl"
               />
             ))}
           </div>
-          {fieldError ? <p className="mt-1 text-sm text-blue-700" role="alert">{fieldError}</p> : null}
+          {fieldError ? <p className="mt-1 text-sm text-[#1447e6]" role="alert">{fieldError}</p> : null}
         </fieldset>
-        <Button type="submit" loading={submitting} className="w-full">
+        <Button variant="auth" type="submit" loading={submitting} className="w-full">
           {submitLabel}
         </Button>
       </form>
       <div className="mt-4 flex items-center justify-between text-sm">
         {onBack ? (
-          <button type="button" onClick={onBack} className="font-medium text-brand-700 hover:underline">
+          <button type="button" onClick={onBack} className="font-medium text-[#1447e6] hover:underline">
             Back
           </button>
         ) : (
@@ -169,7 +169,7 @@ export function OtpForm({
           type="button"
           onClick={resend}
           disabled={resending || cooldown > 0}
-          className="font-medium text-brand-700 hover:underline disabled:opacity-60"
+          className="font-medium text-[#1447e6] hover:underline disabled:opacity-60"
         >
           {resending ? "Sending…" : cooldown > 0 ? `Resend in ${cooldown}s` : "Resend code"}
         </button>

@@ -44,7 +44,7 @@ function VerifyEmailInner() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
               />
-              <Button type="submit" className="w-full">
+              <Button variant="auth" type="submit" className="w-full">
                 Continue
               </Button>
             </form>

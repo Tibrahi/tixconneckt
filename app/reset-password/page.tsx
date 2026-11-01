@@ -20,7 +20,7 @@ function ResetInner() {
             <p className="mb-4 mt-1 text-sm text-neutral-600">
               Your password was changed and other sessions were signed out.
             </p>
-            <Link href={ROUTES.login} className="font-medium text-brand-700 hover:underline">
+            <Link href={ROUTES.login} className="font-medium text-[#1447e6] hover:underline">
               Sign in with your new password
             </Link>
           </section>
@@ -32,7 +32,7 @@ function ResetInner() {
             <p className="mb-4 mt-1 text-sm text-neutral-600">
               Start recovery again to receive a fresh verification code.
             </p>
-            <Link href={ROUTES.forgotPassword} className="font-medium text-brand-700 hover:underline">
+            <Link href={ROUTES.forgotPassword} className="font-medium text-[#1447e6] hover:underline">
               Go to password recovery
             </Link>
           </section>

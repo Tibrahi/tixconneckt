@@ -91,12 +91,13 @@ describe("capability gates", () => {
     expect(can(unset, "provider.support.respond")).toBe(true);
   });
 
-  it("admits active accounts to resource-gated capabilities at the role gate", () => {
+  it("limits project and funding-request creation to requester accounts", () => {
     for (const capability of ["project.create", "request.create", "call.transcript.manage", "payment.bind"] as Capability[]) {
       expect(can(member, capability)).toBe(true);
       expect(can(education, capability)).toBe(true);
-      expect(can(loan, capability)).toBe(true);
     }
+    expect(can(loan, "project.create")).toBe(false);
+    expect(can(loan, "request.create")).toBe(false);
   });
 
   it("denies unknown capabilities", () => {
@@ -112,6 +113,7 @@ describe("actorMatrix", () => {
     expect(loan).toMatchObject({ admin: true, providerLoan: true, providerSupport: false, providerUnset: true, member: false });
     const reconcile = matrix.find((row) => row.capability === "storage.reconcile.read");
     expect(reconcile).toMatchObject({ admin: true, member: false, providerUnset: false });
+    expect(matrix.find((row) => row.capability === "project.create")).toMatchObject({ admin: true, providerLoan: false, providerSupport: false, education: true, member: true });
     for (const row of matrix) expect(row.note.trim()).not.toBe("");
   });
 });

@@ -4,6 +4,7 @@ import { fundingRequests, groupMembers, projects, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { notify } from "@/lib/notify";
 import { getSession } from "@/lib/session";
+import { requireCapability } from "@/lib/roles";
 import { fundingRequestDocumentsSchema, fundingRequestSchema } from "@/lib/validation";
 
 /** My outgoing requests + incoming requests where I am the provider. */
@@ -71,6 +72,8 @@ export async function GET() {
  * group requests require group admin rights (internal approval happens first).
  */
 export async function POST(req: Request) {
+  const access = await requireCapability("request.create");
+  if (access.response) return access.response;
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   let body: unknown;

@@ -12,7 +12,7 @@ async function AuthenticatedAdmin({ children }: { children: React.ReactNode }) {
   const user = await requireAdmin();
   return (
     <AblyProvider>
-      <DashboardShell isAdmin accountRole={user.role} category={user.category} providerKind={user.providerKind}>{children}</DashboardShell>
+      <DashboardShell isAdmin accountRole={user.role} category={user.category}>{children}</DashboardShell>
     </AblyProvider>
   );
 }

@@ -184,7 +184,7 @@ export function DashboardHome() {
       {isProvider ? (
         <div className="mb-3">
           <Card
-            title={providerKind === "support" ? "Support queue" : providerKind === "loan" ? "Funding queue" : "Provider queue"}
+            title="Provider review queue"
             actions={
               <Link href={ROUTES.requests} className="text-sm font-medium text-brand-700 hover:underline">
                 Review requests
@@ -334,7 +334,7 @@ export function DashboardHome() {
           )}
         </Card>
 
-        <Card
+        {!isProvider ? <Card
           title={isProvider ? "Requests and project activity" : isEducation ? "Institution project activity" : "Projects & funding"}
           actions={
             <Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">
@@ -363,9 +363,9 @@ export function DashboardHome() {
               ))}
             </ul>
           )}
-        </Card>
+        </Card> : null}
 
-        <div id="dash-actions" className="lg:col-span-2">
+        {!isProvider ? <div id="dash-actions" className="lg:col-span-2">
           <Card
             title="Upcoming scheduled actions"
             actions={
@@ -392,7 +392,7 @@ export function DashboardHome() {
               </ul>
             )}
           </Card>
-        </div>
+        </div> : null}
       </div>
     </>
   );

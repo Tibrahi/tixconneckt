@@ -69,6 +69,7 @@ export function LegalModal({
           Close
         </Button>
         <Button
+          variant="auth"
           onClick={() => {
             onAccept();
             onClose();

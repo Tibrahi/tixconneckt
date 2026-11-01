@@ -113,7 +113,7 @@ export function RegisterForm() {
   }
 
   const checkboxClass =
-    "h-4 w-4 rounded border-neutral-300 accent-blue-700";
+    "h-4 w-4 rounded border-neutral-300 accent-[#1447e6]";
 
   return (
     <section className="rounded-lg border border-neutral-200/90 bg-white p-6 shadow-card" aria-label="Create account">
@@ -210,7 +210,7 @@ export function RegisterForm() {
                 <button
                   type="button"
                   onClick={() => setModal(item.doc)}
-                  className="font-medium text-brand-700 hover:underline"
+                  className="font-medium text-[#1447e6] hover:underline"
                 >
                   {item.label}
                 </button>
@@ -221,19 +221,19 @@ export function RegisterForm() {
           {form.formState.errors.acceptPrivacy ||
           form.formState.errors.acceptTerms ||
           form.formState.errors.acceptAgreement ? (
-            <p role="alert" className="text-xs font-medium text-blue-700">
+            <p role="alert" className="text-xs font-medium text-[#1447e6]">
               Reading and accepting all three documents is required.
             </p>
           ) : null}
         </fieldset>
 
-        <Button type="submit" loading={form.formState.isSubmitting} className="w-full">
+        <Button variant="auth" type="submit" loading={form.formState.isSubmitting} className="w-full">
           Create account
         </Button>
       </form>
       <p className="mt-4 text-center text-sm text-neutral-600">
         Already have an account?{" "}
-        <Link href={ROUTES.login} className="font-medium text-brand-700 hover:underline">
+        <Link href={ROUTES.login} className="font-medium text-[#1447e6] hover:underline">
           Sign in
         </Link>
       </p>

@@ -15,9 +15,9 @@ import { getSession } from "./session";
  * - Category (`users.category`): individual | university | government |
  *   provider. University/government carry NO distinct authorization today;
  *   they share member access plus organization workflows.
- * - Provider kind (`users.providerKind`): loan | support | null. Display and
- *   queue emphasis only — no route enforces kind-scoped decisions today, and
- *   this matrix preserves that access (see below).
+ * - Provider kind (`users.providerKind`): loan | support | null. It determines
+ *   the provider's queue and response workflow; it does not change which
+ *   requester-owned projects they may access.
  *
  * Migration rule (§C3): existing users keep their current access. New
  * capabilities deny by default; any future kind- or category-scoped
@@ -107,7 +107,8 @@ export function isEducationActor(actor: Pick<Actor, "authRole" | "category">): b
  * Role gate for a capability. Denies by default: unknown capabilities,
  * inactive accounts, and unlisted actors all return false. Admin bypasses
  * every capability. Provider loan/support capabilities admit providers
- * whose kind is unset (preserving current access) or matches.
+ * whose kind is unset or matches. Providers review assigned requests and do
+ * not originate requester projects or funding requests.
  */
 const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
   "admin.access",
@@ -148,13 +149,14 @@ export function can(actor: Actor, capability: Capability): boolean {
     case "group.manage":
     case "group.wallet.act":
     case "project.create":
-    case "project.edit":
     case "request.create":
+      return actor.authRole === "user";
+    case "project.edit":
     case "request.decide":
     case "call.transcript.manage":
     case "payment.bind":
       // Membership/ownership/participant checks live in the owning route;
-      // the role gate admits any active non-admin account.
+      // any active signed-in role may still access their scoped resources.
       return true;
     default:
       return false;
@@ -218,9 +220,9 @@ export function actorMatrix(): MatrixRow[] {
     "org.manage": "Own organization or admin",
     "group.manage": "Group owner/admin or admin",
     "group.wallet.act": "Per approval rules",
-    "project.create": "Any active account",
+    "project.create": "Active member or institution; providers respond to assigned requests",
     "project.edit": "Owner/editor or admin",
-    "request.create": "Project owner / group admin",
+    "request.create": "Member or institution who owns the project / group",
     "request.decide": "Requester side or admin",
     "call.transcript.manage": "Call participants only",
     "wallet.review": "Independent reviewer (admin)",
