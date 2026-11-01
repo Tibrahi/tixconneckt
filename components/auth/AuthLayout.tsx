@@ -118,8 +118,8 @@ function usePrefersReducedMotion(): boolean {
 /**
  * Two-region auth layout (role-aware §E2): an informational carousel region
  * on the left and the requested form on the right. On small screens the
- * layout collapses to a single column with the form first so it stays
- * immediately usable. Auto-advance pauses on hover/focus and is disabled
+ * carousel comes first, followed by the form. Auto-advance pauses on hover/focus
+ * and is disabled
  * for reduced-motion users; controls are keyboard and screen-reader ready.
  */
 export function AuthLayout({ variant, children }: { variant: AuthVariant; children: ReactNode }) {
@@ -140,16 +140,10 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
   const slide = slides[index];
 
   return (
-    <main className="flex min-h-screen flex-col bg-brand-50 lg:flex-row">
-      {/* Form region first in DOM so keyboard and screen-reader users reach it
-          immediately; visually right on desktop, top on small screens. */}
-      <div className="order-1 flex flex-1 items-center justify-center px-4 py-10 lg:order-2">
-        <div className="w-full max-w-md">{children}</div>
-      </div>
-
-      {/* Informational region: left on desktop, below the form on small screens. */}
+    <main className="flex min-h-screen flex-col bg-neutral-50 lg:flex-row">
+      {/* Carousel comes first on small screens and occupies the left region on desktop. */}
       <div
-        className="order-2 flex flex-1 flex-col justify-center bg-brand-950 px-6 py-10 text-white sm:px-10 lg:order-1 lg:min-h-screen lg:py-0"
+        className="flex flex-1 flex-col justify-center bg-brand-950 px-6 py-10 text-white sm:px-10 lg:min-h-screen lg:py-0"
         onMouseEnter={() => setPaused(true)}
         onMouseLeave={() => setPaused(false)}
         onFocus={() => setPaused(true)}
@@ -213,6 +207,11 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
             <Link href={ROUTES.legalAgreement} className="underline hover:text-white">Agreement</Link>.
           </p>
         </div>
+      </div>
+
+      {/* The form follows the carousel on mobile and sits in the right region on desktop. */}
+      <div className="flex flex-1 items-center justify-center px-4 py-10">
+        <div className="w-full max-w-md">{children}</div>
       </div>
     </main>
   );
