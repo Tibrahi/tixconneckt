@@ -23,11 +23,12 @@ interface ProjectItem {
   updatedAt: string;
 }
 
-export function ProjectsPage({ accountCategory = "individual" }: { accountCategory?: string }) {
+export function ProjectsPage({ accountRole = "user", accountCategory = "individual" }: { accountRole?: string; accountCategory?: string }) {
+  const isProvider = accountRole === "provider";
   const isUniversity = accountCategory === "university";
   const isGovernment = accountCategory === "government";
-  const pageTitle = isUniversity ? "Campus projects" : isGovernment ? "Public programs" : "Project";
-  const itemLabel = isGovernment ? "program" : "project";
+  const pageTitle = isProvider ? "Provider projects" : isUniversity ? "Campus projects" : isGovernment ? "Public programs" : "Project";
+  const itemLabel = isGovernment ? "program" : isProvider ? "provider project" : "project";
   const router = useRouter();
   const [items, setItems] = useState<ProjectItem[] | null>(null);
   const [total, setTotal] = useState(0);
@@ -99,6 +100,8 @@ export function ProjectsPage({ accountCategory = "individual" }: { accountCatego
           ? "Create and coordinate campus or research projects with structured documents, collaborators, and funding requests."
           : isGovernment
             ? "Coordinate public initiatives through project workspaces, shared documents, partners, and funding requests."
+            : isProvider
+              ? "Create and coordinate project workspaces for your organization and collaborators. Provider accounts respond to funding and support requests through the assigned request workflow."
             : "Submit ideas, gather contributions, and develop them with structured analysis."}
         actions={
           <>
@@ -106,7 +109,7 @@ export function ProjectsPage({ accountCategory = "individual" }: { accountCatego
               {mineOnly ? "My projects" : "All visible"}
             </Button>
             <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
-              {isGovernment ? "New program" : isUniversity ? "New campus project" : "New project"}
+              {isGovernment ? "New program" : isUniversity ? "New campus project" : isProvider ? "New provider project" : "New project"}
             </Button>
           </>
         }
@@ -114,7 +117,7 @@ export function ProjectsPage({ accountCategory = "individual" }: { accountCatego
       {items.length === 0 ? (
         <EmptyState
           icon="lightbulb"
-          title={isUniversity ? "No campus projects yet" : isGovernment ? "No public programs yet" : "No ideas yet"}
+          title={isUniversity ? "No campus projects yet" : isGovernment ? "No public programs yet" : isProvider ? "No provider projects yet" : "No ideas yet"}
           message={`Create a ${itemLabel} workspace to coordinate contributors, documents, and related funding requests.`}
           action={
             <Button size="sm" onClick={() => setOpen(true)}>
@@ -150,9 +153,11 @@ export function ProjectsPage({ accountCategory = "individual" }: { accountCatego
       )}
       {open ? (
         <ProjectCreateDialog
+          accountRole={accountRole}
+          accountCategory={accountCategory}
           onClose={() => setOpen(false)}
           onDone={(projectId) => {
-            success("Project created successfully.");
+            success(`${isGovernment ? "Program" : isUniversity ? "Campus project" : isProvider ? "Provider project" : "Project"} created successfully.`);
             router.push(ROUTES.projectById(projectId));
           }}
         />

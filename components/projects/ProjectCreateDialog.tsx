@@ -22,7 +22,19 @@ interface Collaborator {
  * Guided project creation (Project.md §2): ownership questions, invites,
  * a permission preview, and an explicit confirmation.
  */
-export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; onDone: (projectId: string) => void }) {
+export function ProjectCreateDialog({ onClose, onDone, accountRole = "user", accountCategory = "individual" }: {
+  onClose: () => void;
+  onDone: (projectId: string) => void;
+  accountRole?: string;
+  accountCategory?: string;
+}) {
+  const projectLabel = accountRole === "provider"
+    ? "provider project"
+    : accountCategory === "government"
+      ? "public program"
+      : accountCategory === "university"
+        ? "campus or research project"
+        : "project";
   const [step, setStep] = useState<"details" | "ownership" | "preview">("details");
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
@@ -82,11 +94,11 @@ export function ProjectCreateDialog({ onClose, onDone }: { onClose: () => void; 
   }
 
   return (
-    <Modal title="Create a project" onClose={onClose} wide>
+    <Modal title={`Create a ${projectLabel}`} onClose={onClose} wide>
       {step === "details" ? (
         <div className="flex flex-col gap-3">
-          <TextField label="What is the project name?" value={title} onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Digital Agriculture Platform" />
-          <TextAreaField label="Describe it (20+ characters)" value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="What problem does it solve, and for whom?" />
+          <TextField label={`What is the ${projectLabel} name?`} value={title} onChange={(e) => setTitle(e.target.value)} placeholder={accountRole === "provider" ? "e.g. Community lending program" : accountCategory === "government" ? "e.g. District water access program" : accountCategory === "university" ? "e.g. Applied research lab" : "e.g. Digital Agriculture Platform"} />
+          <TextAreaField label={`Describe the ${projectLabel} (20+ characters)`} value={summary} onChange={(e) => setSummary(e.target.value)} placeholder="What need does it address, who is involved, and what work will happen?" />
           <TextAreaField label="Extra details (optional)" value={details} onChange={(e) => setDetails(e.target.value)} />
           <section className="rounded-md border border-neutral-200 p-3" aria-label="Project custom fields">
             <h2 className="text-sm font-semibold">Additional project details</h2>

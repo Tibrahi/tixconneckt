@@ -91,12 +91,14 @@ describe("capability gates", () => {
     expect(can(unset, "provider.support.respond")).toBe(true);
   });
 
-  it("limits project and funding-request creation to requester accounts", () => {
-    for (const capability of ["project.create", "request.create", "call.transcript.manage", "payment.bind"] as Capability[]) {
+  it("allows providers to create project workspaces but keeps funding requests requester-only", () => {
+    for (const capability of ["request.create", "call.transcript.manage", "payment.bind"] as Capability[]) {
       expect(can(member, capability)).toBe(true);
       expect(can(education, capability)).toBe(true);
     }
-    expect(can(loan, "project.create")).toBe(false);
+    expect(can(member, "project.create")).toBe(true);
+    expect(can(education, "project.create")).toBe(true);
+    expect(can(loan, "project.create")).toBe(true);
     expect(can(loan, "request.create")).toBe(false);
   });
 
@@ -113,7 +115,7 @@ describe("actorMatrix", () => {
     expect(loan).toMatchObject({ admin: true, providerLoan: true, providerSupport: false, providerUnset: true, member: false });
     const reconcile = matrix.find((row) => row.capability === "storage.reconcile.read");
     expect(reconcile).toMatchObject({ admin: true, member: false, providerUnset: false });
-    expect(matrix.find((row) => row.capability === "project.create")).toMatchObject({ admin: true, providerLoan: false, providerSupport: false, education: true, member: true });
+    expect(matrix.find((row) => row.capability === "project.create")).toMatchObject({ admin: true, providerLoan: true, providerSupport: true, education: true, member: true });
     for (const row of matrix) expect(row.note.trim()).not.toBe("");
   });
 });

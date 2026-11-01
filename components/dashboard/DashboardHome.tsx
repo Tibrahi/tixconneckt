@@ -68,60 +68,126 @@ function StatCard({ label, value, href, icon }: { label: string; value: number; 
   );
 }
 
-function EducationDashboard({ summary, category, refreshing }: {
+function ProjectList({ summary, title, emptyTitle, emptyMessage }: {
   summary: Summary;
-  category: "university" | "government";
-  refreshing: boolean;
+  title: string;
+  emptyTitle: string;
+  emptyMessage: string;
 }) {
-  const university = category === "university";
-  const projectsHeading = university ? "Campus project portfolio" : "Public program portfolio";
+  return (
+    <Card title={title} actions={<Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">Open portfolio</Link>}>
+      {summary.recentProjects.length === 0 ? (
+        <EmptyState icon="diagram-project" title={emptyTitle} message={emptyMessage} action={<Link href={ROUTES.projects} className="font-medium text-brand-700 hover:underline">Create a workspace</Link>} />
+      ) : (
+        <ul className="flex flex-col gap-2">{summary.recentProjects.map((project) => <li key={project.id}><Link href={ROUTES.projectById(project.id)} className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 p-3 hover:border-brand-300"><span className="truncate text-sm font-medium">{project.title}</span><Badge>{project.stage}</Badge></Link></li>)}</ul>
+      )}
+    </Card>
+  );
+}
+
+function UniversityDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader
-        title={university ? "University workspace" : "Government coordination workspace"}
-        description={university
-          ? "Coordinate institutional projects, research groups, funding requests, and external partnerships."
-          : "Coordinate public initiatives, funding requests, partner organizations, and inter-agency groups."}
-        actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>}
-      />
-      <div className="grid gap-3 md:grid-cols-3">
-        <Link href={ROUTES.projects} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{university ? "Research & campus" : "Public initiatives"}</p>
-          <h2 className="mt-2 text-lg font-semibold">{projectsHeading}</h2>
-          <p className="mt-1 text-sm text-neutral-600">Review project workspaces, stages, and shared contributions.</p>
-          <span className="mt-4 inline-block text-sm font-medium text-brand-700">Open projects →</span>
-        </Link>
-        <Link href={ROUTES.groups} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">{university ? "Academic collaboration" : "Inter-agency coordination"}</p>
-          <h2 className="mt-2 text-lg font-semibold">{university ? "Research groups" : "Coordination groups"}</h2>
-          <p className="mt-1 text-sm text-neutral-600">{summary.groupCount} active group{summary.groupCount === 1 ? "" : "s"} · {summary.pendingApprovals} pending group approval{summary.pendingApprovals === 1 ? "" : "s"}</p>
-          <span className="mt-4 inline-block text-sm font-medium text-brand-700">Manage groups →</span>
-        </Link>
-        <Link href={ROUTES.requests} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
-          <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Funding workflow</p>
-          <h2 className="mt-2 text-lg font-semibold">{summary.openFunding} open request{summary.openFunding === 1 ? "" : "s"}</h2>
-          <p className="mt-1 text-sm text-neutral-600">Track funding requests attached to projects you own or manage.</p>
-          <span className="mt-4 inline-block text-sm font-medium text-brand-700">Review requests →</span>
-        </Link>
-      </div>
-      <div className={`mt-5 grid items-start gap-5 ${university ? "lg:grid-cols-[1.5fr_1fr]" : "lg:grid-cols-[1fr_1.5fr]"}`}>
-        <Card title={projectsHeading} actions={<Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">View all</Link>}>
-          {summary.recentProjects.length === 0 ? (
-            <EmptyState icon="diagram-project" title={university ? "No campus projects yet" : "No public initiatives yet"} message="Projects created by your account or its groups will appear here." action={<Link href={ROUTES.projects} className="font-medium text-brand-700 hover:underline">Create a project</Link>} />
-          ) : (
-            <ul className="flex flex-col gap-2">{summary.recentProjects.map((project) => <li key={project.id}><Link href={ROUTES.projectById(project.id)} className="flex items-center justify-between gap-2 rounded-md border border-neutral-200 p-3 hover:border-brand-300"><span className="truncate text-sm font-medium">{project.title}</span><Badge>{project.stage}</Badge></Link></li>)}</ul>
-          )}
-        </Card>
+      <PageHeader title="University research workspace" description="Develop campus and research projects, organize academic teams, and coordinate external support from the project record." actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>} />
+      <div className="grid gap-5 xl:grid-cols-[1.6fr_0.9fr]">
+        <ProjectList summary={summary} title="Research and campus portfolio" emptyTitle="Start a campus project" emptyMessage="Create a research or campus workspace, then invite contributors and organize its documents." />
         <div className="flex flex-col gap-5">
-          <Card title={university ? "Institution identity" : "Agency identity"} actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage profile</Link>}>
-            <p className="text-sm text-neutral-600">Maintain the organization profile, visibility, and verification materials associated with your account.</p>
+          <Card title="Academic teams" actions={<Link href={ROUTES.groups} className="text-sm font-medium text-brand-700 hover:underline">Open research groups</Link>}>
+            <p className="text-3xl font-semibold tabular-nums">{summary.groupCount}</p>
+            <p className="mt-1 text-sm text-neutral-600">Active groups connected to your account.</p>
+            <p className="mt-3 text-sm font-medium">{summary.pendingApprovals} group approval{summary.pendingApprovals === 1 ? "" : "s"} awaiting action</p>
           </Card>
-          <Card title={university ? "Partnership workspace" : "Partner coordination"} actions={<Link href={ROUTES.conneckt} className="text-sm font-medium text-brand-700 hover:underline">Open partners</Link>}>
-            <p className="text-sm text-neutral-600">Coordinate provider and member connections, then continue approved conversations in chat.</p>
-            <Link href={ROUTES.chat} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Open collaboration chat</Link>
+          <Card title="Research support" actions={<Link href={ROUTES.requests} className="text-sm font-medium text-brand-700 hover:underline">Review requests</Link>}>
+            <p className="text-sm text-neutral-600">{summary.openFunding} open funding request{summary.openFunding === 1 ? "" : "s"} attached to projects you own. Prepare new requests from the relevant project workspace.</p>
+            <Link href={ROUTES.projects} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Choose a research project →</Link>
+          </Card>
+          <Card title="Institution profile" actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage profile</Link>}>
+            <p className="text-sm text-neutral-600">Maintain your institution’s public presence and verification materials for prospective collaborators.</p>
           </Card>
         </div>
       </div>
+      <Card title="Academic collaboration" className="mt-5">
+        <p className="text-sm text-neutral-600">Find partners for a research initiative, manage approved connections, and continue the work in shared conversations.</p>
+        <div className="mt-3 flex flex-wrap gap-3"><Link href={ROUTES.conneckt} className="text-sm font-medium text-brand-700 hover:underline">Find research partners →</Link><Link href={ROUTES.chat} className="text-sm font-medium text-brand-700 hover:underline">Continue collaboration →</Link></div>
+      </Card>
+    </>
+  );
+}
+
+function GovernmentDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
+  return (
+    <>
+      <PageHeader title="Government program workspace" description="Coordinate public initiatives across agency teams, manage program funding requests, and keep partner decisions connected to each project." actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>} />
+      <section aria-label="Program coordination actions" className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Public program portfolio</p>
+          <h2 className="mt-3 max-w-xl text-2xl font-semibold">Keep initiatives, teams, and support in one accountable workflow.</h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-100">Open a program workspace to coordinate collaborators, documents, and requests with the people assigned to the work.</p>
+          <Link href={ROUTES.projects} className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 hover:bg-brand-50">Open public programs</Link>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
+          <Link href={ROUTES.groups} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Inter-agency coordination</p>
+            <h2 className="mt-2 text-2xl font-semibold tabular-nums">{summary.groupCount}</h2>
+            <p className="text-sm text-neutral-600">Active coordination groups · {summary.pendingApprovals} approvals pending</p>
+            <span className="mt-3 inline-block text-sm font-medium text-brand-700">Manage group participation →</span>
+          </Link>
+          <Link href={ROUTES.requests} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Program funding</p>
+            <h2 className="mt-2 text-2xl font-semibold tabular-nums">{summary.openFunding}</h2>
+            <p className="text-sm text-neutral-600">Open requests from programs you own</p>
+            <span className="mt-3 inline-block text-sm font-medium text-brand-700">Review program requests →</span>
+          </Link>
+        </div>
+      </section>
+      <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.2fr_0.8fr]">
+        <ProjectList summary={summary} title="Active public initiatives" emptyTitle="No programs in your portfolio" emptyMessage="Create a public program workspace to bring its scope, collaborators, and support requests together." />
+        <div className="flex flex-col gap-5">
+          <Card title="Agency identity" actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage agency profile</Link>}>
+            <p className="text-sm text-neutral-600">Keep the agency profile and verification materials current for people and organizations working with your programs.</p>
+          </Card>
+          <Card title="External coordination" actions={<Link href={ROUTES.conneckt} className="text-sm font-medium text-brand-700 hover:underline">Open partner network</Link>}>
+            <p className="text-sm text-neutral-600">Review partner connections and continue approved program conversations in chat.</p>
+            <Link href={ROUTES.chat} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Open partner communications →</Link>
+          </Card>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function ProviderDashboard({ summary, providerKind, refreshing }: { summary: Summary; providerKind: string | null; refreshing: boolean }) {
+  const focus = providerKind === "loan" ? "funding requests" : providerKind === "support" ? "support requests" : "assigned requests";
+  return (
+    <>
+      <PageHeader title={providerKind === "loan" ? "Funding provider workspace" : providerKind === "support" ? "Support provider workspace" : "Provider workspace"} description={`Review ${focus}, respond to eligible projects, and manage the provider connections assigned to your account.`} actions={<span className="flex items-center gap-3">{refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}<TourButton /></span>} />
+      <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
+        <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Assigned work queue</p>
+          <h2 className="mt-3 text-3xl font-semibold tabular-nums">{summary.providerQueue ?? 0}</h2>
+          <p className="mt-2 max-w-lg text-sm leading-6 text-brand-100">{focus} and provider connection requests assigned to your account are managed in the review workspace.</p>
+          <Link href={ROUTES.requests} className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 hover:bg-brand-50">Review assigned work</Link>
+        </div>
+        <div className="flex flex-col gap-5">
+          <Card title="Provider organization" actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage profile</Link>}>
+            <p className="text-sm text-neutral-600">Maintain the provider profile and organization details requesters use to understand your service.</p>
+          </Card>
+          <Card title="Response conversations" actions={<Link href={ROUTES.chat} className="text-sm font-medium text-brand-700 hover:underline">Open provider chat</Link>}>
+            {summary.recentMessages.length === 0 ? <p className="text-sm text-neutral-600">Messages for approved provider connections appear here.</p> : <ul className="flex flex-col gap-2">{summary.recentMessages.slice(0, 3).map((message) => <li key={message.id}><Link href={ROUTES.chatThread(message.conversationId)} className="block rounded-md border border-neutral-200 p-3 hover:border-brand-300"><span className="block text-sm font-medium">{message.senderName}</span><span className="block truncate text-sm text-neutral-600">{message.preview}</span></Link></li>)}</ul>}
+          </Card>
+        </div>
+      </div>
+      <Card title="Provider-owned project work" className="mt-5" actions={<Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">Open projects</Link>}>
+        <p className="text-sm text-neutral-600">Create project workspaces for your organization and collaborators. Funding and support responses remain in the assigned-request workflow.</p>
+        <Link href={ROUTES.projects} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Create or manage a provider project →</Link>
+      </Card>
+      <Card title="How provider work proceeds" className="mt-5">
+        <ol className="grid gap-4 md:grid-cols-3">
+          <li><span className="font-mono text-xs font-semibold text-brand-700">01 · RECEIVE</span><p className="mt-1 text-sm text-neutral-600">Open requests and connection invitations assigned to your provider account.</p></li>
+          <li><span className="font-mono text-xs font-semibold text-brand-700">02 · RESPOND</span><p className="mt-1 text-sm text-neutral-600">Prepare a response and agreement in the project-linked request workspace.</p></li>
+          <li><span className="font-mono text-xs font-semibold text-brand-700">03 · FOLLOW THROUGH</span><p className="mt-1 text-sm text-neutral-600">Keep communications and recorded decisions with the request they belong to.</p></li>
+        </ol>
+      </Card>
     </>
   );
 }
@@ -215,8 +281,14 @@ export function DashboardHome() {
         ? "Organization"
         : "Member";
 
-  if (isEducation && (actorCategory === "university" || actorCategory === "government")) {
-    return <EducationDashboard summary={summary} category={actorCategory} refreshing={refreshing} />;
+  if (isProvider) {
+    return <ProviderDashboard summary={summary} providerKind={providerKind} refreshing={refreshing} />;
+  }
+  if (actorRole === "user" && actorCategory === "university") {
+    return <UniversityDashboard summary={summary} refreshing={refreshing} />;
+  }
+  if (actorRole === "user" && actorCategory === "government") {
+    return <GovernmentDashboard summary={summary} refreshing={refreshing} />;
   }
 
   return (
@@ -243,44 +315,7 @@ export function DashboardHome() {
         }
       />
 
-      {isProvider ? (
-        <div className="mb-3">
-          <Card
-            title="Provider review queue"
-            actions={
-              <Link href={ROUTES.requests} className="text-sm font-medium text-brand-700 hover:underline">
-                Review requests
-              </Link>
-            }
-          >
-            <p className="text-sm text-neutral-600">
-              <span className="font-mono text-lg font-semibold text-black">{summary.providerQueue ?? 0}</span>{" "}
-              request{(summary.providerQueue ?? 0) === 1 ? "" : "s"} waiting for your response. Responses you
-              author stay separate from requester-owned project documents.
-            </p>
-          </Card>
-        </div>
-      ) : null}
-
-      {isEducation ? (
-        <div className="mb-3">
-          <Card
-            title="Organization workspace"
-            actions={
-              <Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">
-                Open organizations
-              </Link>
-            }
-          >
-            <p className="text-sm text-neutral-600">
-              Discover projects and collaborate through your institution profile. Funding controls appear only
-              for provider accounts.
-            </p>
-          </Card>
-        </div>
-      ) : null}
-
-      {!isProvider ? <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Unread messages" value={summary.unreadChat} href={ROUTES.chat} icon="message" />
         <StatCard
           label="Pending requests"
@@ -300,10 +335,10 @@ export function DashboardHome() {
           href={ROUTES.notifications}
           icon="bell"
         />
-      </div> : null}
+      </div>
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">
-        {!isProvider ? <Card
+        <Card
           title={isEducation ? "Institution profile" : "Profile"}
           actions={
             <Link href={ROUTES.profile} className="text-sm font-medium text-brand-700 hover:underline">
@@ -334,9 +369,9 @@ export function DashboardHome() {
                 : `Member of ${summary.groupCount} group${summary.groupCount === 1 ? "" : "s"}: ${summary.groups.map((g) => g.name).join(", ")}`}
             </p>
           </div>
-        </Card> : null}
+        </Card>
 
-        {!isProvider && !isEducation ? <Card
+        <Card
           title="Wallet"
           actions={
             <Link href={ROUTES.wallet} className="text-sm font-medium text-brand-700 hover:underline">
@@ -367,10 +402,10 @@ export function DashboardHome() {
               ))}
             </ul>
           )}
-        </Card> : null}
+        </Card>
 
         <Card
-          title={isProvider ? "Provider conversations" : "Recent messages"}
+          title="Recent messages"
           actions={
             <Link href={ROUTES.chat} className="text-sm font-medium text-brand-700 hover:underline">
               Open chat
@@ -396,8 +431,8 @@ export function DashboardHome() {
           )}
         </Card>
 
-        {!isProvider ? <Card
-          title={isProvider ? "Requests and project activity" : isEducation ? "Institution project activity" : "Projects & funding"}
+        <Card
+          title="Projects & funding"
           actions={
             <Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">
               Open projects
@@ -425,9 +460,9 @@ export function DashboardHome() {
               ))}
             </ul>
           )}
-        </Card> : null}
+        </Card>
 
-        {!isProvider ? <div id="dash-actions" className="lg:col-span-2">
+        <div id="dash-actions" className="lg:col-span-2">
           <Card
             title="Upcoming scheduled actions"
             actions={
@@ -454,7 +489,7 @@ export function DashboardHome() {
               </ul>
             )}
           </Card>
-        </div> : null}
+        </div>
       </div>
     </>
   );

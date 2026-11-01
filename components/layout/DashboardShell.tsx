@@ -170,7 +170,7 @@ export function DashboardShell({
     .filter((item): item is NavItem => Boolean(item))
     .map((item) => ({ ...item, label: institutionLabels[item.href] ?? item.label }));
   const roleNav = isAdmin ? DASHBOARD_NAV : accountRole === "provider"
-    ? DASHBOARD_NAV.filter((item) => [ROUTES.dashboard, ROUTES.profile, ROUTES.chat, ROUTES.requests, ROUTES.organizations, ROUTES.notifications, ROUTES.plans, ROUTES.settings].includes(item.href as never))
+    ? DASHBOARD_NAV.filter((item) => [ROUTES.dashboard, ROUTES.profile, ROUTES.chat, ROUTES.requests, ROUTES.projects, ROUTES.organizations, ROUTES.notifications, ROUTES.plans, ROUTES.settings].includes(item.href as never))
     : category === "university" || category === "government"
       ? educationNav
       : DASHBOARD_NAV;

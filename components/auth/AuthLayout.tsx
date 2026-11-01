@@ -211,7 +211,7 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
 
       {/* The form follows the carousel on mobile and sits in the right region on desktop. */}
       <div className="flex flex-1 items-center justify-center px-4 py-10">
-        <div className="w-full max-w-md">{children}</div>
+        <div className="auth-form w-full max-w-md">{children}</div>
       </div>
     </main>
   );

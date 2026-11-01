@@ -48,6 +48,14 @@
   }
 }
 
+/* Keep shared form controls on auth screens aligned with the requested brand blue. */
+.auth-form :is(input, select, textarea):focus {
+  border-color: #1447e6;
+}
+.auth-form :focus-visible {
+  outline-color: #1447e6;
+}
+
 /* Document playground (Tiptap) canvas + read-only preview. */
 .tiptap-canvas {
   min-height: 320px;

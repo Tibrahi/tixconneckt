@@ -107,8 +107,9 @@ export function isEducationActor(actor: Pick<Actor, "authRole" | "category">): b
  * Role gate for a capability. Denies by default: unknown capabilities,
  * inactive accounts, and unlisted actors all return false. Admin bypasses
  * every capability. Provider loan/support capabilities admit providers
- * whose kind is unset or matches. Providers review assigned requests and do
- * not originate requester projects or funding requests.
+ * whose kind is unset or matches. Providers may create project workspaces,
+ * but funding requests remain requester-only and provider responses stay
+ * scoped to requests assigned to the provider.
  */
 const KNOWN_CAPABILITIES: ReadonlySet<string> = new Set([
   "admin.access",
@@ -148,9 +149,10 @@ export function can(actor: Actor, capability: Capability): boolean {
     case "org.manage":
     case "group.manage":
     case "group.wallet.act":
-    case "project.create":
     case "request.create":
       return actor.authRole === "user";
+    case "project.create":
+      return actor.authRole === "user" || actor.authRole === "provider";
     case "project.edit":
     case "request.decide":
     case "call.transcript.manage":
@@ -220,7 +222,7 @@ export function actorMatrix(): MatrixRow[] {
     "org.manage": "Own organization or admin",
     "group.manage": "Group owner/admin or admin",
     "group.wallet.act": "Per approval rules",
-    "project.create": "Active member or institution; providers respond to assigned requests",
+    "project.create": "Active member, institution, or provider; funding requests remain requester-only",
     "project.edit": "Owner/editor or admin",
     "request.create": "Member or institution who owns the project / group",
     "request.decide": "Requester side or admin",
