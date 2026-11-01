@@ -23,6 +23,7 @@ interface ViewableProfile {
   strengths: string[];
   fields: string[];
   bio: string | null;
+  githubUrl: string | null;
   email: string | null;
   phone: string | null;
   groupCount: number;
@@ -137,6 +138,23 @@ export function UserProfilePage({ shortId }: { shortId: string }) {
             <div><dt className="text-neutral-600">Education</dt><dd>{profile.educationLevel ?? "—"}</dd></div>
             <div><dt className="text-neutral-600">Major</dt><dd>{profile.major ?? "—"}</dd></div>
             <div><dt className="text-neutral-600">Location</dt><dd>{profile.location ?? profile.country ?? "—"}</dd></div>
+            <div>
+              <dt className="text-neutral-600">GitHub</dt>
+              <dd>
+                {profile.githubUrl ? (
+                  <a
+                    href={profile.githubUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium text-brand-700 hover:underline"
+                  >
+                    {profile.githubUrl.replace(/^https:\/\/github\.com\//, "").replace(/\/$/, "")} ↗
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </dd>
+            </div>
             <div><dt className="text-neutral-600">Email</dt><dd className="font-mono">{profile.email ?? "Hidden by owner"}</dd></div>
             <div><dt className="text-neutral-600">Phone</dt><dd className="font-mono">{profile.phone ?? "Hidden by owner"}</dd></div>
           </dl>

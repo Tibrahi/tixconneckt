@@ -71,6 +71,27 @@
       "when": 1793566800000,
       "tag": "0010_storage_postgres_fallback",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1793630400000,
+      "tag": "0011_call_transcripts",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1793630500000,
+      "tag": "0012_github_url",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1793630600000,
+      "tag": "0013_payment_methods",
+      "breakpoints": true
     }
   ]
 }

@@ -4,18 +4,12 @@ import { getDb } from "@/db";
 import { fundingRequests, groups, projects, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
-import { getSession } from "@/lib/session";
-
-async function requireAdminSession() {
-  const session = await getSession();
-  if (!session || session.user.role !== "admin") return null;
-  return session;
-}
+import { requireCapability } from "@/lib/roles";
 
 /** Moderation queues: groups, projects, and funding requests. */
 export async function GET(req: Request) {
-  const session = await requireAdminSession();
-  if (!session) return apiError("Administrators only.", 403);
+  const { actor, response } = await requireCapability("admin.access");
+  if (!actor) return response;
   const url = new URL(req.url);
   const queue = url.searchParams.get("queue") ?? "projects";
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
@@ -89,8 +83,8 @@ const moderateSchema = z.object({
 
 /** Archive a project, or close a funding request. Recorded in the audit log. */
 export async function PATCH(req: Request) {
-  const session = await requireAdminSession();
-  if (!session) return apiError("Administrators only.", 403);
+  const { actor, response } = await requireCapability("admin.access");
+  if (!actor) return response;
   let body: unknown;
   try {
     body = await req.json();
@@ -115,7 +109,7 @@ export async function PATCH(req: Request) {
   }
 
   await audit({
-    actorId: session.user.id,
+    actorId: actor.userId,
     action: "admin.moderate",
     targetType: parsed.data.queue,
     targetId: parsed.data.id,

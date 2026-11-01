@@ -29,6 +29,7 @@ export interface OwnProfile {
   fields: string[];
   bio: string | null;
   location: string | null;
+  githubUrl: string | null;
   contactVisibility: string;
   financialVisibility: string;
   profileVisibility: string;
@@ -107,6 +108,7 @@ export async function getOwnProfile(userId: string): Promise<OwnProfile | null> 
     fields: profile?.fields ?? [],
     bio: profile?.bio ?? null,
     location: profile?.location ?? null,
+    githubUrl: profile?.githubUrl ?? null,
     contactVisibility: profile?.contactVisibility ?? "connections",
     financialVisibility: profile?.financialVisibility ?? "private",
     profileVisibility: profile?.profileVisibility ?? "public",
@@ -136,6 +138,7 @@ export interface ViewableProfile {
   strengths: string[];
   fields: string[];
   bio: string | null;
+  githubUrl: string | null;
   email: string | null;
   phone: string | null;
   groupCount: number;
@@ -225,6 +228,7 @@ export async function getViewableProfile(
     strengths: canSeeDetails ? profile?.strengths ?? [] : [],
     fields: canSeeDetails ? profile?.fields ?? [] : [],
     bio: canSeeDetails ? profile?.bio ?? null : null,
+    githubUrl: canSeeDetails ? profile?.githubUrl ?? null : null,
     email: canSeeContact ? user.email : null,
     phone: canSeeContact ? user.phone : null,
     groupCount: canSeeDetails ? groupCount?.n ?? 0 : 0,

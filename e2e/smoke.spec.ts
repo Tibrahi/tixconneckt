@@ -7,7 +7,7 @@ import { expect, test } from "@playwright/test";
 
 test("entry point shows the landing page to visitors", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Find collaborators, build digital projects, and fund them together." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Turn skills and ideas into work that moves forward." })).toBeVisible();
   await expect(page.getByRole("link", { name: /create your account/i }).first()).toBeVisible();
 });
 
@@ -24,7 +24,7 @@ test("landing buttons lead to sign in and registration", async ({ page }) => {
 test("legacy /welcome redirects to the landing page", async ({ page }) => {
   await page.goto("/welcome");
   await expect(page).toHaveURL(/\/$/);
-  await expect(page.getByRole("heading", { name: "Find collaborators, build digital projects, and fund them together." })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Turn skills and ideas into work that moves forward." })).toBeVisible();
 });
 
 test("registration shows legal gates", async ({ page }) => {

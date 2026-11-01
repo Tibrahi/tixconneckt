@@ -69,6 +69,9 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
         phone: users.phone,
         country: users.country,
         shortId: users.shortId,
+        role: users.role,
+        category: users.category,
+        providerKind: users.providerKind,
         educationLevel: profiles.educationLevel,
         objectives: profiles.objectives,
         major: profiles.major,
@@ -111,9 +114,14 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       (SELECT COUNT(*)::int FROM "funding_requests"
         WHERE "status" IN ('pending', 'under_review')
           AND "project_id" IN (SELECT "id" FROM "projects" WHERE "owner_id" = ${userId})
-      ) AS "funding"
+      ) AS "funding",
+      (SELECT COUNT(*)::int FROM "funding_requests"
+        WHERE "status" IN ('pending', 'under_review') AND "provider_id" = ${userId}
+      ) + (SELECT COUNT(*)::int FROM "provider_links"
+        WHERE "status" = 'pending' AND "provider_id" = ${userId}
+      ) AS "providerQueue"
   `));
-  const tally = (tallyRows.rows[0] ?? {}) as Partial<{ matching: number; approvals: number; funding: number }>;
+  const tally = (tallyRows.rows[0] ?? {}) as Partial<{ matching: number; approvals: number; funding: number; providerQueue: number }>;
   const myGroups = await withDbRead(() =>
     db
       .select({ groupId: groupMembers.groupId, role: groupMembers.role, name: groups.name })
@@ -217,6 +225,13 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
   return {
     profileCompletion,
     shortId: identity?.shortId ?? "",
+    // Role context for the role-aware overview (matrix in lib/roles.ts).
+    actor: {
+      role: identity?.role ?? "user",
+      category: identity?.category ?? "individual",
+      providerKind: identity?.providerKind ?? null,
+    },
+    providerQueue: tally?.providerQueue ?? 0,
     unreadChat: counts.chat,
     unreadNotifications: counts.notifications,
     pendingConnections: counts.conneckt,

@@ -45,6 +45,9 @@ export async function PATCH(req: Request, { params }: RouteContext) {
       status: outcome.status,
       answeredAt: outcome.status === "accepted" ? now : call.answeredAt,
       endedAt: outcome.status === "accepted" ? null : now,
+      ...(outcome.status === "failed"
+        ? { failureReason: parsed.data.reason?.slice(0, 200) || "Call connection failed." }
+        : {}),
     })
     .where(eq(calls.id, id));
 
@@ -72,14 +75,18 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     });
   }
 
-  // Call activity in the conversation history (terminal states only).
-  if (outcome.status === "missed" || outcome.status === "declined" || outcome.status === "ended") {
+  // Deliberate, documented export: a typed system marker (kind "system",
+  // never an ordinary message) links the conversation to the call record.
+  // The authoritative history lives in the separate calls API + Calls tab.
+  if (outcome.status === "missed" || outcome.status === "declined" || outcome.status === "ended" || outcome.status === "failed") {
     const label =
       outcome.status === "missed"
         ? `Missed ${call.kind} call from ${callerName}`
         : outcome.status === "declined"
           ? `${callerName}'s ${call.kind} call was declined`
-          : `${call.kind === "video" ? "Video" : "Audio"} call ended`;
+          : outcome.status === "failed"
+            ? `${call.kind === "video" ? "Video" : "Audio"} call failed to connect`
+            : `${call.kind === "video" ? "Video" : "Audio"} call ended`;
     await postSystemMessage(call.conversationId, label, {
       event: `call_${outcome.status}`,
       callId: call.id,

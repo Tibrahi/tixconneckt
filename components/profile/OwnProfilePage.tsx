@@ -30,6 +30,7 @@ interface OwnProfile {
   fields: string[];
   bio: string | null;
   location: string | null;
+  githubUrl: string | null;
   contactVisibility: string;
   financialVisibility: string;
   profileVisibility: string;
@@ -85,6 +86,7 @@ export function OwnProfilePage() {
         fields: body.data.fields.join(", "),
         bio: body.data.bio ?? "",
         location: body.data.location ?? "",
+        githubUrl: body.data.githubUrl ?? "",
         contactVisibility: body.data.contactVisibility,
         financialVisibility: body.data.financialVisibility,
         profileVisibility: body.data.profileVisibility,
@@ -122,6 +124,7 @@ export function OwnProfilePage() {
           fields: splitList(draft.fields ?? ""),
           bio: draft.bio ?? "",
           location: draft.location ?? "",
+          githubUrl: draft.githubUrl ?? "",
           contactVisibility: draft.contactVisibility || undefined,
           financialVisibility: draft.financialVisibility || undefined,
           profileVisibility: draft.profileVisibility || undefined,
@@ -335,6 +338,13 @@ export function OwnProfilePage() {
               <TextField label="Strengths (comma separated)" value={draft.strengths ?? ""} onChange={(e) => setDraft({ ...draft, strengths: e.target.value })} />
               <TextField label="Fields / sectors (comma separated)" value={draft.fields ?? ""} onChange={(e) => setDraft({ ...draft, fields: e.target.value })} />
               <TextAreaField label="Bio" value={draft.bio ?? ""} onChange={(e) => setDraft({ ...draft, bio: e.target.value })} />
+              <TextField
+                label="GitHub profile URL (optional)"
+                value={draft.githubUrl ?? ""}
+                onChange={(e) => setDraft({ ...draft, githubUrl: e.target.value.trim() })}
+                placeholder="https://github.com/username"
+                hint="Shown on your profile as a link. We never fetch GitHub data."
+              />
             </div>
           ) : (
             <dl className="grid gap-3 text-sm sm:grid-cols-2">
@@ -360,6 +370,23 @@ export function OwnProfilePage() {
                 </dd>
               </div>
               <div className="sm:col-span-2"><dt className="text-neutral-600">Bio</dt><dd>{profile.bio ?? "—"}</dd></div>
+              <div>
+                <dt className="text-neutral-600">GitHub</dt>
+                <dd>
+                  {profile.githubUrl ? (
+                    <a
+                      href={profile.githubUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-medium text-brand-700 hover:underline"
+                    >
+                      {profile.githubUrl.replace(/^https:\/\/github\.com\//, "").replace(/\/$/, "")} ↗
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </dd>
+              </div>
             </dl>
           )}
         </Card>

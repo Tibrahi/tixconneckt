@@ -4,18 +4,12 @@ import { getDb } from "@/db";
 import { securityEvents, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
-import { getSession } from "@/lib/session";
-
-async function requireAdminSession() {
-  const session = await getSession();
-  if (!session || session.user.role !== "admin") return null;
-  return session;
-}
+import { requireCapability } from "@/lib/roles";
 
 /** Paginated user directory (no passwords, no message content). */
 export async function GET(req: Request) {
-  const session = await requireAdminSession();
-  if (!session) return apiError("Administrators only.", 403);
+  const { actor, response } = await requireCapability("admin.users.manage");
+  if (!actor) return response;
   const url = new URL(req.url);
   const search = url.searchParams.get("search")?.trim() ?? "";
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
@@ -59,8 +53,8 @@ const updateSchema = z.object({
 
 /** Change a user's role or status. Every change is audit-recorded. */
 export async function PATCH(req: Request) {
-  const session = await requireAdminSession();
-  if (!session) return apiError("Administrators only.", 403);
+  const { actor, response } = await requireCapability("admin.users.manage");
+  if (!actor) return response;
   let body: unknown;
   try {
     body = await req.json();
@@ -69,7 +63,7 @@ export async function PATCH(req: Request) {
   }
   const parsed = updateSchema.safeParse(body);
   if (!parsed.success) return apiError("Invalid update.", 400);
-  if (parsed.data.userId === session.user.id) {
+  if (parsed.data.userId === actor.userId) {
     return apiError("You cannot change your own role or status.", 400);
   }
 
@@ -86,7 +80,7 @@ export async function PATCH(req: Request) {
     .where(eq(users.id, user.id));
 
   await audit({
-    actorId: session.user.id,
+    actorId: actor.userId,
     action: "admin.user.update",
     targetType: "user",
     targetId: user.id,

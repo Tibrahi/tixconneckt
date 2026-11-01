@@ -1,12 +1,16 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
+  callHides,
+  callTranscriptConsents,
+  callTranscripts,
   calls,
   conversationMembers,
   conversations,
   users,
 } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import { callDurationMs, transcriptionActive } from "@/lib/call-transcript";
 import { notify } from "@/lib/notify";
 import { rateLimit } from "@/lib/rate-limit";
 import { emitToRoom } from "@/lib/realtime";
@@ -114,12 +118,19 @@ export async function POST(req: Request) {
 }
 
 /** Recent calls for a conversation I belong to (missed-call history). */
+/**
+ * Call history for one conversation, separate from messages. Includes
+ * missed, declined, failed, and ended calls with outcome, duration, and
+ * transcript state. Ended calls the viewer hid are excluded unless
+ * `showHidden=1` — missed/declined/failed calls are never hidden.
+ */
 export async function GET(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const url = new URL(req.url);
   const conversationId = url.searchParams.get("conversationId");
   if (!conversationId) return apiError("conversationId is required.", 400);
+  const showHidden = url.searchParams.get("showHidden") === "1";
 
   const db = getDb();
   const membership = await db
@@ -147,6 +158,7 @@ export async function GET(req: Request) {
       createdAt: calls.createdAt,
       answeredAt: calls.answeredAt,
       endedAt: calls.endedAt,
+      failureReason: calls.failureReason,
     })
     .from(calls)
     .innerJoin(users, eq(users.id, calls.callerId))
@@ -159,5 +171,46 @@ export async function GET(req: Request) {
     .orderBy(desc(calls.createdAt))
     .limit(20);
 
-  return apiOk({ calls: rows });
+  const ids = rows.map((r) => r.id);
+  const [hides, segmentCounts, consents] = ids.length === 0
+    ? [[], [], []] as const
+    : await Promise.all([
+      db
+        .select({ callId: callHides.callId })
+        .from(callHides)
+        .where(and(inArray(callHides.callId, ids), eq(callHides.userId, session.user.id))),
+      db
+        .select({ callId: callTranscripts.callId, n: count() })
+        .from(callTranscripts)
+        .where(inArray(callTranscripts.callId, ids))
+        .groupBy(callTranscripts.callId),
+      db
+        .select({
+          callId: callTranscriptConsents.callId,
+          userId: callTranscriptConsents.userId,
+          consented: callTranscriptConsents.consented,
+        })
+        .from(callTranscriptConsents)
+        .where(inArray(callTranscriptConsents.callId, ids)),
+    ]);
+  const hiddenIds = new Set(hides.map((h) => h.callId));
+  const segmentsByCall = new Map(segmentCounts.map((s) => [s.callId, s.n]));
+  const consentsByCall = new Map<string, Array<{ userId: string; consented: boolean }>>();
+  for (const c of consents) {
+    const list = consentsByCall.get(c.callId) ?? [];
+    list.push({ userId: c.userId, consented: c.consented });
+    consentsByCall.set(c.callId, list);
+  }
+
+  const history = rows
+    .filter((row) => showHidden || !hiddenIds.has(row.id))
+    .map((row) => ({
+      ...row,
+      durationMs: callDurationMs(row.answeredAt, row.endedAt),
+      transcriptSegments: segmentsByCall.get(row.id) ?? 0,
+      transcriptActive: transcriptionActive(consentsByCall.get(row.id) ?? [], [row.callerId, row.calleeId]),
+      hidden: hiddenIds.has(row.id),
+    }));
+
+  return apiOk({ calls: history });
 }

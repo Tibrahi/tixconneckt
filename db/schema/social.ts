@@ -22,6 +22,8 @@ export const profiles = pgTable("profiles", {
   fields: jsonb("fields").$type<string[]>().notNull().default([]),
   bio: text("bio"),
   location: text("location"),
+  /** Optional user-provided GitHub profile URL (validated, never scraped). */
+  githubUrl: text("github_url"),
   /** public | connections | private */
   contactVisibility: text("contact_visibility").notNull().default("connections"),
   financialVisibility: text("financial_visibility").notNull().default("private"),

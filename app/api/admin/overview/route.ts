@@ -9,22 +9,13 @@ import {
   scheduledActions,
   users,
 } from "@/db/schema";
-import { apiError, apiOk } from "@/lib/api-response";
-import { getSession } from "@/lib/session";
-
-async function requireAdminSession() {
-  const session = await getSession();
-  if (!session) return { error: apiError("Sign in required.", 401), session: null };
-  if (session.user.role !== "admin") {
-    return { error: apiError("Administrators only.", 403), session: null };
-  }
-  return { error: null as null, session };
-}
+import { apiOk } from "@/lib/api-response";
+import { requireCapability } from "@/lib/roles";
 
 /** Platform overview counts + recent sensitive events. */
 export async function GET() {
-  const { error } = await requireAdminSession();
-  if (error) return error;
+  const { actor, response } = await requireCapability("admin.access");
+  if (!actor) return response;
   const db = getDb();
 
   const [userCount] = await db.select({ n: count() }).from(users);

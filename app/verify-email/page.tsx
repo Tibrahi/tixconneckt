@@ -5,6 +5,7 @@ import { Suspense, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Fields";
+import { AuthLayout } from "@/components/auth/AuthLayout";
 import { OtpForm } from "@/components/auth/OtpForm";
 
 function VerifyEmailInner() {
@@ -14,9 +15,7 @@ function VerifyEmailInner() {
   const [started, setStarted] = useState(Boolean(params.get("email")));
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 py-10">
-      <div className="w-full max-w-md">
-        <p className="mb-6 text-center text-2xl font-bold tracking-tight text-black">TIXCONNECKT</p>
+    <AuthLayout variant="verify">
         {started && email ? (
           <OtpForm
             email={email}
@@ -51,8 +50,7 @@ function VerifyEmailInner() {
             </form>
           </section>
         )}
-      </div>
-    </main>
+    </AuthLayout>
   );
 }
 

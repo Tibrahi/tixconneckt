@@ -13,6 +13,7 @@ import { Icon } from "@/components/ui/Icon";
 import { CallButtons } from "@/components/calls/CallProvider";
 import { useAbly } from "@/components/realtime/AblyProvider";
 import { useChat, useTyping, useTypingPublisher } from "@/hooks/use-chat";
+import { CallHistory } from "./CallHistory";
 import { Composer } from "./Composer";
 import { DetailsPanel } from "./DetailsPanel";
 import { MessageBubble } from "./MessageBubble";
@@ -65,6 +66,7 @@ export function ThreadView({
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [composerSeed, setComposerSeed] = useState<{ text: string; nonce: number } | null>(null);
+  const [tab, setTab] = useState<"messages" | "calls">("messages");
 
   const { onEvent, connected, realtimeAvailable } = useAbly();
   useChat(conversationId);
@@ -644,6 +646,45 @@ export function ThreadView({
           </p>
         ) : null}
 
+        {data.conversation.type !== "group" ? (
+          <div role="tablist" aria-label="Conversation sections" className="flex gap-1 border-b border-neutral-200 bg-white px-3 sm:px-4">
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "messages"}
+              onClick={() => setTab("messages")}
+              className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${
+                tab === "messages" ? "border-brand-600 text-brand-700" : "border-transparent text-black hover:border-neutral-300"
+              }`}
+            >
+              <Icon name="message" /> Messages
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={tab === "calls"}
+              onClick={() => setTab("calls")}
+              className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${
+                tab === "calls" ? "border-brand-600 text-brand-700" : "border-transparent text-black hover:border-neutral-300"
+              }`}
+            >
+              <Icon name="phone" /> Calls
+            </button>
+          </div>
+        ) : null}
+
+        {tab === "calls" && data.conversation.type !== "group" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 px-4 py-4">
+            <CallHistory
+              conversationId={conversationId}
+              myUserId={myUserId}
+              peerName={others[0]?.name ?? title}
+              onError={onError}
+            />
+          </div>
+        ) : (
+          <>
+
         {searchOpen ? (
           <div className="flex gap-2 border-b border-neutral-200 bg-white px-4 py-2">
             <div className="flex-1">
@@ -767,6 +808,8 @@ export function ThreadView({
           onError={onError}
           seed={composerSeed}
         />
+          </>
+        )}
       </div>
 
       {detailsOpen ? (

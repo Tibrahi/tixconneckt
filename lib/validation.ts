@@ -88,6 +88,10 @@ export const profileUpdateSchema = z.object({
   fields: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   bio: z.string().trim().max(2000).optional(),
   location: z.string().trim().max(200).optional(),
+  githubUrl: z.string().trim().max(200).refine(
+    (value) => value === "" || /^https:\/\/github\.com\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/?$/.test(value),
+    "Enter a valid GitHub profile URL (https://github.com/username)",
+  ).optional(),
   contactVisibility: z.enum(["public", "connections", "private"]).optional(),
   financialVisibility: z.enum(["private", "connections"]).optional(),
   profileVisibility: z.enum(["public", "connections", "private"]).optional(),
@@ -220,10 +224,36 @@ export const callSignalSchema = z.discriminatedUnion("kind", [
 export type CallSignalInput = z.infer<typeof callSignalSchema>;
 
 export const callDecisionSchema = z.object({
-  decision: z.enum(["accepted", "declined", "ended"]),
+  decision: z.enum(["accepted", "declined", "ended", "failed"]),
+  /** Honest failure reason when marking a call failed. */
+  reason: z.string().trim().max(200).optional(),
 });
 
 export type CallDecisionInput = z.infer<typeof callDecisionSchema>;
+
+/** Per-call transcription consent toggle (either participant). */
+export const callTranscriptConsentSchema = z.object({
+  consented: z.boolean(),
+});
+
+/** One transcript segment: text only, never raw audio. */
+export const callTranscriptSegmentSchema = z.object({
+  segmentIndex: z.number().int().min(0).max(10000),
+  /** Speaker attribution, only when the diarization path is reliable. */
+  speaker: z.string().trim().max(80).optional(),
+  text: z.string().trim().min(1).max(2000),
+  final: z.boolean().default(true),
+  turnId: z.number().int().min(0).optional(),
+});
+
+export const callTranscriptSegmentsSchema = z.object({
+  segments: z.array(callTranscriptSegmentSchema).min(1).max(200),
+});
+
+/** Hide/show an ended call in personal history (missed/declined/failed stay). */
+export const callHideSchema = z.object({
+  hidden: z.boolean(),
+});
 
 export const projectSubmitSchema = z.object({
   title: z.string().trim().min(4, "Title is required").max(200),
@@ -541,6 +571,23 @@ export const paginationSchema = z.object({
 });
 
 export type PaginationInput = z.infer<typeof paginationSchema>;
+
+/**
+ * Payment-method binding. Only a type, a masked display label, and an
+ * optional provider-issued reference — raw credentials have no fields.
+ */
+export const paymentMethodBindSchema = z.object({
+  type: z.enum(["card", "mobile_money", "crypto", "bank"]),
+  displayLabel: z
+    .string()
+    .trim()
+    .min(2, "Describe the method (e.g. Visa •• 4242).")
+    .max(60)
+    .refine((v) => !/^(?:pin|cvv|cvc|password)\s*[:=]?\s*\S+/i.test(v), "Never enter PINs, CVVs, or passwords."),
+  providerRef: z.string().trim().max(120).optional(),
+});
+
+export type PaymentMethodBindInput = z.infer<typeof paymentMethodBindSchema>;
 
 /** AI profile/cover picture generation request. */
 export const aiImageGenerateSchema = z.object({

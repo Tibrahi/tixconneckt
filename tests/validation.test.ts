@@ -146,6 +146,23 @@ describe("profileUpdateSchema countryCode", () => {
   });
 });
 
+describe("profileUpdateSchema githubUrl", () => {
+  it("accepts empty and valid GitHub profile URLs", () => {
+    expect(profileUpdateSchema.safeParse({ githubUrl: "" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "https://github.com/octocat" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "https://github.com/octocat/" }).success).toBe(true);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "https://github.com/a-b-1" }).success).toBe(true);
+  });
+  it("rejects non-profile URLs and lookalikes", () => {
+    expect(profileUpdateSchema.safeParse({ githubUrl: "http://github.com/octocat" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "https://github.com/octocat/repo" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "https://github.com.evil.com/octocat" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "https://github.com/-bad" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "javascript:alert(1)" }).success).toBe(false);
+    expect(profileUpdateSchema.safeParse({ githubUrl: "octocat" }).success).toBe(false);
+  });
+});
+
 describe("normalizeProfileProposal", () => {
   it("maps aliases onto canonical fields", () => {
     expect(

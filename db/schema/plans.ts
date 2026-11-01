@@ -83,3 +83,35 @@ export const payments = pgTable(
   },
   (t) => [index("payment_subscription_idx").on(t.subscriptionId)],
 );
+
+/**
+ * Bound payment methods (role-aware §D2 readiness step). Stores ONLY a
+ * provider-issued token/reference plus non-sensitive display metadata
+ * ("Visa •• 4242"). There are deliberately no columns for card numbers,
+ * CVV, PINs, or private keys — those must never be collected or persisted.
+ * Bindings stay `pending` until a verified provider integration confirms
+ * them; a bound method is never proof of payment.
+ */
+export const paymentMethods = pgTable(
+  "payment_methods",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** card | mobile_money | crypto | bank */
+    type: text("type").notNull(),
+    /** Non-sensitive display label, e.g. "Visa •• 4242", "MTN •• 123". */
+    displayLabel: text("display_label").notNull(),
+    /** Provider-issued token/reference, never raw credentials. */
+    providerRef: text("provider_ref"),
+    /** pending | verified | failed | unavailable */
+    status: text("status").notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (t) => [index("payment_method_user_idx").on(t.userId)],
+);

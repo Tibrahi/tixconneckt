@@ -1,16 +1,14 @@
 import { count, desc } from "drizzle-orm";
 import { getDb } from "@/db";
 import { auditLogs, users } from "@/db/schema";
-import { apiError, apiOk } from "@/lib/api-response";
-import { getSession } from "@/lib/session";
+import { apiOk } from "@/lib/api-response";
+import { requireCapability } from "@/lib/roles";
 import { eq } from "drizzle-orm";
 
 /** Paginated audit log for administrator review. */
 export async function GET(req: Request) {
-  const session = await getSession();
-  if (!session || session.user.role !== "admin") {
-    return apiError("Administrators only.", 403);
-  }
+  const { actor, response } = await requireCapability("admin.access");
+  if (!actor) return response;
   const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
   const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get("pageSize") ?? 20)));

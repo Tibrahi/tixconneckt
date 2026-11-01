@@ -2,14 +2,15 @@
  * Call lifecycle state machine (pure, tested in tests/calls.test.ts).
  *
  * States: ringing → accepted → ended
- *               → declined | missed (terminal)
+ *               → declined | missed | failed (terminal)
  * The server persists every transition; realtime events carry the outcome
  * to the other party. Hangup-while-ringing from the caller is a missed
- * call; from the callee it is a decline.
+ * call; from the callee it is a decline. Either side may mark a
+ * non-terminal call failed with an honest reason (network, unreachable).
  */
 
-export type CallStatus = "ringing" | "accepted" | "declined" | "ended" | "missed";
-export type CallDecision = "accepted" | "declined" | "ended";
+export type CallStatus = "ringing" | "accepted" | "declined" | "ended" | "missed" | "failed";
+export type CallDecision = "accepted" | "declined" | "ended" | "failed";
 export type CallActor = "caller" | "callee";
 
 export type DecisionOutcome =
@@ -21,6 +22,9 @@ export function resolveCallDecision(
   decision: CallDecision,
   actor: CallActor,
 ): DecisionOutcome {
+  if (decision === "failed" && (current === "ringing" || current === "accepted")) {
+    return { status: "failed", event: "call:failed", notifyMissed: false };
+  }
   if (current === "ringing") {
     if (actor === "callee" && decision === "accepted") {
       return { status: "accepted", event: "call:accept", notifyMissed: false };

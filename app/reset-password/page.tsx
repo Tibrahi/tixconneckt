@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 import { ROUTES } from "@/lib/routes";
+import { AuthLayout } from "@/components/auth/AuthLayout";
 import { ResetPasswordForm } from "@/components/auth/ResetPasswordForm";
 
 function ResetInner() {
@@ -12,9 +13,7 @@ function ResetInner() {
   const [done, setDone] = useState(false);
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 py-10">
-      <div className="w-full max-w-md">
-        <p className="mb-6 text-center text-2xl font-bold tracking-tight text-black">TIXCONNECKT</p>
+    <AuthLayout variant="reset">
         {done ? (
           <section className="rounded-lg border border-neutral-200/90 bg-white p-6 text-center shadow-card">
             <h1 className="text-lg font-semibold text-black">Password changed</h1>
@@ -38,8 +37,7 @@ function ResetInner() {
             </Link>
           </section>
         )}
-      </div>
-    </main>
+    </AuthLayout>
   );
 }
 

@@ -7,6 +7,7 @@ import { Badge, Card, StatusBadge } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { ErrorDialog, ConfirmDialog } from "@/components/ui/Modal";
+import { PaymentMethods } from "./PaymentMethods";
 
 interface Plan {
   id: string;
@@ -179,6 +180,10 @@ export function PlansPage() {
             </ul>
           )}
         </Card>
+      </div>
+
+      <div className="mt-4">
+        <PaymentMethods onError={setError} />
       </div>
 
       {confirmPlan ? (

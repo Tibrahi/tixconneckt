@@ -5,18 +5,12 @@ import { payments, plans, subscriptions, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
 import { notify } from "@/lib/notify";
-import { getSession } from "@/lib/session";
-
-async function requireAdminSession() {
-  const session = await getSession();
-  if (!session || session.user.role !== "admin") return null;
-  return session;
-}
+import { requireCapability } from "@/lib/roles";
 
 /** Pending payments awaiting verification. */
 export async function GET(req: Request) {
-  const session = await requireAdminSession();
-  if (!session) return apiError("Administrators only.", 403);
+  const { actor, response } = await requireCapability("admin.access");
+  if (!actor) return response;
   const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
   const pageSize = 20;
@@ -59,8 +53,8 @@ const verifySchema = z.object({
  * Paid access activates ONLY through this authorized action.
  */
 export async function PATCH(req: Request) {
-  const session = await requireAdminSession();
-  if (!session) return apiError("Administrators only.", 403);
+  const { actor, response } = await requireCapability("admin.access");
+  if (!actor) return response;
   let body: unknown;
   try {
     body = await req.json();
@@ -83,7 +77,7 @@ export async function PATCH(req: Request) {
     .set({
       status: parsed.data.decision,
       providerRef: parsed.data.providerRef,
-      verifiedBy: session.user.id,
+      verifiedBy: actor.userId,
     })
     .where(eq(payments.id, payment.id));
 
@@ -117,7 +111,7 @@ export async function PATCH(req: Request) {
       resourceId: sub.id,
     });
     await audit({
-      actorId: session.user.id,
+      actorId: actor.userId,
       action: "admin.payment.verify",
       targetType: "payment",
       targetId: payment.id,

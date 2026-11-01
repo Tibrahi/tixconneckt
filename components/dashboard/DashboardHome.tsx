@@ -15,6 +15,8 @@ import { useAbly } from "@/components/realtime/AblyProvider";
 interface Summary {
   profileCompletion: number;
   shortId: string;
+  actor?: { role: string; category: string; providerKind: string | null };
+  providerQueue?: number;
   unreadChat: number;
   unreadNotifications: number;
   pendingConnections: number;
@@ -142,6 +144,19 @@ export function DashboardHome() {
     );
   }
 
+  const actorRole = summary.actor?.role ?? "user";
+  const actorCategory = summary.actor?.category ?? "individual";
+  const providerKind = summary.actor?.providerKind ?? null;
+  const isProvider = actorRole === "provider";
+  const isEducation = actorRole === "user" && (actorCategory === "university" || actorCategory === "government");
+  const roleLabel = actorRole === "admin"
+    ? "Administrator"
+    : isProvider
+      ? `Provider${providerKind ? ` (${providerKind})` : ""}`
+      : isEducation
+        ? "Organization"
+        : "Member";
+
   return (
     <>
       <PageHeader
@@ -149,8 +164,8 @@ export function DashboardHome() {
         description={
           summary.shortId ? (
             <>
-              Your identifier is <span className="font-mono font-semibold">{summary.shortId}</span>. Share
-              it so collaborators can find you.
+              Your identifier is <span className="font-mono font-semibold">{summary.shortId}</span> · signed
+              in as <span className="font-medium">{roleLabel}</span>.
             </>
           ) : undefined
         }
@@ -165,6 +180,43 @@ export function DashboardHome() {
           </>
         }
       />
+
+      {isProvider ? (
+        <div className="mb-3">
+          <Card
+            title={providerKind === "support" ? "Support queue" : providerKind === "loan" ? "Funding queue" : "Provider queue"}
+            actions={
+              <Link href={ROUTES.requests} className="text-sm font-medium text-brand-700 hover:underline">
+                Review requests
+              </Link>
+            }
+          >
+            <p className="text-sm text-neutral-600">
+              <span className="font-mono text-lg font-semibold text-black">{summary.providerQueue ?? 0}</span>{" "}
+              request{(summary.providerQueue ?? 0) === 1 ? "" : "s"} waiting for your response. Responses you
+              author stay separate from requester-owned project documents.
+            </p>
+          </Card>
+        </div>
+      ) : null}
+
+      {isEducation ? (
+        <div className="mb-3">
+          <Card
+            title="Organization workspace"
+            actions={
+              <Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">
+                Open organizations
+              </Link>
+            }
+          >
+            <p className="text-sm text-neutral-600">
+              Discover projects and collaborate through your institution profile. Funding controls appear only
+              for provider accounts.
+            </p>
+          </Card>
+        </div>
+      ) : null}
 
       <div id="dash-stats" className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Unread messages" value={summary.unreadChat} href={ROUTES.chat} icon="message" />
