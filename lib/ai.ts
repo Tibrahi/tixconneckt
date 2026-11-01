@@ -21,6 +21,8 @@ export interface SparkRequest {
   task: string;
   input: unknown;
   schemaHint?: string;
+  /** Optional provider-enforced JSON Schema for tasks with a fixed contract. */
+  outputSchema?: Record<string, unknown>;
 }
 
 export interface SparkResponse {

@@ -10,7 +10,6 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
-import { DynamicValue } from "@/components/dynamic/DynamicValue";
 import { VoiceRecorder } from "@/components/ai/VoiceRecorder";
 import { ProfilePhotos } from "@/components/profile/ProfilePhotos";
 
@@ -47,6 +46,26 @@ interface OwnProfile {
 
 function splitList(value: string): string[] {
   return value.split(",").map((s) => s.trim()).filter(Boolean);
+}
+
+const PROFILE_FIELD_LABELS: Record<string, string> = {
+  name: "Full name",
+  phone: "Phone",
+  country: "Country",
+  countryCode: "Country calling code",
+  educationLevel: "Education level",
+  objectives: "Objectives",
+  major: "Major or specialization",
+  skills: "Skills",
+  strengths: "Strengths",
+  fields: "Fields or sectors",
+  bio: "Bio",
+  location: "Location",
+  githubUrl: "GitHub profile",
+};
+
+function proposalText(value: unknown): string {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string").join(", ") : typeof value === "string" ? value : "";
 }
 
 export function OwnProfilePage() {
@@ -438,6 +457,8 @@ export function OwnProfilePage() {
               onTranscript={(transcript, meta) => {
                 setAssistText(transcript);
                 setAudioNote(meta.audioNote ?? meta.pendingReason ?? null);
+                setAssistPending(meta.pendingReason ?? null);
+                setProposal(meta.proposal ?? null);
               }}
             />
             {audioNote ? (
@@ -449,7 +470,7 @@ export function OwnProfilePage() {
               Close
             </Button>
             <Button loading={assistLoading} disabled={!assistText.trim()} onClick={runAssist}>
-              Propose values
+              {proposal ? "Re-parse transcript" : "Propose values"}
             </Button>
           </div>
           {assistPending ? (
@@ -459,16 +480,41 @@ export function OwnProfilePage() {
           ) : null}
           {proposal ? (
             <div className="mt-3 rounded-md border border-neutral-200 p-3">
-              <p className="mb-2 text-sm font-medium">Proposed values — review before applying:</p>
-              <div className="max-h-60 overflow-auto">
-                <DynamicValue doc={proposal} />
+              <p className="mb-2 text-sm font-medium">Recognized profile fields — review these values before applying:</p>
+              <div className="max-h-80 space-y-3 overflow-auto">
+                {Object.entries(proposal).filter(([key]) => key in PROFILE_FIELD_LABELS).map(([key, value]) => {
+                  const current = draft[key] || "Not set";
+                  const valueText = proposalText(value);
+                  return (
+                    <div key={key} className="rounded-md border border-neutral-200 p-3">
+                      <p className="text-sm font-semibold">{PROFILE_FIELD_LABELS[key]}</p>
+                      <p className="mt-1 text-xs text-neutral-500">Current value: {current}</p>
+                      <div className="mt-2">
+                        {key === "bio" || key === "objectives" ? (
+                          <TextAreaField
+                            label={`Proposed ${PROFILE_FIELD_LABELS[key].toLowerCase()}`}
+                            value={valueText}
+                            rows={3}
+                            onChange={(event) => setProposal((p) => p ? { ...p, [key]: event.target.value } : p)}
+                          />
+                        ) : (
+                          <TextField
+                            label={`Proposed ${PROFILE_FIELD_LABELS[key].toLowerCase()}${["skills", "strengths", "fields"].includes(key) ? " (comma separated)" : ""}`}
+                            value={valueText}
+                            onChange={(event) => setProposal((p) => p ? { ...p, [key]: ["skills", "strengths", "fields"].includes(key) ? splitList(event.target.value) : event.target.value } : p)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="mt-3 flex justify-end gap-2">
                 <Button variant="secondary" size="sm" onClick={() => setProposal(null)}>
                   Discard
                 </Button>
                 <Button size="sm" onClick={applyProposal}>
-                  Apply to form
+                  Apply fields to profile draft
                 </Button>
               </div>
             </div>

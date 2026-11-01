@@ -598,6 +598,13 @@ export const aiImageGenerateSchema = z.object({
 
 /** Profile-assistant proposal: the reviewable subset of profileUpdateSchema. */
 export const profileProposalSchema = z.object({
+  name: z.string().trim().min(2).max(120).optional(),
+  phone: z.string().trim().max(32).refine((value) => value === "" || value.length >= 4, "Phone number is too short").optional(),
+  country: z.string().trim().max(120).optional(),
+  countryCode: z.string().trim().max(6).refine(
+    (value) => value === "" || /^[a-z]{2,3}$/i.test(value) || /^\+[1-9]\d{0,4}$/.test(value),
+    "Enter an ISO country code or calling code",
+  ).optional(),
   educationLevel: z.string().trim().max(120).optional(),
   objectives: z.string().trim().max(2000).optional(),
   major: z.string().trim().max(200).optional(),
@@ -606,12 +613,20 @@ export const profileProposalSchema = z.object({
   fields: z.array(z.string().trim().min(1).max(80)).max(20).optional(),
   bio: z.string().trim().max(2000).optional(),
   location: z.string().trim().max(200).optional(),
+  githubUrl: z.string().trim().max(200).refine(
+    (value) => value === "" || /^https:\/\/github\.com\/[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\/?$/.test(value),
+    "Enter a valid GitHub profile URL",
+  ).optional(),
 });
 
 export type ProfileProposal = z.infer<typeof profileProposalSchema>;
 
 /** Canonical profile field names accepted in an AI proposal. */
 const PROFILE_PROPOSAL_FIELDS = [
+  "name",
+  "phone",
+  "country",
+  "countryCode",
   "educationLevel",
   "objectives",
   "major",
@@ -620,10 +635,15 @@ const PROFILE_PROPOSAL_FIELDS = [
   "fields",
   "bio",
   "location",
+  "githubUrl",
 ] as const;
 
 /** Explicit alias map: legacy/provider names → canonical profile field. */
 const PROFILE_PROPOSAL_ALIASES: Record<string, string[]> = {
+  name: ["fullName", "full_name", "displayName", "display_name"],
+  phone: ["mobile", "telephone", "telephoneNumber", "telephone_number"],
+  country: ["countryName", "country_name", "nation"],
+  countryCode: ["country_code", "dialCode", "dial_code", "callingCode", "calling_code"],
   educationLevel: ["education", "education_level", "qualification"],
   objectives: ["objective", "goals", "goal", "careerObjectives", "career_objectives", "ambitions"],
   major: ["degree", "program", "programme", "specialization"],
@@ -631,13 +651,26 @@ const PROFILE_PROPOSAL_ALIASES: Record<string, string[]> = {
   strengths: ["personalStrengths", "personal_strengths"],
   fields: ["sectors", "sector", "industries", "industry", "domains", "domain"],
   bio: ["biography", "summary", "about", "aboutMe", "description"],
-  location: ["city", "address", "basedIn", "based_in", "country"],
+  location: ["city", "address", "basedIn", "based_in", "place"],
+  githubUrl: ["github", "github_url", "githubProfile", "github_profile"],
 };
 
 /** Wrapper keys unwrapped when the model nests the proposal one level deep. */
 const PROFILE_PROPOSAL_WRAPPERS = ["profile", "proposal", "fields", "values", "data", "result"];
 
 const PROFILE_LIST_FIELDS = new Set(["skills", "strengths", "fields"]);
+
+/** Structured-output contract for profile interpretation. */
+export const PROFILE_PROPOSAL_OUTPUT_SCHEMA: Record<string, unknown> = {
+  type: "object",
+  additionalProperties: false,
+  properties: {
+    name: { type: "string" }, phone: { type: "string" }, country: { type: "string" }, countryCode: { type: "string" },
+    educationLevel: { type: "string" }, objectives: { type: "string" }, major: { type: "string" },
+    skills: { type: "array", items: { type: "string" } }, strengths: { type: "array", items: { type: "string" } },
+    fields: { type: "array", items: { type: "string" } }, bio: { type: "string" }, location: { type: "string" }, githubUrl: { type: "string" },
+  },
+};
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

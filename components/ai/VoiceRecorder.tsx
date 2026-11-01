@@ -19,6 +19,8 @@ export interface VoiceResultMeta {
   audioRetained?: boolean;
   audioNote?: string;
   pendingReason?: string;
+  /** A downstream parser may return field-mapped data with the transcript. */
+  proposal?: Record<string, unknown>;
 }
 
 export function VoiceRecorder({
@@ -63,6 +65,7 @@ export function VoiceRecorder({
           pending?: boolean;
           pendingReason?: string;
           transcript?: string;
+          proposal?: Record<string, unknown>;
           record?: { doc?: { transcript?: string } };
           audioRetained?: boolean;
           audioNote?: string;
@@ -81,6 +84,7 @@ export function VoiceRecorder({
             audioRetained: body.data.audioRetained,
             audioNote: body.data.audioNote,
             pendingReason: body.data.pendingReason,
+            proposal: body.data.proposal,
           });
           return;
         }
@@ -95,6 +99,7 @@ export function VoiceRecorder({
       onTranscript(transcript, {
         audioRetained: body.data.audioRetained,
         audioNote: body.data.audioNote,
+        proposal: body.data.proposal,
       });
     } catch (cause) {
       setError(

@@ -5,9 +5,8 @@ import { sparkChatEndpoint, sparkModel } from "./endpoints";
  * Muse Spark via the Meta Model API Chat Completions protocol
  * (dev.meta.ai/docs/protocols/chat-completions — OpenAI-compatible).
  *
- * Every task here produces validated JSON for JSONB persistence, so the
- * model is always asked for a single JSON object (`response_format:
- * json_object`) and the content is parsed before it leaves this module.
+ * Tasks return JSON parsed before it leaves this module. A task with a fixed
+ * contract may pass an output schema so the provider constrains its response.
  * Nothing is fabricated: transport, HTTP, and parse failures all surface
  * as errors the caller persists on the task run.
  */
@@ -23,10 +22,8 @@ const TASK_INSTRUCTIONS: Record<string, string> = {
     "Structure the idea into a reviewable project outline: goal, scope, milestones, risks, and open questions.",
   interpret_action:
     "Turn the instruction into a reviewable scheduled action with a clear title, schedule, and parameters. Refuse destructive or ambiguous actions by explaining why.",
-  profile_suggest:
-    "Propose profile field values strictly from the provided text. Only use fields the schema hint allows.",
   profile_interpret:
-    "Interpret the text into profile field values strictly from what was said. Only use fields the schema hint allows.",
+    "Map only details explicitly stated or explicitly requested for change onto the allowed profile fields. Return canonical field keys. Never infer, invent, or overwrite a field that was not mentioned. Keep country distinct from location, phone distinct from country calling code, and education distinct from major. Omit every field with no explicit value.",
   compare_versions:
     "Summarize what changed between two document versions. State assumptions explicitly and flag anything uncertain.",
   summarize_conversation:
@@ -77,6 +74,7 @@ export async function runSparkTask(request: {
   task: string;
   input: unknown;
   schemaHint?: string;
+  outputSchema?: Record<string, unknown>;
 }): Promise<SparkTaskResult> {
   const url = sparkChatEndpoint();
   const key = process.env.MUSE_SPARK_API_KEY;
@@ -105,7 +103,16 @@ export async function runSparkTask(request: {
           { role: "system", content: system },
           { role: "user", content: JSON.stringify(request.input) },
         ],
-        response_format: { type: "json_object" },
+        response_format: request.outputSchema
+          ? {
+              type: "json_schema",
+              json_schema: {
+                name: `${request.task.replace(/[^a-z0-9_-]/gi, "_")}_result`,
+                strict: false,
+                schema: request.outputSchema,
+              },
+            }
+          : { type: "json_object" },
       }),
       signal: AbortSignal.timeout(90000),
     });

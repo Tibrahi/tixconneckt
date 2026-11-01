@@ -8,6 +8,7 @@ import {
   voiceModel,
   voiceRealtimeEndpoint,
 } from "@/lib/muse/endpoints";
+import { aiImageConfigured } from "@/lib/config";
 
 const KEYS = [
   "MUSE_SPARK_API_URL",
@@ -38,6 +39,14 @@ afterEach(() => {
 });
 
 describe("Muse endpoint resolution", () => {
+  it("configures Image from its explicit URL or the shared Spark URL and key", () => {
+    setEnv({ MUSE_IMAGE_API_URL: "https://images.example.com", MUSE_SPARK_API_KEY: "k" });
+    expect(aiImageConfigured()).toBe(true);
+    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
+    expect(aiImageConfigured()).toBe(true);
+    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1" });
+    expect(aiImageConfigured()).toBe(false);
+  });
   it("does not double the /v1 segment for the configured Spark root (production 404)", () => {
     setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1" });
     expect(sparkChatEndpoint()).toBe("https://api.meta.ai/v1/chat/completions");

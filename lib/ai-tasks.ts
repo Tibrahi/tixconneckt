@@ -84,15 +84,15 @@ export const AI_TASKS: AiTaskDef[] = [
     supported: true,
   },
   {
-    id: "profile_suggest",
+    id: "profile_interpret",
     engine: "spark",
-    label: "Profile suggestions",
-    description: "Suggest profile field values from context you provide.",
+    label: "Profile field extraction",
+    description: "Map explicitly stated profile details to the correct editable profile fields.",
     needs: ["context"],
     questions: {
       context: {
         label: "What should the suggestions be based on?",
-        description: "Paste background, a bio, or notes. You review everything before saving.",
+        description: "Paste the details you want added or changed. Values stay reviewable until you save your profile.",
         long: true,
       },
     },

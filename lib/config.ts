@@ -69,11 +69,16 @@ export function emailConfigured(): boolean {
 }
 
 export function aiSparkConfigured(): boolean {
-  return Boolean(process.env.MUSE_SPARK_API_URL && process.env.MUSE_SPARK_API_KEY);
+  return Boolean(process.env.MUSE_SPARK_API_URL?.trim() && process.env.MUSE_SPARK_API_KEY?.trim());
 }
 
 export function aiVoiceConfigured(): boolean {
-  return Boolean(process.env.MUSE_VOICE_API_URL && process.env.MUSE_VOICE_API_KEY);
+  return Boolean(process.env.MUSE_VOICE_API_URL?.trim() && process.env.MUSE_VOICE_API_KEY?.trim());
+}
+
+/** Muse Image shares the Model API key, but may use its own endpoint. */
+export function aiImageConfigured(): boolean {
+  return Boolean((process.env.MUSE_IMAGE_API_URL?.trim() || process.env.MUSE_SPARK_API_URL?.trim()) && process.env.MUSE_SPARK_API_KEY?.trim());
 }
 
 export function redisConfigured(): boolean {

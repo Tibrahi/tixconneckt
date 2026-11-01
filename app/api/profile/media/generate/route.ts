@@ -1,5 +1,5 @@
 import { generateImage } from "@/lib/muse/image";
-import { aiSparkConfigured } from "@/lib/config";
+import { aiImageConfigured } from "@/lib/config";
 import { apiError, apiOk } from "@/lib/api-response";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/session";
@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!session) return apiError("Sign in required.", 401);
   const rl = await rateLimit("ai-image", session.user.id, 10, "1 h");
   if (!rl.allowed) return apiError("Too many image generations. Please try again later.", 429);
-  if (!aiSparkConfigured()) {
+  if (!aiImageConfigured()) {
     return apiError("Image generation is not configured.", 503);
   }
 

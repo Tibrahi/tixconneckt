@@ -138,6 +138,12 @@ describe("profileUpdateSchema countryCode", () => {
     expect(profileUpdateSchema.safeParse({ countryCode: "" }).success).toBe(true);
     expect(profileUpdateSchema.safeParse({}).success).toBe(true);
   });
+  it("accepts the same country code values in AI proposals", () => {
+    expect(profileProposalSchema.safeParse({ countryCode: "RW" }).success).toBe(true);
+    expect(profileProposalSchema.safeParse({ countryCode: "+250" }).success).toBe(true);
+    expect(profileProposalSchema.safeParse({ countryCode: "" }).success).toBe(true);
+    expect(profileProposalSchema.safeParse({ countryCode: "R2" }).success).toBe(false);
+  });
   it("rejects malformed codes", () => {
     expect(profileUpdateSchema.safeParse({ countryCode: "R2" }).success).toBe(false);
     expect(profileUpdateSchema.safeParse({ countryCode: "RWANDA" }).success).toBe(false);
@@ -164,6 +170,14 @@ describe("profileUpdateSchema githubUrl", () => {
 });
 
 describe("normalizeProfileProposal", () => {
+  it("keeps country, location, phone, and country code in distinct fields", () => {
+    expect(normalizeProfileProposal({ country: "Rwanda", location: "Kigali", phone: "+250788123456", countryCode: "+250" })).toEqual({
+      phone: "+250788123456",
+      country: "Rwanda",
+      countryCode: "+250",
+      location: "Kigali",
+    });
+  });
   it("maps aliases onto canonical fields", () => {
     expect(
       normalizeProfileProposal({

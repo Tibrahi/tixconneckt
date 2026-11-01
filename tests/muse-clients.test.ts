@@ -81,14 +81,14 @@ describe("runSparkTask", () => {
   it("maps HTTP errors to safe messages", async () => {
     setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
     vi.stubGlobal("fetch", vi.fn(async () => jsonRes({ error: { message: "nope" } }, 404)));
-    const result = await runSparkTask({ task: "x", input: {} });
+    const result = await runSparkTask({ task: "summarize_conversation", input: {} });
     expect(result.data).toBeUndefined();
     expect(result.error).toContain("not found");
   });
   it("rejects non-JSON content", async () => {
     setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
     vi.stubGlobal("fetch", vi.fn(async () => jsonRes({ choices: [{ message: { content: "plain text" } }] })));
-    const result = await runSparkTask({ task: "x", input: {} });
+    const result = await runSparkTask({ task: "summarize_conversation", input: {} });
     expect(result.error).toContain("unusable");
   });
   it("reports unconfigured without calling fetch", async () => {
@@ -98,6 +98,21 @@ describe("runSparkTask", () => {
     const result = await runSparkTask({ task: "x", input: {} });
     expect(result.error).toContain("not configured");
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it("requests the supplied strict field schema", async () => {
+    setEnv({ MUSE_SPARK_API_URL: "https://api.meta.ai/v1", MUSE_SPARK_API_KEY: "k" });
+    let body: Record<string, unknown> | undefined;
+    vi.stubGlobal("fetch", vi.fn(async (_url: string, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+      return jsonRes({ choices: [{ message: { content: '{"country":"Rwanda"}' } }] });
+    }));
+    const schema = { type: "object", properties: { country: { type: "string" } }, additionalProperties: false };
+    const result = await runSparkTask({ task: "profile_interpret", input: { text: "Rwanda" }, outputSchema: schema });
+    expect(result.data).toEqual({ country: "Rwanda" });
+    expect(body?.response_format).toEqual({
+      type: "json_schema",
+      json_schema: { name: "profile_interpret_result", strict: false, schema },
+    });
   });
 });
 
