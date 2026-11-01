@@ -52,7 +52,7 @@ export function ForgotPasswordForm({ onToken }: { onToken: (token: string) => vo
   }
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6" aria-label="Recover password">
+    <section className="rounded-lg border border-neutral-200/90 bg-white p-6 shadow-card" aria-label="Recover password">
       <h1 className="text-lg font-semibold text-black">Recover your password</h1>
       <p className="mb-4 mt-1 text-sm text-neutral-600">
         Enter your account email. If it matches an account, we will send a verification code.

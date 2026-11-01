@@ -1,16 +1,20 @@
 import { sql } from "drizzle-orm";
-import { getDb, withDbRead, type Database } from "@/db";
+import { getDb, isDatabaseUnavailable, withDbRead, type Database } from "@/db";
 
 export interface DashboardCounts {
   chat: number;
   notifications: number;
   conneckt: number;
+  /** Present only when serving last-known counts during a database outage. */
+  stale?: boolean;
 }
 
 /**
  * All three nav-badge counts in ONE database round trip (one pool checkout)
  * instead of three parallel queries. Scalar subselects keep each count
- * independent while sharing a single connection.
+ * independent while sharing a single connection. NOT EXISTS (equivalent to
+ * NOT IN here — both id columns are NOT NULL) lets Postgres probe the
+ * message_reads index per message instead of materializing the read list.
  */
 export async function getDashboardCounts(
   db: Database,
@@ -18,10 +22,10 @@ export async function getDashboardCounts(
 ): Promise<DashboardCounts> {
   const rows = await withDbRead(() => db.execute(sql`
     SELECT
-      (SELECT COUNT(*)::int FROM "messages"
-        WHERE "conversation_id" IN (SELECT "conversation_id" FROM "conversation_members" WHERE "user_id" = ${userId})
-          AND "sender_id" <> ${userId}
-          AND "id" NOT IN (SELECT "message_id" FROM "message_reads" WHERE "user_id" = ${userId})
+      (SELECT COUNT(*)::int FROM "messages" AS "m"
+        WHERE "m"."conversation_id" IN (SELECT "conversation_id" FROM "conversation_members" WHERE "user_id" = ${userId})
+          AND "m"."sender_id" <> ${userId}
+          AND NOT EXISTS (SELECT 1 FROM "message_reads" AS "r" WHERE "r"."message_id" = "m"."id" AND "r"."user_id" = ${userId})
       ) AS "chat",
       (SELECT COUNT(*)::int FROM "notifications" WHERE "user_id" = ${userId} AND "read_at" IS NULL) AS "notifications",
       (SELECT COUNT(*)::int FROM "connections" WHERE "addressee_id" = ${userId} AND "status" = 'pending') AS "conneckt"
@@ -79,14 +83,47 @@ export function createTtlCache<T>(ttlMs: number) {
     cached.delete(key);
   }
 
-  return { get, invalidate };
+  /** Last-known data regardless of expiry; null when never cached. */
+  function stale(key: string): T | null {
+    return cached.get(key)?.data ?? null;
+  }
+
+  return { get, invalidate, stale };
 }
 
 /** Badge counts cached 10s per user; polling tabs share one DB round trip. */
 export const countsCache = createTtlCache<DashboardCounts>(10_000);
 
-export function getCachedDashboardCounts(userId: string): Promise<DashboardCounts> {
-  return countsCache.get(userId, () => getDashboardCounts(getDb(), userId));
+/**
+ * Cached read with graceful degradation: background overview data the UI
+ * already treats as seconds-stale serves the last-known value (flagged
+ * `stale`) with 200 during a transient outage instead of 503ing. Only a
+ * cold cache plus a down database still throws (genuinely unavailable).
+ */
+export function getCachedWithStale<T extends object>(
+  cache: Pick<ReturnType<typeof createTtlCache<T>>, "get" | "stale">,
+  key: string,
+  fn: () => Promise<T>,
+  label: string,
+): Promise<T> {
+  return cache.get(key, fn).catch((error: unknown) => {
+    if (!isDatabaseUnavailable(error)) throw error;
+    const last = cache.stale(key);
+    if (!last) throw error;
+    console.warn(`[${label}] serving stale data while the database is unavailable`);
+    return { ...last, stale: true };
+  });
+}
+
+/**
+ * Badge counts with graceful degradation.
+ * The fetch parameter exists so tests can simulate the database honestly.
+ */
+export function getCachedDashboardCounts(
+  userId: string,
+  fetchCounts: (id: string) => Promise<DashboardCounts> = (id) => getDashboardCounts(getDb(), id),
+): Promise<DashboardCounts> {
+  return getCachedWithStale(countsCache, userId, () => fetchCounts(userId), "dashboard:counts");
 }
 
 /** Drop cached counts/summary after a mutation so refetches read fresh data. */

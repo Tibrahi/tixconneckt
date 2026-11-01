@@ -24,7 +24,7 @@ function Stat({ label, value, href }: { label: string; value: number; href: stri
   return (
     <Link
       href={href}
-      className="rounded-lg border border-neutral-200 bg-white p-4 transition-colors hover:border-black"
+      className="rounded-lg border border-neutral-200/90 bg-white p-4 shadow-card transition-shadow hover:shadow-lift"
     >
       <span className="block font-mono text-2xl font-semibold">{value}</span>
       <span className="block text-sm text-neutral-600">{label}</span>

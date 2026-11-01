@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createTtlCache } from "@/lib/dashboard-queries";
+import { createTtlCache, getCachedDashboardCounts } from "@/lib/dashboard-queries";
 
 describe("createTtlCache", () => {
   it("serves repeats from cache without re-executing", async () => {
@@ -39,5 +39,58 @@ describe("createTtlCache", () => {
     await expect(cache.get("u1", fn)).rejects.toThrow("boom");
     await expect(cache.get("u1", fn)).resolves.toBe("ok");
     expect(fn).toHaveBeenCalledTimes(2);
+  });
+
+  it("exposes last-known data regardless of expiry", async () => {
+    vi.useFakeTimers();
+    try {
+      const cache = createTtlCache<string>(10_000);
+      await expect(cache.get("u1", async () => "v1")).resolves.toBe("v1");
+      vi.advanceTimersByTime(11_000);
+      expect(cache.stale("u1")).toBe("v1");
+      expect(cache.stale("nobody")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("getCachedDashboardCounts", () => {
+  const fresh = { chat: 2, notifications: 1, conneckt: 0 };
+  const outage = () => Object.assign(new Error("connection reset"), { code: "ECONNRESET" });
+
+  it("serves last-known counts flagged stale when the database fails after a success", async () => {
+    vi.useFakeTimers();
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    try {
+      await expect(getCachedDashboardCounts("stale-u1", async () => fresh)).resolves.toEqual(fresh);
+      vi.advanceTimersByTime(11_000);
+      await expect(
+        getCachedDashboardCounts("stale-u1", async () => {
+          throw outage();
+        }),
+      ).resolves.toEqual({ ...fresh, stale: true });
+    } finally {
+      vi.useRealTimers();
+      warn.mockRestore();
+    }
+  });
+
+  it("still throws when nothing was ever cached (genuinely unavailable)", async () => {
+    const down = outage();
+    await expect(
+      getCachedDashboardCounts("cold-u1", async () => {
+        throw down;
+      }),
+    ).rejects.toBe(down);
+  });
+
+  it("rethrows non-database errors without serving stale data", async () => {
+    const bad = Object.assign(new Error('relation "nope" does not exist'), { code: "42P01" });
+    await expect(
+      getCachedDashboardCounts("query-err-u1", async () => {
+        throw bad;
+      }),
+    ).rejects.toBe(bad);
   });
 });

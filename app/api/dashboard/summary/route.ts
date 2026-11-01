@@ -1,13 +1,10 @@
-import { and, count, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
-import { getDb, isDatabaseUnavailable, withDbRead } from "@/db";
+import { and, desc, eq, gt, inArray, or, sql } from "drizzle-orm";
+import { dbFailureCode, getDb, isDatabaseUnavailable, withDbRead } from "@/db";
 import {
   conversationMembers,
-  fundingRequests,
-  groupApprovals,
   groupMembers,
   groups,
   ledgerEntries,
-  matchResults,
   messages,
   notifications,
   profiles,
@@ -18,13 +15,16 @@ import {
 } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import {
-  getDashboardCounts,
+  getCachedDashboardCounts,
+  getCachedWithStale,
   summaryCache,
   unavailableHeaders,
 } from "@/lib/dashboard-queries";
 import { getSession } from "@/lib/session";
 
-function unavailable() {
+function unavailable(stage: "session" | "summary", error: unknown) {
+  // Structured trace for every 503: endpoint + stage + failure category.
+  console.warn(`[api:dashboard:summary:503] stage=${stage} code=${dbFailureCode(error)}`);
   return apiError(
     "Dashboard data is temporarily unavailable. Please retry in a moment.",
     503,
@@ -39,17 +39,19 @@ export async function GET() {
   try {
     session = await getSession({ throwOnDatabaseUnavailable: true });
   } catch (error) {
-    if (isDatabaseUnavailable(error)) return unavailable();
+    if (isDatabaseUnavailable(error)) return unavailable("session", error);
     throw error;
   }
   if (!session) return apiError("Sign in required.", 401);
   const userId = session.user.id;
 
   try {
-    const data = await summaryCache.get(userId, () => buildSummary(userId));
+    // Transient outages serve the last-known summary flagged stale; only a
+    // cold cache plus a down database still 503s (genuinely unavailable).
+    const data = await getCachedWithStale(summaryCache, userId, () => buildSummary(userId), "dashboard:summary");
     return apiOk(data);
   } catch (error) {
-    if (isDatabaseUnavailable(error)) return unavailable();
+    if (isDatabaseUnavailable(error)) return unavailable("summary", error);
     throw error;
   }
 }
@@ -58,46 +60,70 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
   const db = getDb();
   // Queries run sequentially (never Promise.all fan-out): each holds one
   // pool connection briefly, so concurrent dashboard loads queue instead of
-  // exhausting the pool and failing with 503s.
-  const [profile] = await withDbRead(() =>
-    db.select().from(profiles).where(eq(profiles.userId, userId)).limit(1),
-  );
-  const [user] = await withDbRead(() =>
-    db.select().from(users).where(eq(users.id, userId)).limit(1),
+  // exhausting the pool and failing with 503s. Independent scalars ride
+  // together in single round trips to keep the count low.
+  const [identity] = await withDbRead(() =>
+    db
+      .select({
+        name: users.name,
+        phone: users.phone,
+        country: users.country,
+        shortId: users.shortId,
+        educationLevel: profiles.educationLevel,
+        objectives: profiles.objectives,
+        major: profiles.major,
+        skills: profiles.skills,
+        fields: profiles.fields,
+        bio: profiles.bio,
+      })
+      .from(users)
+      .leftJoin(profiles, eq(profiles.userId, users.id))
+      .where(eq(users.id, userId))
+      .limit(1),
   );
 
   // Profile completion from filled fields.
   const fields = [
-    user?.name,
-    user?.phone,
-    user?.country,
-    profile?.educationLevel,
-    profile?.objectives,
-    profile?.major,
-    (profile?.skills?.length ?? 0) > 0 ? "x" : "",
-    (profile?.fields?.length ?? 0) > 0 ? "x" : "",
-    profile?.bio,
+    identity?.name,
+    identity?.phone,
+    identity?.country,
+    identity?.educationLevel,
+    identity?.objectives,
+    identity?.major,
+    (identity?.skills?.length ?? 0) > 0 ? "x" : "",
+    (identity?.fields?.length ?? 0) > 0 ? "x" : "",
+    identity?.bio,
   ];
   const filled = fields.filter((f) => f && String(f).trim().length > 0).length;
   const profileCompletion = Math.round((filled / fields.length) * 100);
 
-  const counts = await getDashboardCounts(db, userId);
+  // Shared with the nav-badge poll: one cached execution, not two queries.
+  const counts = await getCachedDashboardCounts(userId);
 
-  const [matchingOpportunities] = await withDbRead(() =>
-    db
-      .select({ n: count() })
-      .from(matchResults)
-      .where(and(eq(matchResults.userId, userId), eq(matchResults.status, "suggested"))),
-  );
+  // Independent tallies in one round trip (same values as three COUNTs).
+  const tallyRows = await withDbRead(() => db.execute(sql`
+    SELECT
+      (SELECT COUNT(*)::int FROM "match_results" WHERE "user_id" = ${userId} AND "status" = 'suggested') AS "matching",
+      (SELECT COUNT(*)::int FROM "group_approvals"
+        WHERE "status" = 'pending'
+          AND "group_id" IN (SELECT "group_id" FROM "group_members" WHERE "user_id" = ${userId} AND "status" = 'active')
+      ) AS "approvals",
+      (SELECT COUNT(*)::int FROM "funding_requests"
+        WHERE "status" IN ('pending', 'under_review')
+          AND "project_id" IN (SELECT "id" FROM "projects" WHERE "owner_id" = ${userId})
+      ) AS "funding"
+  `));
+  const tally = (tallyRows.rows[0] ?? {}) as Partial<{ matching: number; approvals: number; funding: number }>;
   const myGroups = await withDbRead(() =>
     db
-      .select({ groupId: groupMembers.groupId, role: groupMembers.role })
+      .select({ groupId: groupMembers.groupId, role: groupMembers.role, name: groups.name })
       .from(groupMembers)
+      .innerJoin(groups, eq(groups.id, groupMembers.groupId))
       .where(and(eq(groupMembers.userId, userId), eq(groupMembers.status, "active"))),
   );
   const myWallets = await withDbRead(() =>
     db
-      .select()
+      .select({ currency: wallets.currency, balanceMinor: wallets.balanceMinor })
       .from(wallets)
       .where(and(eq(wallets.ownerType, "user"), eq(wallets.ownerId, userId))),
   );
@@ -137,21 +163,6 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       .limit(5),
   );
 
-  const [pendingApprovals] = myGroupIds.length
-    ? await withDbRead(() =>
-        db
-          .select({ n: count() })
-          .from(groupApprovals)
-          .where(
-            and(
-              inArray(groupApprovals.groupId, myGroupIds),
-              eq(groupApprovals.status, "pending"),
-            ),
-          ),
-      )
-    : [{ n: 0 }];
-
-  const myProjectIds = db.select({ id: projects.id }).from(projects).where(eq(projects.ownerId, userId));
   const upcomingActions = await withDbRead(() =>
     db
       .select({
@@ -171,17 +182,6 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       )
       .orderBy(scheduledActions.scheduledFor)
       .limit(5),
-  );
-  const [openFunding] = await withDbRead(() =>
-    db
-      .select({ n: count() })
-      .from(fundingRequests)
-      .where(
-        and(
-          sql`${fundingRequests.projectId} IN (${myProjectIds})`,
-          or(eq(fundingRequests.status, "pending"), eq(fundingRequests.status, "under_review")),
-        ),
-      ),
   );
   const recentNotifications = await withDbRead(() =>
     db
@@ -214,24 +214,15 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       ),
   );
 
-  const groupNames = myGroupIds.length
-    ? await withDbRead(() =>
-        db
-          .select({ id: groups.id, name: groups.name })
-          .from(groups)
-          .where(inArray(groups.id, myGroupIds)),
-      )
-    : [];
-
   return {
     profileCompletion,
-    shortId: user?.shortId ?? "",
+    shortId: identity?.shortId ?? "",
     unreadChat: counts.chat,
     unreadNotifications: counts.notifications,
     pendingConnections: counts.conneckt,
-    matchingOpportunities: matchingOpportunities?.n ?? 0,
+    matchingOpportunities: tally?.matching ?? 0,
     groupCount: myGroups.length,
-    groups: groupNames,
+    groups: myGroups.map((g) => ({ id: g.groupId, name: g.name })),
     wallets: myWallets.map((w) => ({ currency: w.currency, balanceMinor: w.balanceMinor })),
     approvedCreditsMinor: Number(approvedVolume?.total ?? 0),
     recentMessages: recentMessages.map((m) => ({
@@ -242,8 +233,8 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       conversationId: m.conversationId,
     })),
     recentProjects,
-    pendingApprovals: pendingApprovals?.n ?? 0,
-    openFunding: openFunding?.n ?? 0,
+    pendingApprovals: tally?.approvals ?? 0,
+    openFunding: tally?.funding ?? 0,
     upcomingActions,
     recentNotifications,
   };

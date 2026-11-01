@@ -116,7 +116,7 @@ export function RegisterForm() {
     "h-4 w-4 rounded border-neutral-300 accent-blue-700";
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6" aria-label="Create account">
+    <section className="rounded-lg border border-neutral-200/90 bg-white p-6 shadow-card" aria-label="Create account">
       <h1 className="text-lg font-semibold text-black">Create your account</h1>
       <p className="mb-4 mt-1 text-sm text-neutral-600">
         Read each legal document, then check the boxes to accept.

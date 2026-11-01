@@ -116,7 +116,9 @@ function usePagedList<T>(fetcher: (page: number, signal: AbortSignal) => Promise
   const [refreshing, setRefreshing] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const fetcherRef = useRef(fetcher);
-  fetcherRef.current = fetcher;
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
 
   const load = useCallback(
     async (targetPage: number, background = false) => {

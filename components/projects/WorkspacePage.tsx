@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,7 +11,6 @@ import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Icon } from "@/components/ui/Icon";
 import { ConfirmDialog, ErrorDialog } from "@/components/ui/Modal";
 import { ROUTES } from "@/lib/routes";
-import { DocEditor } from "./DocEditor";
 import { ProjectOverview } from "./ProjectOverview";
 import { QuickLinks } from "./QuickLinks";
 import { RequestDialog } from "./RequestDialog";
@@ -28,6 +28,12 @@ import {
   SettingsDialog,
   UploadDialog,
 } from "./WorkspaceDialogs";
+
+// Split the tiptap editor out of the page bundle: it loads on first file open.
+const DocEditor = dynamic(() => import("./DocEditor").then((m) => m.DocEditor), {
+  ssr: false,
+  loading: () => <SkeletonList rows={3} />,
+});
 
 type TabId = "workspace" | "overview" | "requests" | "conversations" | "agreements";
 

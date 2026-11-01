@@ -116,7 +116,7 @@ export function OrganizationsPage() {
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
           {orgs.map((o) => (
-            <li key={o.id} className="rounded-lg border border-neutral-200 bg-white p-4">
+            <li key={o.id} className="rounded-lg border border-neutral-200/90 bg-white p-4 shadow-card">
               <div className="flex items-start gap-3">
                 {logos[o.id] ? (
                   // eslint-disable-next-line @next/next/no-img-element

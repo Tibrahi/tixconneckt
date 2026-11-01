@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import {
@@ -25,18 +25,32 @@ export async function GET() {
     .where(eq(scheduledActions.userId, session.user.id))
     .orderBy(desc(scheduledActions.scheduledFor))
     .limit(100);
-  const withAttempts = await Promise.all(
-    rows.map(async (r) => {
-      const history = await db
-        .select()
-        .from(actionAttempts)
-        .where(eq(actionAttempts.actionId, r.id))
-        .orderBy(desc(actionAttempts.startedAt))
-        .limit(10);
-      return { ...r, history };
-    }),
-  );
-  return apiOk(withAttempts);
+  // One batched fetch instead of per-action queries (was N+1 with pool
+  // fan-out). ROW_NUMBER keeps the exact per-action 10-most-recent shape.
+  const historyRows =
+    rows.length > 0
+      ? ((
+          await db.execute(sql`
+            SELECT "id", "actionId", "startedAt", "finishedAt", "outcome", "detail" FROM (
+              SELECT "id", "action_id" AS "actionId", "started_at" AS "startedAt",
+                "finished_at" AS "finishedAt", "outcome", "detail",
+                ROW_NUMBER() OVER (PARTITION BY "action_id" ORDER BY "started_at" DESC) AS "rn"
+              FROM "action_attempts"
+              WHERE "action_id" IN ${sql`(${sql.join(
+                rows.map((r) => sql`${r.id}`),
+                sql`, `,
+              )})`}
+            ) AS "ranked" WHERE "rn" <= 10 ORDER BY "startedAt" DESC
+          `)
+        ).rows as Array<typeof actionAttempts.$inferSelect>)
+      : [];
+  const historyByAction = new Map<string, typeof historyRows>();
+  for (const h of historyRows) {
+    const list = historyByAction.get(h.actionId);
+    if (list) list.push(h);
+    else historyByAction.set(h.actionId, [h]);
+  }
+  return apiOk(rows.map((r) => ({ ...r, history: historyByAction.get(r.id) ?? [] })));
 }
 
 /** Shape validation shared by schedule and edit. Returns the problem or null. */

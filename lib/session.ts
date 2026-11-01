@@ -2,7 +2,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
-import { getDb, isDatabaseUnavailable } from "@/db";
+import { getDb, isDatabaseUnavailable, withDbRead } from "@/db";
 import { sessions, users } from "@/db/schema";
 import { getConfig } from "./config";
 import { LEGACY_SESSION_COOKIES, SESSION_COOKIE, sessionCookieName } from "./auth-session";
@@ -35,23 +35,27 @@ export async function getSession(options: { throwOnDatabaseUnavailable?: boolean
     const expected = createHmac("sha256", getConfig().AUTH_SECRET).update(token).digest();
     const actual = Buffer.from(suppliedSignature, "base64");
     if (actual.length !== expected.length || !timingSafeEqual(actual, expected)) return null;
-    const [row] = await getDb()
-      .select({
-        sessionId: sessions.id,
-        expiresAt: sessions.expiresAt,
-        id: users.id,
-        email: users.email,
-        name: users.name,
-        shortId: users.shortId,
-        role: users.role,
-        status: users.status,
-        category: users.category,
-        emailVerified: users.emailVerified,
-      })
-      .from(sessions)
-      .innerJoin(users, eq(users.id, sessions.userId))
-      .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
-      .limit(1);
+    // One retry on connection-level blips: without it a single transient
+    // failure 503s (or logs out) an otherwise healthy request.
+    const [row] = await withDbRead(async () =>
+      getDb()
+        .select({
+          sessionId: sessions.id,
+          expiresAt: sessions.expiresAt,
+          id: users.id,
+          email: users.email,
+          name: users.name,
+          shortId: users.shortId,
+          role: users.role,
+          status: users.status,
+          category: users.category,
+          emailVerified: users.emailVerified,
+        })
+        .from(sessions)
+        .innerJoin(users, eq(users.id, sessions.userId))
+        .where(and(eq(sessions.token, token), gt(sessions.expiresAt, new Date())))
+        .limit(1),
+    );
     if (!row) return null;
     return {
       user: {

@@ -117,7 +117,7 @@ export function OtpForm({
   }
 
   return (
-    <section className="mx-auto w-full max-w-md rounded-lg border border-neutral-200 bg-white p-4 sm:p-5" aria-label="Verify code">
+    <section className="mx-auto w-full max-w-md rounded-lg border border-neutral-200/90 bg-white p-4 shadow-card sm:p-5" aria-label="Verify code">
       <h1 className="text-lg font-semibold text-black">Check your email</h1>
       <p className="mb-4 mt-1 text-sm text-neutral-600">
         We sent a 6-digit code to <span className="font-mono">{email}</span>. It expires in 10

@@ -126,6 +126,25 @@ export function isDatabaseUnavailable(error: unknown): boolean {
 }
 
 /**
+ * First Postgres/driver error code found walking the cause chain, or
+ * "unknown". Gives every 503 log line a failure category (improve.md asks
+ * for endpoint + category on each 503) without duplicating the traversal.
+ */
+export function dbFailureCode(error: unknown): string {
+  const pending: unknown[] = [error];
+  const visited = new Set<object>();
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || typeof current !== "object" || visited.has(current)) continue;
+    visited.add(current);
+    const candidate = current as { cause?: unknown; code?: unknown };
+    if (typeof candidate.code === "string" && candidate.code) return candidate.code;
+    pending.push(candidate.cause);
+  }
+  return "unknown";
+}
+
+/**
  * Run an idempotent READ with one automatic retry on connection-level
  * failures (pool saturation, reset connections, failover). Uses exponential
  * backoff with jitter and never retries query errors or writes, so it

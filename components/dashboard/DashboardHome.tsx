@@ -53,13 +53,13 @@ function StatCard({ label, value, href, icon }: { label: string; value: number; 
   return (
     <Link
       href={href}
-      className="group flex min-h-24 items-center gap-4 rounded-xl border border-neutral-200 bg-white p-4 shadow-sm transition duration-150 hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+      className="group flex min-h-24 items-center gap-4 rounded-xl border border-neutral-200/90 bg-white p-4 shadow-card transition duration-150 motion-safe:hover:-translate-y-0.5 hover:border-brand-300 hover:shadow-lift focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
     >
-      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-50 text-lg text-brand-700 transition-colors group-hover:bg-brand-100" aria-hidden="true">
+      <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-brand-700 text-lg text-white shadow-sm" aria-hidden="true">
         <Icon name={icon} />
       </span>
       <span>
-        <span className="block font-mono text-2xl font-semibold leading-tight text-black">{value}</span>
+        <span className="block text-2xl font-semibold leading-tight tracking-tight text-black tabular-nums">{value}</span>
         <span className="mt-1 block text-sm text-neutral-600">{label}</span>
       </span>
     </Link>

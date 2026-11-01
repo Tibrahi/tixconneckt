@@ -36,7 +36,7 @@ function NavList({
               aria-current={active ? "page" : undefined}
               className={`flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
                 active
-                  ? "bg-brand-50 text-brand-700"
+                  ? "bg-brand-50 font-semibold text-brand-700 shadow-sm"
                   : "text-black hover:bg-neutral-100"
               } ${collapsed ? "justify-center px-2" : ""}`}
             >
@@ -155,7 +155,7 @@ export function DashboardShell({
   const sidebarWidth = collapsed ? "lg:w-16" : "lg:w-60";
 
   return (
-    <div className="min-h-screen bg-white text-black">
+    <div className="min-h-screen bg-neutral-50 text-black">
       {/* Mobile top bar with drawer trigger (page-level, not a global header) */}
       <div className="sticky top-0 z-30 flex items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2.5 lg:hidden">
         <button
@@ -172,7 +172,7 @@ export function DashboardShell({
       <div className="flex min-h-screen lg:min-h-0">
         {/* Desktop / tablet sidebar */}
         <aside
-          className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-neutral-200 bg-white p-3 transition-all lg:flex ${sidebarWidth}`}
+          className={`sticky top-0 hidden h-screen shrink-0 flex-col border-r border-neutral-200 bg-white p-3 transition-all motion-reduce:transition-none lg:flex ${sidebarWidth}`}
           aria-label="Main navigation"
         >
           <div className={`flex items-center gap-2 px-1 pb-3 ${collapsed ? "justify-center" : "justify-between"}`}>

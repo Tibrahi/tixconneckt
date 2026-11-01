@@ -15,7 +15,7 @@ export default async function RegisterPage() {
     redirect(session.user.role === "admin" ? ROUTES.admin : ROUTES.dashboard);
   }
   return (
-    <main className="flex min-h-screen items-center justify-center bg-white px-4 py-10">
+    <main className="flex min-h-screen items-center justify-center bg-neutral-50 px-4 py-10">
       <div className="w-full max-w-xl">
         <p className="mb-6 text-center text-2xl font-bold tracking-tight text-black">TIXCONNECKT</p>
         <RegisterForm />

@@ -244,7 +244,7 @@ export function MatchingPage() {
         ) : (
           <ul className="flex flex-col gap-3">
             {suggestions.map((s) => (
-              <li key={s.id} className="rounded-lg border border-neutral-200 bg-white p-4">
+              <li key={s.id} className="rounded-lg border border-neutral-200/90 bg-white p-4 shadow-card">
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <Link

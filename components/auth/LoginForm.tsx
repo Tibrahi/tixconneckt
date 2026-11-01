@@ -58,7 +58,7 @@ export function LoginForm() {
   }
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6" aria-label="Sign in">
+    <section className="rounded-lg border border-neutral-200/90 bg-white p-6 shadow-card" aria-label="Sign in">
       <h1 className="text-lg font-semibold text-black">Sign in</h1>
       <p className="mb-4 mt-1 text-sm text-neutral-600">
         Use your email and password, then confirm the code we send you.

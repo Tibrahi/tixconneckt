@@ -1,11 +1,11 @@
 "use client";
 
 import Link from "next/link";
+import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { formatMoney } from "@/lib/currency";
-import { DocEditor } from "@/components/projects/DocEditor";
 import { api } from "@/components/projects/types";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge, Card, StatusBadge } from "@/components/ui/Card";
@@ -14,6 +14,11 @@ import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
+
+const DocEditor = dynamic(() => import("@/components/projects/DocEditor").then((m) => m.DocEditor), {
+  ssr: false,
+  loading: () => <SkeletonList rows={3} />,
+});
 
 interface Detail {
   request: {

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { computeReadRetryDelayMs, isDatabaseUnavailable, withDbRead } from "@/db";
+import { computeReadRetryDelayMs, dbFailureCode, isDatabaseUnavailable, withDbRead } from "@/db";
 
 function connectionError(): Error {
   return Object.assign(new Error("timeout exceeded when trying to connect"), { code: "ETIMEDOUT" });
@@ -49,5 +49,17 @@ describe("withDbRead", () => {
     const fn = vi.fn().mockRejectedValue(queryError);
     await expect(withDbRead(fn)).rejects.toThrow("does not exist");
     expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("dbFailureCode", () => {
+  it("returns the first code in the cause chain", () => {
+    expect(dbFailureCode(Object.assign(new Error("x"), { code: "57P01" }))).toBe("57P01");
+    expect(dbFailureCode({ message: "wrap", cause: { code: "ECONNRESET" } })).toBe("ECONNRESET");
+  });
+
+  it("returns unknown when no code exists", () => {
+    expect(dbFailureCode(new Error("boom"))).toBe("unknown");
+    expect(dbFailureCode(null)).toBe("unknown");
   });
 });

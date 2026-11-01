@@ -43,7 +43,7 @@ export function ResetPasswordForm({ token, onDone }: { token: string; onDone: ()
   }
 
   return (
-    <section className="rounded-lg border border-neutral-200 bg-white p-6" aria-label="Set new password">
+    <section className="rounded-lg border border-neutral-200/90 bg-white p-6 shadow-card" aria-label="Set new password">
       <h1 className="text-lg font-semibold text-black">Set a new password</h1>
       <p className="mb-4 mt-1 text-sm text-neutral-600">
         Your other sessions will be signed out after the change.

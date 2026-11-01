@@ -61,7 +61,7 @@ export function LoadError({
   onRetry?: () => void;
 }) {
   return (
-    <div className="flex flex-col items-center gap-2 rounded-lg border border-neutral-200 bg-white px-4 py-8 text-center">
+    <div className="flex flex-col items-center gap-2 rounded-lg border border-neutral-200/90 bg-white px-4 py-8 text-center shadow-card">
       <span className="text-2xl" aria-hidden="true">
         <Icon name="warning" />
       </span>

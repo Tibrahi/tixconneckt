@@ -14,7 +14,7 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`rounded-lg border border-neutral-200 bg-white p-4 sm:p-5 ${className}`}>
+    <section className={`rounded-lg border border-neutral-200/90 bg-white p-4 shadow-card sm:p-5 ${className}`}>
       {title || actions ? (
         <div className="mb-3 flex flex-wrap items-start justify-between gap-2">
           <div>
