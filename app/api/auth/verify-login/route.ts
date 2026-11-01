@@ -61,11 +61,11 @@ export async function POST(req: Request) {
   });
 
   if (isNewDevice) {
-    const { subject, text } = securityAlertEmail(
+    const { subject, text, html } = securityAlertEmail(
       "New device sign-in",
       `A sign-in from an unrecognized device was detected${ip ? ` (${ip})` : ""}. If this was not you, change your password immediately.`,
     );
-    await sendEmail({ to: user.email, subject, text });
+    await sendEmail({ to: user.email, subject, text, html });
   }
 
   return apiOk({ authenticated: true });

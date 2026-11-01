@@ -1,7 +1,7 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { memberAccounts, notificationDeliveries, notifications, users } from "@/db/schema";
-import { sendEmail } from "./email";
+import { notificationEmail, sendEmail } from "./email";
 import { emitToRoom } from "./realtime";
 
 export interface NotifyInput {
@@ -56,8 +56,7 @@ export async function notify(input: NotifyInput): Promise<string> {
     input.emailTo
       ? sendEmail({
           to: input.emailTo,
-          subject: `TIXCONNECKT: ${input.title}`,
-          text: input.body ?? input.title,
+          ...notificationEmail({ title: input.title, body: input.body }),
         })
       : Promise.resolve(null),
   ]);
@@ -88,8 +87,8 @@ export interface MemberNotifyInput {
   body?: string;
   resourceType?: string;
   resourceId?: string;
-  /** Email copy (subject + text); sent only when the member opted into email. */
-  email?: { subject: string; text: string };
+  /** Email copy (subject + text + html); sent only when the member opted into email. */
+  email?: { subject: string; text: string; html?: string };
 }
 
 /**
@@ -141,6 +140,7 @@ export async function notifyMember(userId: string, input: MemberNotifyInput): Pr
         to: user.email,
         subject: input.email.subject,
         text: input.email.text,
+        html: input.email.html,
       });
       await db.insert(notificationDeliveries).values({
         notificationId: targetId,
@@ -163,7 +163,7 @@ export async function notifyAdmins(input: {
   body: string;
   resourceType?: string;
   resourceId?: string;
-  email: { subject: string; text: string };
+  email: { subject: string; text: string; html?: string };
 }): Promise<void> {
   const db = getDb();
   const admins = await db
@@ -183,6 +183,7 @@ export async function notifyAdmins(input: {
       to: admin.email,
       subject: input.email.subject,
       text: input.email.text,
+      html: input.email.html,
     });
     await db.insert(notificationDeliveries).values({
       notificationId,

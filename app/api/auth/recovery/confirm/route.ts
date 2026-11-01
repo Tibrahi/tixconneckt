@@ -103,8 +103,8 @@ export async function POST(req: Request) {
       userAgent: req.headers.get("user-agent"),
     });
 
-    const { subject, text } = passwordChangedEmail(userRows[0].name);
-    await sendEmail({ to: userRows[0].email, subject, text });
+    const { subject, text, html } = passwordChangedEmail(userRows[0].name);
+    await sendEmail({ to: userRows[0].email, subject, text, html });
 
     return apiOk({ changed: true });
   }

@@ -108,8 +108,8 @@ export async function POST(req: Request) {
 
   const [user] = await db.select().from(users).where(eq(users.id, session.user.id)).limit(1);
   if (user) {
-    const { subject, text } = passwordChangedEmail(user.name);
-    await sendEmail({ to: user.email, subject, text });
+    const { subject, text, html } = passwordChangedEmail(user.name);
+    await sendEmail({ to: user.email, subject, text, html });
   }
   await audit({ actorId: session.user.id, action: "password.change", targetType: "user", targetId: session.user.id, ipAddress: clientIp(req) });
   return apiOk({ changed: true });

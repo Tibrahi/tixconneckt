@@ -18,7 +18,7 @@ import {
   scheduledMessageKey,
 } from "./action-policy";
 import { audit } from "./audit";
-import { actionResultEmail, sendEmail } from "./email";
+import { actionResultEmail, sendEmail, upcomingActionEmail } from "./email";
 import { notify, notifyMember } from "./notify";
 import { emitToRoom } from "./realtime";
 import { profileUpdateSchema, workflowStepsSchema } from "./validation";
@@ -303,8 +303,10 @@ export async function runDueActions(limit = 25): Promise<{
     });
     const email = await sendEmail({
       to: user.email,
-      subject: `Upcoming scheduled action: ${action.title}`,
-      text: `Your scheduled action "${action.title}" runs at ${action.scheduledFor.toISOString()} (${action.timezone}). Open Actions to edit or cancel it.`,
+      ...upcomingActionEmail({
+        title: action.title,
+        when: `${action.scheduledFor.toISOString()} (${action.timezone})`,
+      }),
     });
     if (!email.sent) {
       console.warn(

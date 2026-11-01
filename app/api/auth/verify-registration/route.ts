@@ -42,8 +42,8 @@ export async function POST(req: Request) {
     userAgent: req.headers.get("user-agent") ?? undefined,
   });
 
-  const { subject, text } = activationEmail(user.name);
-  await sendEmail({ to: email, subject, text });
+  const { subject, text, html } = activationEmail(user.name);
+  await sendEmail({ to: email, subject, text, html });
 
   return apiOk({ activated: true });
 }

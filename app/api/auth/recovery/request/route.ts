@@ -40,11 +40,11 @@ export async function POST(req: Request) {
       ipAddress: clientIp(req),
       userAgent: req.headers.get("user-agent"),
     });
-    const { subject, text } = securityAlertEmail(
+    const { subject, text, html } = securityAlertEmail(
       "Password recovery requested",
       "A password recovery was requested for your account. If this was not you, ignore the verification code — your password stays unchanged.",
     );
-    await sendEmail({ to: email, subject, text });
+    await sendEmail({ to: email, subject, text, html });
     await issueOtp(email, "recovery", user.id);
   }
 
