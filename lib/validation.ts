@@ -205,6 +205,13 @@ export const callSignalSchema = z.discriminatedUnion("kind", [
       sdpMLineIndex: z.number().int().min(0).max(64).nullable().optional(),
     })
     .strict(),
+  z
+    .object({
+      kind: z.literal("media-state"),
+      muted: z.boolean().optional(),
+      cameraOff: z.boolean().optional(),
+    })
+    .strict(),
 ]);
 
 export type CallSignalInput = z.infer<typeof callSignalSchema>;

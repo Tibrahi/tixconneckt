@@ -212,7 +212,7 @@ export async function POST(req: Request) {
       resourceId: interestProject ? interestProject.id : session.user.id,
       emailTo: target.email,
     }),
-    emitToRoom(`user:${target.id}`, "connection:updated", { kind: "incoming" }),
+    emitToRoom(`private:user:${target.id}`, "connection:updated", { kind: "incoming" }),
   ]);
 
   invalidateDashboard(session.user.id, target.id);
@@ -270,7 +270,7 @@ export async function PATCH(req: Request) {
         resourceId: rows[0].id,
         emailTo: requester.email,
       }),
-      emitToRoom(`user:${requester.id}`, "connection:updated", { kind: "decision" }),
+      emitToRoom(`private:user:${requester.id}`, "connection:updated", { kind: "decision" }),
     ]);
   }
 

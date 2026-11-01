@@ -9,14 +9,15 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useSocket } from "@/components/realtime/SocketProvider";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
+import { useCallSignaling, type CallInvite, type CallSignal } from "@/hooks/use-call-signaling";
 import {
   callsSupported,
   createPeerConnection,
   getCallMedia,
+  getIceServers,
   setTrackEnabled,
   stopStream,
   turnConfigured,
@@ -24,9 +25,10 @@ import {
 
 /**
  * Global 1:1 call manager. Listens for incoming calls anywhere in the
- * dashboard, runs the WebRTC handshake over our own signaling API, and
- * renders the incoming/active call UI. Media is peer-to-peer; only the
- * call lifecycle and SDP/ICE signaling touch our servers.
+ * dashboard, runs the WebRTC handshake over our signaling API (relayed via
+ * Ably personal channels), and renders the incoming/active call UI. Media
+ * is peer-to-peer; only the call lifecycle and SDP/ICE signaling touch our
+ * servers.
  */
 
 type CallKind = "audio" | "video";
@@ -81,36 +83,31 @@ export function CallButtons({ conversationId, calleeName }: { conversationId: st
   }
   return (
     <span className="flex gap-1">
-      <Button
-        size="sm"
-        variant="secondary"
+      <IconButton
+        label={`Start audio call with ${calleeName}`}
         icon="phone"
         disabled={inCall}
         onClick={() => startCall(conversationId, "audio", calleeName)}
-      >
-        Audio
-      </Button>
-      <Button
-        size="sm"
-        variant="secondary"
+      />
+      <IconButton
+        label={`Start video call with ${calleeName}`}
         icon="video"
         disabled={inCall}
         onClick={() => startCall(conversationId, "video", calleeName)}
-      >
-        Video
-      </Button>
+      />
     </span>
   );
 }
 
 export function CallProvider({ children }: { children: ReactNode }) {
-  const { onEvent } = useSocket();
   const [incoming, setIncoming] = useState<IncomingCall | null>(null);
   const [active, setActive] = useState<ActiveCall | null>(null);
   const [ringingOffline, setRingingOffline] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [muted, setMuted] = useState(false);
   const [cameraOff, setCameraOff] = useState(false);
+  const [peerMedia, setPeerMedia] = useState<{ muted: boolean; cameraOff: boolean }>({ muted: false, cameraOff: false });
+  const [fullscreen, setFullscreen] = useState(false);
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -125,6 +122,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const localVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteVideoRef = useRef<HTMLVideoElement | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
+  const videoWrapRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     activeRef.current = active;
@@ -159,6 +157,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     setRemoteStream(null);
     setMuted(false);
     setCameraOff(false);
+    setPeerMedia({ muted: false, cameraOff: false });
   }, []);
 
   const endLocally = useCallback(
@@ -315,7 +314,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       localRef.current = stream;
       setLocalStream(stream);
 
-      const pc = createPeerConnection(() => {});
+      const pc = createPeerConnection(await getIceServers(), () => {});
       pcRef.current = pc;
       for (const track of stream.getTracks()) pc.addTrack(track, stream);
       attachPeerHandlers(callId);
@@ -378,7 +377,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
     localRef.current = stream;
     setLocalStream(stream);
 
-    const pc = createPeerConnection(() => {});
+    const pc = createPeerConnection(await getIceServers(), () => {});
     pcRef.current = pc;
     for (const track of stream.getTracks()) pc.addTrack(track, stream);
     attachPeerHandlers(inv.callId);
@@ -417,108 +416,91 @@ export function CallProvider({ children }: { children: ReactNode }) {
     window.dispatchEvent(new Event("tix:calls"));
   }, []);
 
-  // ---- Realtime event wiring ----
-  useEffect(() => {
-    const offs = [
-      onEvent("call:incoming", (payload) => {
-        const data = payload as {
-          callId?: string;
-          conversationId?: string;
-          kind?: string;
-          caller?: { name?: string };
-        };
-        if (!data.callId || !data.conversationId) return;
-        if (activeRef.current || incomingRef.current) {
-          // Busy in another call — politely decline the new one.
-          decide(String(data.callId), "declined").catch(() => {});
-          return;
+  // ---- Ably call-signaling subscriptions (signaling only; media is P2P) ----
+  useCallSignaling({
+    onInvite: (data: CallInvite) => {
+      if (!data.callId || !data.conversationId) return;
+      if (activeRef.current || incomingRef.current) {
+        // Busy in another call — politely decline the new one.
+        decide(String(data.callId), "declined").catch(() => {});
+        return;
+      }
+      setCallError(null);
+      setIncoming({
+        callId: String(data.callId),
+        conversationId: String(data.conversationId),
+        kind: data.kind === "video" ? "video" : "audio",
+        callerName: String(data.caller?.name ?? "Unknown"),
+      });
+      later(() => {
+        // Ringing UI expires locally; the caller side still resolves the record.
+        if (incomingRef.current?.callId === String(data.callId)) setIncoming(null);
+      }, RING_TIMEOUT_MS);
+    },
+    onOffer: (signal: CallSignal) => {
+      // Pre-accept offers are buffered for acceptCall, not dropped.
+      if (incomingRef.current?.callId === String(signal.callId) && typeof signal.sdp === "string") {
+        pendingOfferRef.current = { type: "offer", sdp: signal.sdp };
+      }
+    },
+    onAnswer: (signal: CallSignal) => {
+      if (activeRef.current?.callId !== String(signal.callId)) return;
+      const pc = pcRef.current;
+      if (!pc || typeof signal.sdp !== "string") return;
+      pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: signal.sdp }))
+        .then(() => flushPendingCandidates())
+        .catch(() => {});
+      setActive((a) => (a ? { ...a, phase: "connecting" } : a));
+      // Media must arrive promptly once the answer is in.
+      later(() => {
+        const still = activeRef.current;
+        if (still && still.callId === String(signal.callId) && still.phase !== "active") {
+          decide(String(signal.callId), "ended").catch(() => {});
+          endLocally("Media couldn't be established. Check your connection and try again.");
         }
-        setCallError(null);
-        setIncoming({
-          callId: String(data.callId),
-          conversationId: String(data.conversationId),
-          kind: data.kind === "video" ? "video" : "audio",
-          callerName: String(data.caller?.name ?? "Unknown"),
-        });
-        later(() => {
-          // Ringing UI expires locally; the caller side still resolves the record.
-          if (incomingRef.current?.callId === String(data.callId)) setIncoming(null);
-        }, RING_TIMEOUT_MS);
-      }),
-      onEvent("call:signal", (payload) => {
-        const data = payload as {
-          callId?: string;
-          signal?: { kind?: string; sdp?: string; candidate?: string; sdpMid?: string | null; sdpMLineIndex?: number | null };
-        };
-        const current = activeRef.current;
-        if (!data.callId || !data.signal) return;
-        if (current?.callId === String(data.callId)) {
-          const pc = pcRef.current;
-          const signal = data.signal;
-          if (signal.kind === "answer" && pc && typeof signal.sdp === "string") {
-            pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: signal.sdp }))
-              .then(() => flushPendingCandidates())
-              .catch(() => {});
-            setActive((a) => (a ? { ...a, phase: "connecting" } : a));
-            // Media must arrive promptly once the answer is in.
-            later(() => {
-              const still = activeRef.current;
-              if (still && still.callId === String(data.callId) && still.phase !== "active") {
-                decide(String(data.callId), "ended").catch(() => {});
-                endLocally("Media couldn't be established. Check your connection and try again.");
-              }
-            }, MEDIA_TIMEOUT_MS);
-          } else if (signal.kind === "candidate" && typeof signal.candidate === "string") {
-            const init: RTCIceCandidateInit = {
-              candidate: signal.candidate,
-              sdpMid: signal.sdpMid,
-              sdpMLineIndex: signal.sdpMLineIndex,
-            };
-            if (pc && pc.remoteDescription) {
-              pc.addIceCandidate(new RTCIceCandidate(init)).catch(() => {});
-            } else {
-              pendingCandidatesRef.current.push(init);
-            }
-          }
-        } else if (incomingRef.current?.callId === String(data.callId)) {
-          // Pre-accept signaling (offer + early ICE) is buffered, not dropped.
-          const signal = data.signal;
-          if (signal.kind === "offer" && typeof signal.sdp === "string") {
-            pendingOfferRef.current = { type: "offer", sdp: signal.sdp };
-          } else if (signal.kind === "candidate" && typeof signal.candidate === "string") {
-            pendingCandidatesRef.current.push({
-              candidate: signal.candidate,
-              sdpMid: signal.sdpMid,
-              sdpMLineIndex: signal.sdpMLineIndex,
-            });
-          }
+      }, MEDIA_TIMEOUT_MS);
+    },
+    onCandidate: (signal: CallSignal) => {
+      if (typeof signal.candidate !== "string") return;
+      const init: RTCIceCandidateInit = {
+        candidate: signal.candidate,
+        sdpMid: signal.sdpMid,
+        sdpMLineIndex: signal.sdpMLineIndex,
+      };
+      const pc = pcRef.current;
+      if (activeRef.current?.callId === String(signal.callId)) {
+        if (pc && pc.remoteDescription) {
+          pc.addIceCandidate(new RTCIceCandidate(init)).catch(() => {});
+        } else {
+          pendingCandidatesRef.current.push(init);
         }
-      }),
-      onEvent("call:accepted", (payload) => {
-        const data = payload as { callId?: string };
-        setActive((a) =>
-          a && data.callId === a.callId ? { ...a, phase: "connecting" } : a,
-        );
-      }),
-      onEvent("call:declined", (payload) => {
-        const data = payload as { callId?: string };
-        if (activeRef.current?.callId === data.callId) {
-          endLocally("The call was declined.");
-        }
-      }),
-      onEvent("call:ended", (payload) => {
-        const data = payload as { callId?: string };
-        if (activeRef.current?.callId === data.callId) endLocally();
-        if (incomingRef.current?.callId === data.callId) setIncoming(null);
-      }),
-      onEvent("call:missed", (payload) => {
-        const data = payload as { callId?: string };
-        if (incomingRef.current?.callId === data.callId) setIncoming(null);
-      }),
-    ];
-    return () => offs.forEach((off) => off());
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onEvent]);
+      } else if (incomingRef.current?.callId === String(signal.callId)) {
+        pendingCandidatesRef.current.push(init);
+      }
+    },
+    onMediaState: (state) => {
+      if (activeRef.current?.callId !== String(state.callId)) return;
+      setPeerMedia((prev) => ({
+        muted: typeof state.muted === "boolean" ? state.muted : prev.muted,
+        cameraOff: typeof state.cameraOff === "boolean" ? state.cameraOff : prev.cameraOff,
+      }));
+    },
+    onAccept: (data) => {
+      setActive((a) => (a && data.callId === a.callId ? { ...a, phase: "connecting" } : a));
+    },
+    onReject: (data) => {
+      if (activeRef.current?.callId === data.callId) {
+        endLocally("The call was declined.");
+      }
+    },
+    onEnd: (data) => {
+      if (activeRef.current?.callId === data.callId) endLocally();
+      if (incomingRef.current?.callId === data.callId) setIncoming(null);
+    },
+    onMissed: (data) => {
+      if (incomingRef.current?.callId === data.callId) setIncoming(null);
+    },
+  });
 
   // Attach media streams to elements.
   useEffect(() => {
@@ -541,13 +523,72 @@ export function CallProvider({ children }: { children: ReactNode }) {
     const next = !muted;
     setMuted(next);
     setTrackEnabled(localRef.current, "audio", !next);
+    const callId = activeRef.current?.callId;
+    if (callId) postSignal(callId, { kind: "media-state", muted: next }).catch(() => {});
   }
 
   function toggleCamera(): void {
     const next = !cameraOff;
     setCameraOff(next);
     setTrackEnabled(localRef.current, "video", !next);
+    const callId = activeRef.current?.callId;
+    if (callId) postSignal(callId, { kind: "media-state", cameraOff: next }).catch(() => {});
   }
+
+  /** Switch between front/back cameras where the device has several. */
+  const switchCamera = useCallback(async () => {
+    const call = activeRef.current;
+    const stream = localRef.current;
+    if (!call || call.kind !== "video" || !stream) return;
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter((d) => d.kind === "videoinput");
+      if (cameras.length < 2) {
+        setCallError("Only one camera is available on this device.");
+        return;
+      }
+      const current = stream.getVideoTracks()[0];
+      const currentId = current?.getSettings().deviceId;
+      const next = cameras.find((c) => c.deviceId && c.deviceId !== currentId) ?? cameras[0];
+      const nextStream = await navigator.mediaDevices.getUserMedia({
+        video: next.deviceId ? { deviceId: { exact: next.deviceId } } : true,
+        audio: false,
+      });
+      const nextTrack = nextStream.getVideoTracks()[0];
+      if (!nextTrack) throw new Error("no track");
+      const sender = pcRef.current?.getSenders().find((s) => s.track?.kind === "video");
+      await sender?.replaceTrack(nextTrack);
+      if (current) {
+        stream.removeTrack(current);
+        current.stop();
+      }
+      stream.addTrack(nextTrack);
+      nextStream.getTracks().forEach((t) => {
+        if (t !== nextTrack) t.stop();
+      });
+      // Re-attach the preview element to the mutated stream.
+      if (localVideoRef.current) localVideoRef.current.srcObject = stream;
+    } catch {
+      setCallError("We couldn't switch cameras on this device.");
+    }
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = videoWrapRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await el.requestFullscreen();
+    } catch {
+      /* fullscreen unsupported — the call itself is unaffected */
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setFullscreen(document.fullscreenElement !== null);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
 
   const phaseLabel =
     active?.phase === "ringing" ? "Ringing…" : active?.phase === "connecting" ? "Connecting…" : "In call";
@@ -563,7 +604,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
             Your camera and microphone turn on only if you accept.
           </p>
           <div className="mt-4 flex justify-end gap-2">
-            <Button variant="secondary" icon="phone" onClick={() => void declineCall()}>
+            <Button variant="secondary" icon="phone-slash" onClick={() => void declineCall()}>
               Decline
             </Button>
             <Button icon="phone" onClick={() => void acceptCall()}>
@@ -582,6 +623,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
                 <span className="text-neutral-600">
                   · {active.phase === "ringing" && ringingOffline ? "Ringing… they may be offline; we notified them" : phaseLabel}
                   {active.phase === "active" ? ` · ${formatElapsed(active.startedAt, now)}` : ""}
+                  {peerMedia.muted ? " · peer muted" : ""}
+                  {active.kind === "video" && peerMedia.cameraOff ? " · peer camera off" : ""}
                 </span>
               </p>
               <p className="font-mono text-xs text-neutral-500">
@@ -590,8 +633,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
             </div>
 
             {active.kind === "video" ? (
-              <div className="grid gap-2 sm:grid-cols-[2fr_1fr]">
-                <div className="overflow-hidden rounded-lg border border-neutral-200 bg-black">
+              <div ref={videoWrapRef} className={`grid gap-2 bg-white sm:grid-cols-[2fr_1fr] ${fullscreen ? "h-full content-center p-4" : ""}`}>
+                <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-black">
                   <video
                     ref={remoteVideoRef}
                     autoPlay
@@ -599,6 +642,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
                     aria-label={`${active.peerName} video`}
                     className="aspect-video w-full object-cover"
                   />
+                  {peerMedia.cameraOff ? (
+                    <span className="absolute inset-0 flex items-center justify-center text-sm text-white">
+                      {active.peerName} turned their camera off
+                    </span>
+                  ) : null}
                 </div>
                 <div className="overflow-hidden rounded-lg border border-neutral-200 bg-black">
                   <video
@@ -624,19 +672,36 @@ export function CallProvider({ children }: { children: ReactNode }) {
               </div>
             )}
 
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="secondary" icon="microphone" onClick={toggleMute}>
-                {muted ? "Unmute" : "Mute"}
-              </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <IconButton
+                label={muted ? "Unmute microphone" : "Mute microphone"}
+                icon={muted ? "microphone-slash" : "microphone"}
+                onClick={toggleMute}
+              />
               {active.kind === "video" ? (
-                <Button size="sm" variant="secondary" icon="camera" onClick={toggleCamera}>
-                  {cameraOff ? "Camera on" : "Camera off"}
-                </Button>
+                <>
+                  <IconButton
+                    label={cameraOff ? "Turn camera on" : "Turn camera off"}
+                    icon={cameraOff ? "video-slash" : "video"}
+                    onClick={toggleCamera}
+                  />
+                  <IconButton label="Switch camera" icon="camera-rotate" onClick={() => void switchCamera()} />
+                  <IconButton
+                    label={fullscreen ? "Exit full screen" : "Full-screen video"}
+                    icon="expand"
+                    onClick={() => void toggleFullscreen()}
+                  />
+                </>
               ) : null}
-              <Button size="sm" variant="danger" icon="phone" onClick={() => void hangup()}>
+              <Button size="sm" variant="danger" icon="phone-slash" onClick={() => void hangup()}>
                 Hang up
               </Button>
             </div>
+            {callError ? (
+              <p role="alert" className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                {callError}
+              </p>
+            ) : null}
             <p className="text-xs text-neutral-600">
               If the other side can&rsquo;t hear or see you, you are likely behind a restrictive network —
               voice and video need a direct peer connection.

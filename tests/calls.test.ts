@@ -6,17 +6,17 @@ describe("resolveCallDecision", () => {
   it("lets the callee accept or decline a ringing call", () => {
     expect(resolveCallDecision("ringing", "accepted", "callee")).toMatchObject({
       status: "accepted",
-      event: "call:accepted",
+      event: "call:accept",
     });
     expect(resolveCallDecision("ringing", "declined", "callee")).toMatchObject({
       status: "declined",
-      event: "call:declined",
+      event: "call:reject",
     });
   });
   it("treats callee hangup while ringing as a decline", () => {
     expect(resolveCallDecision("ringing", "ended", "callee")).toMatchObject({
       status: "declined",
-      event: "call:declined",
+      event: "call:reject",
     });
   });
   it("marks caller hangup while ringing as missed", () => {
@@ -52,6 +52,8 @@ describe("callSignalSchema", () => {
         sdpMLineIndex: 0,
       }).success,
     ).toBe(true);
+    expect(callSignalSchema.safeParse({ kind: "media-state", muted: true }).success).toBe(true);
+    expect(callSignalSchema.safeParse({ kind: "media-state", cameraOff: false }).success).toBe(true);
   });
   it("rejects malformed or oversized payloads", () => {
     expect(callSignalSchema.safeParse({ kind: "offer" }).success).toBe(false);

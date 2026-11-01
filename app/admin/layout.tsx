@@ -1,17 +1,19 @@
 import { Suspense } from "react";
+import { connection } from "next/server";
 import { requireAdmin } from "@/lib/session";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { DashboardLoading } from "@/components/layout/DashboardLoading";
-import { SocketProvider } from "@/components/realtime/SocketProvider";
+import { AblyProvider } from "@/components/realtime/AblyProvider";
 
 export const instant = false;
 
 async function AuthenticatedAdmin({ children }: { children: React.ReactNode }) {
+  await connection();
   await requireAdmin();
   return (
-    <SocketProvider>
+    <AblyProvider>
       <DashboardShell isAdmin>{children}</DashboardShell>
-    </SocketProvider>
+    </AblyProvider>
   );
 }
 

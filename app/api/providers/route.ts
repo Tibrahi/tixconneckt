@@ -222,7 +222,7 @@ export async function POST(req: Request) {
     .returning({ id: groupApprovals.id });
 
   // Notify group admins + realtime fan-out concurrently: deliveries of an
-  // already-persisted approval. Sequential awaits stacked SMTP/socket
+  // already-persisted approval. Sequential awaits stacked SMTP/realtime
   // latencies onto the requester's loading state.
   const admins = await db
     .select({ userId: groupMembers.userId })
@@ -241,7 +241,7 @@ export async function POST(req: Request) {
           resourceId: inserted[0].id,
         }),
       ),
-    emitToRoom(`group:${parsed.data.groupId}`, "group:approval", { id: inserted[0].id }),
+    emitToRoom(`private:group:${parsed.data.groupId}`, "group:approval", { id: inserted[0].id }),
   ]);
 
   invalidateDashboard(session.user.id);

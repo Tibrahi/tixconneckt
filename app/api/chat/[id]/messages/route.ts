@@ -335,7 +335,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .values({ messageId: message.id, userId: session.user.id })
     .onConflictDoNothing();
 
-  await emitToRoom(`conversation:${id}`, "message:new", {
+  await emitToRoom(`private:conversation:${id}`, "message:new", {
     id: message.id,
     conversationId: id,
     kind: "user",
@@ -348,7 +348,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     createdAt: message.createdAt,
   });
 
-  // Notify other members unless they muted this conversation.
+  // Refresh every member's conversation list via their personal channel
+  // (the list view subscribes there, not to each conversation channel),
+  // then notify non-muted members other than the sender.
   const members = await db
     .select({
       userId: conversationMembers.userId,
@@ -359,6 +361,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .from(conversationMembers)
     .innerJoin(users, eq(users.id, conversationMembers.userId))
     .where(eq(conversationMembers.conversationId, id));
+  await Promise.all(
+    members
+      .filter((m) => m.userId !== session.user.id)
+      .map((m) =>
+        emitToRoom(`private:user:${m.userId}`, "conversation:update", {
+          conversationId: id,
+          messageId: message.id,
+        }),
+      ),
+  );
   for (const m of members) {
     if (m.userId === session.user.id) continue;
     if (normalizeSettings(m.settings).muted) continue;
@@ -414,7 +426,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
       and(eq(conversationMembers.conversationId, id), eq(conversationMembers.userId, session.user.id)),
     );
   if (unread.length > 0) {
-    await emitToRoom(`conversation:${id}`, "message:read", {
+    await emitToRoom(`private:conversation:${id}`, "message:read", {
       conversationId: id,
       userId: session.user.id,
       count: unread.length,

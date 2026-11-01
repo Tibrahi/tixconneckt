@@ -87,7 +87,7 @@ export async function POST(req: Request) {
     .where(eq(users.id, calleeId))
     .limit(1);
 
-  const delivered = await emitToRoom(`user:${calleeId}`, "call:incoming", {
+  const delivered = await emitToRoom(`private:user:${calleeId}`, "call:invite", {
     callId: call.id,
     conversationId: conv.id,
     kind: call.kind,

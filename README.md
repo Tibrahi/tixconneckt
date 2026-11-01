@@ -1,100 +1,94 @@
-# TIXCONNECKT
+# TIXCONNECKT — Production environment on Vercel
 
-Connect people globally through compatible skills, career objectives, collaborative projects,
-funding opportunities, and trusted support.
+Add these in Vercel: project → Settings → Environment Variables → environment
+**Production**, then redeploy. Keys starting with `NEXT_PUBLIC_` are baked into
+the build, so any change to them needs a redeploy too. Never commit real values
+to git.
 
-Full-stack Next.js application: authentication with email OTP, dashboard, profiles, matching,
-Conneckt, real-time chat, wallet with an auditable ledger, plans, scheduled actions, projects,
-funding requests with agreements, notifications, settings, and system administration.
-Product, UI/UX, architecture, and security requirements live in `Specification/`.
+## Required
 
-## Stack
+| Key | Production value |
+| --- | --- |
+| `DATABASE_URL` | Neon **pooled** URL from the Neon console, e.g. `postgresql://<user>:<password>@<host>-pooler.<region>.aws.neon.tech/<db>?sslmode=require` |
+| `AUTH_SECRET` | Random 64 hex chars: `openssl rand -hex 32` (minimum 32 chars) |
+| `NEXT_PUBLIC_APP_URL` | `https://<your-domain>` with no trailing slash, e.g. `https://tixconneckt.com` (or your `https://<app>.vercel.app` URL) |
 
-Next.js + React + TypeScript, Tailwind CSS, Neon PostgreSQL + Drizzle ORM, app-owned auth (+ jose),
-Zod + React Hook Form, Nodemailer (Google SMTP), Socket.IO, Serwist PWA, Upstash Redis rate
-limiting, Font Awesome icons, Inter + IBM Plex Mono.
+## Email (SMTP)
 
-## Setup
+| Key | Production value |
+| --- | --- |
+| `SMTP_HOST` | `smtp.gmail.com` |
+| `SMTP_PORT` | `465` |
+| `SMTP_USER` | Gmail address used for sending |
+| `SMTP_PASS` | Google app password (16 characters) |
+| `SMTP_FROM` | `TIXCONNECKT <no-reply@tixconneckt.com>` |
+| `MAIL_REPLY_TO` | Monitored inbox, e.g. `support@tixconneckt.com` (optional; without it, mail says do-not-reply) |
 
-1. Install dependencies:
+## File storage (Neon Object Storage, bucket `tixconneckt`)
 
-   ```bash
-   npm install
-   ```
+| Key | Production value |
+| --- | --- |
+| `NEON_STORAGE_BUCKET` | `tixconneckt` |
+| `AWS_REGION` | Neon storage region, e.g. `us-east-1` |
+| `AWS_ENDPOINT_URL_S3` | Neon storage endpoint from the Neon console (`https://…`) |
+| `AWS_ACCESS_KEY_ID` | Neon storage key with `storage:write` access |
+| `AWS_SECRET_ACCESS_KEY` | Matching Neon storage secret |
 
-2. Configure environment:
+Without these four AWS values, uploads and pictures are stored in Neon
+PostgreSQL instead — the app keeps working.
 
-   ```bash
-   # Create .env and fill in DATABASE_URL, AUTH_SECRET, SMTP_*, and only the integrations you enable.
-   ```
+## Realtime (chat, presence, call signaling)
 
-   `DATABASE_URL` must be a PostgreSQL connection URL. For Neon, use the pooled
-   connection URL for application traffic; `DATABASE_URL_DIRECT` is optional
-   and is used by Drizzle Kit for schema changes. The runtime uses a shared
-   `pg` connection pool (`DB_POOL_MAX=5`, `DB_CONNECT_TIMEOUT_MS=5000`,
-   `DB_IDLE_TIMEOUT_MS=30000`, `DB_STATEMENT_TIMEOUT_MS=30000` by default).
-   Set these `DB_*` values only when the deployment needs different limits.
+Ably Pub/Sub is the only realtime infrastructure — no separate realtime
+server to host. Browsers authenticate with short-lived tokens from
+`GET /api/ably/token`, scoped to the user's own channels.
 
-   Private uploaded documents and profile/group photos use Neon Object Storage.
-   Configure `AWS_ENDPOINT_URL_S3`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`,
-   `AWS_REGION`, and `NEON_STORAGE_BUCKET` with a bucket and a Neon credential
-   that has `storage:write` access. Without these values uploads return an
-   explicit unavailable response; they are never stored in a temporary local
-   file. Apply migration `0008_neon_object_storage.sql` to an existing database.
+| Key | Production value |
+| --- | --- |
+| `ABLY_API_KEY` | Private Ably API key from the Ably dashboard (server-side only — never `NEXT_PUBLIC_`) |
 
-3. Apply the committed schema migrations and seed reference data (legal versions + plan catalog):
+Without it, chat keeps working on API polling and the UI says live
+updates are unavailable.
 
-   ```bash
-   npm run db:migrate
-   npm run db:seed
-   ```
+## Calls (voice/video behind NAT)
 
-   `db:migrate` is the schema-change path for existing databases and production.
-   `db:push` is for local development only; do not use it against production.
-   Migrations preserve existing profile media while new uploads use object storage.
+| Key | Production value |
+| --- | --- |
+| `NEXT_PUBLIC_TURN_URLS` | TURN server URLs, comma-separated, e.g. `turn:turn.example.com:3478` |
+| `TURN_USERNAME` | TURN username (server-side only, delivered per session via `GET /api/calls/ice`) |
+| `TURN_PASSWORD` | TURN credential (server-side only) |
+| `NEXT_PUBLIC_STUN_URLS` | Optional STUN list, e.g. `stun:stun.l.google.com:19302` |
 
-4. Run the app:
+## Security webhooks and cron
 
-   ```bash
-   npm run dev          # Next.js only
-   npm run realtime     # Socket.IO server (second terminal)
-   npm run dev:all      # both at once
-   ```
+| Key | Production value |
+| --- | --- |
+| `CRON_SECRET` | Random 32+ chars; the scheduler calls `GET /api/cron/actions` with `Authorization: Bearer <value>` every minute |
+| `TIXLPAY_WEBHOOK_SECRET` | Webhook secret from the TixLPay dashboard (only if payments are enabled) |
 
-   Open [http://localhost:3000](http://localhost:3000) — visitors see the landing
-   page, with sign-in and registration behind its buttons. Authenticated users
-   go straight to `/dashboard`. (`/welcome` redirects to `/`.)
+## Optional integrations
 
-5. Schedule the action worker (example, every minute):
+| Key | Production value |
+| --- | --- |
+| `UPSTASH_REDIS_REST_URL` | Upstash Redis REST URL (rate limiting; without it the API runs fail-open) |
+| `UPSTASH_REDIS_REST_TOKEN` | Upstash REST token |
+| `MUSE_SPARK_API_URL` / `MUSE_SPARK_API_KEY` | AI text endpoint + key (without them AI features show explicit pending states) |
+| `MUSE_VOICE_API_URL` / `MUSE_VOICE_API_KEY` | AI voice endpoint + key (same fallback) |
+| `DATABASE_URL_DIRECT` | Neon **direct** (non-pooled) URL, used for schema migrations |
+| `DB_POOL_MAX` | `10` (default; one pool per serverless instance) |
+| `DB_CONNECT_TIMEOUT_MS` | `10000` |
+| `DB_IDLE_TIMEOUT_MS` | `30000` |
+| `DB_STATEMENT_TIMEOUT_MS` | `30000` |
+| `SKIP_AUTO_MIGRATE` | `1` only if you apply migrations yourself instead of the automatic boot migration |
 
-   ```bash
-   curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/actions
-   ```
+`NODE_ENV=production` is set by Vercel automatically — do not add it.
 
-## Scripts
+## After the first deploy
 
-| Command          | Purpose                                              |
-| ---------------- | ---------------------------------------------------- |
-| `dev` / `dev:all`| Start Next.js / Next.js + realtime server          |
-| `realtime`       | Standalone Socket.IO server (`realtime.mjs`)         |
-| `build` / `start`| Production build / production server               |
-| `lint`           | ESLint                                               |
-| `typecheck`      | `tsc --noEmit`                                       |
-| `test`           | Vitest unit tests                                    |
-| `test:e2e`       | Playwright smoke journeys (needs a running server)   |
-| `db:generate`    | Generate Drizzle migrations                          |
-| `db:migrate`     | Apply committed migrations                           |
-| `db:push`        | Push schema directly (dev only)                      |
-| `db:studio`      | Inspect the database                                 |
-| `db:seed`        | Seed legal documents + plan catalog                  |
-
-## Notes
-
-- Graceful degradation: SMTP, Muse AI, Redis, and the realtime
-  server are optional at runtime. Unconfigured integrations surface as explicit
-  "pending" states — never fake success.
-- Private data (auth, API, dashboard) is excluded from the service-worker cache.
-- Financial balances derive only from approved ledger entries; AI-extracted
-  values are proposals until a human verifies them.
-- An administrator account is created by registering normally, then setting
-  `role = 'admin'` on that user row before signing in.
+1. Apply schema and seed data once, from any machine with the production
+   `DATABASE_URL`: `npm run db:migrate && npm run db:seed`.
+2. Schedule the action worker every minute against
+   `https://<your-domain>/api/cron/actions` with the `CRON_SECRET` bearer
+   token (Vercel Cron or any external scheduler).
+3. Create the admin account by registering normally, then setting
+   `role = 'admin'` on that user row before signing in.

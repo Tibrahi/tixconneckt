@@ -1,61 +1,31 @@
+import { normalizeChannel } from "./ably/events";
+import { ablyConfigured, getPresenceClientIds, publishToChannel } from "./ably/server";
+
 /**
- * Server-side realtime relay. API routes call emitToRoom() AFTER their
- * database commit; the standalone realtime server forwards to room members.
- * Delivery failures are logged — clients also poll authoritative endpoints.
+ * Server-side realtime relay (Ably-only). API routes call emitToRoom()
+ * AFTER their database commit; Ably forwards to subscribed channel
+ * members. Delivery failures are logged — clients also poll authoritative
+ * endpoints, so a missed event never means lost data.
  */
 
 export function realtimeAvailable(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_REALTIME_URL || process.env.REALTIME_PORT);
-}
-
-function relayBase(): string {
-  const publicUrl = process.env.NEXT_PUBLIC_REALTIME_URL;
-  if (publicUrl) return publicUrl.replace(/\/$/, "");
-  return `http://localhost:${process.env.REALTIME_PORT ?? 3001}`;
+  return ablyConfigured();
 }
 
 export async function emitToRoom(room: string, event: string, payload: unknown): Promise<boolean> {
-  const secret = process.env.INTERNAL_RELAY_SECRET;
-  if (!secret) return false;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const res = await fetch(`${relayBase()}/internal/emit`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${secret}`,
-      },
-      body: JSON.stringify({ room, event, payload }),
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
-    return res.ok;
-  } catch {
-    return false;
-  }
+  return publishToChannel(normalizeChannel(room), event, payload);
 }
 
 /**
- * Genuine presence: which of these user ids hold a live socket connection
- * right now. Returns null when the realtime server is unreachable, in which
- * case callers must show no presence rather than a guess.
+ * Genuine presence: which of these user ids hold a live Ably presence
+ * entry right now. Returns null when Ably is unconfigured or unreachable,
+ * in which case callers must show no presence rather than a guess.
  */
 export async function fetchPresence(userIds: string[]): Promise<string[] | null> {
-  const secret = process.env.INTERNAL_RELAY_SECRET;
-  if (!secret || userIds.length === 0) return secret ? [] : null;
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 3000);
-    const params = new URLSearchParams({ ids: userIds.slice(0, 100).join(",") });
-    const res = await fetch(`${relayBase()}/internal/presence?${params.toString()}`, {
-      headers: { Authorization: `Bearer ${secret}` },
-      signal: controller.signal,
-    }).finally(() => clearTimeout(timeout));
-    if (!res.ok) return null;
-    const data = (await res.json()) as { ok?: boolean; online?: string[] };
-    if (!data.ok || !Array.isArray(data.online)) return null;
-    return data.online;
-  } catch {
-    return null;
-  }
+  if (!ablyConfigured()) return null;
+  if (userIds.length === 0) return [];
+  const online = await getPresenceClientIds();
+  if (online === null) return null;
+  const set = new Set(online);
+  return userIds.filter((id) => set.has(id));
 }

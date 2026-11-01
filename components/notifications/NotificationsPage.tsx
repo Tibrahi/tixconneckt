@@ -9,7 +9,7 @@ import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { Pagination } from "@/components/ui/Pagination";
 import { ErrorDialog } from "@/components/ui/Modal";
-import { useSocket } from "@/components/realtime/SocketProvider";
+import { useAbly } from "@/components/realtime/AblyProvider";
 
 interface NotificationItem {
   id: string;
@@ -60,7 +60,7 @@ export function NotificationsPage() {
   const [unreadOnly, setUnreadOnly] = useState(false);
   const [failed, setFailed] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { onEvent } = useSocket();
+  const { onEvent } = useAbly();
 
   const load = useCallback(async () => {
     setFailed(false);

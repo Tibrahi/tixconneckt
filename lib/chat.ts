@@ -120,7 +120,7 @@ export async function postSystemMessage(
     .update(conversations)
     .set({ updatedAt: new Date() })
     .where(eq(conversations.id, conversationId));
-  await emitToRoom(`conversation:${conversationId}`, "message:new", {
+  await emitToRoom(`private:conversation:${conversationId}`, "message:new", {
     id: inserted.id,
     conversationId,
     kind: "system",

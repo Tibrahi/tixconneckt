@@ -79,7 +79,7 @@ export async function POST(req: Request, { params }: RouteContext) {
     grouped.set(row.emoji, entry);
   }
 
-  await emitToRoom(`conversation:${id}`, "reaction:changed", {
+  await emitToRoom(`private:conversation:${id}`, "message:reaction", {
     messageId,
     conversationId: id,
     reactions: [...grouped.entries()].map(([emoji, v]) => ({ emoji, ...v })),

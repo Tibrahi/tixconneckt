@@ -118,7 +118,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         userId: pending.userId,
       });
     }
-    await emitToRoom(`group:${id}`, "group:members", {});
+    await emitToRoom(`private:group:${id}`, "group:members", {});
   } else {
     await db.delete(groupMembers).where(eq(groupMembers.id, pending.id));
   }

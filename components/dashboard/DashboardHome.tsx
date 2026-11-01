@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Icon } from "@/components/ui/Icon";
 import { TourButton } from "@/components/tour/TourButton";
-import { useSocket } from "@/components/realtime/SocketProvider";
+import { useAbly } from "@/components/realtime/AblyProvider";
 
 interface Summary {
   profileCompletion: number;
@@ -70,7 +70,7 @@ export function DashboardHome() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [failed, setFailed] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const { onEvent } = useSocket();
+  const { onEvent } = useAbly();
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (options: { background?: boolean } = {}) => {
@@ -110,9 +110,11 @@ export function DashboardHome() {
       if (refreshTimer) clearTimeout(refreshTimer);
       refreshTimer = setTimeout(() => void load({ background: true }), 300);
     };
+    // Personal-channel events only: the dashboard never joins conversation
+    // or group channels, so list/count refreshes arrive via these.
     const offs = [
       onEvent("notification:new", refresh),
-      onEvent("message:new", refresh),
+      onEvent("conversation:update", refresh),
       onEvent("connection:updated", refresh),
       onEvent("wallet:updated", refresh),
     ];

@@ -95,7 +95,7 @@ async function executeMessageAction(
     .values({ messageId: inserted.id, userId })
     .onConflictDoNothing();
 
-  await emitToRoom(`conversation:${conversationId}`, "message:new", {
+  await emitToRoom(`private:conversation:${conversationId}`, "message:new", {
     id: inserted.id,
     conversationId,
     senderId: userId,

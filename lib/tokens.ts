@@ -26,30 +26,3 @@ export async function verifyRecoveryToken(
   }
 }
 
-/** Short-lived socket handshake ticket (2 minutes) bound to a user. */
-export async function signSocketTicket(userId: string): Promise<string> {
-  return new SignJWT({ sub: userId, purpose: "socket" })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("2m")
-    .sign(secretKey());
-}
-
-export async function verifySocketTicket(token: string): Promise<string | null> {
-  try {
-    const { payload } = await jwtVerify(token, secretKey());
-    if (payload.purpose !== "socket" || !payload.sub) return null;
-    return String(payload.sub);
-  } catch {
-    return null;
-  }
-}
-
-/** Short-lived per-room join ticket (5 minutes), issued after membership checks. */
-export async function signRoomTicket(userId: string, room: string): Promise<string> {
-  return new SignJWT({ sub: userId, room, purpose: "room" })
-    .setProtectedHeader({ alg: "HS256" })
-    .setIssuedAt()
-    .setExpirationTime("5m")
-    .sign(secretKey());
-}

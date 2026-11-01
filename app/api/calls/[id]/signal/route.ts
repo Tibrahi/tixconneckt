@@ -6,9 +6,11 @@ import { callSignalSchema } from "@/lib/validation";
 import { loadParticipantCall } from "../_lib";
 
 /**
- * Relay a validated WebRTC signaling payload (offer/answer/ICE) to the
- * other call party over their personal realtime room. Signaling only —
- * media never touches our servers.
+ * Relay a validated WebRTC signaling payload to the other call party over
+ * their personal Ably channel. Signaling only — media never touches our
+ * servers. Each payload kind maps to its own event (chat2.md Phase 5):
+ * offer → webrtc:offer, answer → webrtc:answer, ICE → webrtc:ice-candidate,
+ * mute/camera toggles → call:media-state.
  */
 export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
@@ -33,10 +35,23 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   }
 
   const otherId = call.callerId === session.user.id ? call.calleeId : call.callerId;
-  const relayed = await emitToRoom(`user:${otherId}`, "call:signal", {
+  const signal = parsed.data;
+  const event =
+    signal.kind === "offer"
+      ? "webrtc:offer"
+      : signal.kind === "answer"
+        ? "webrtc:answer"
+        : signal.kind === "candidate"
+          ? "webrtc:ice-candidate"
+          : "call:media-state";
+  const relayed = await emitToRoom(`private:user:${otherId}`, event, {
     callId: call.id,
     from: session.user.id,
-    signal: parsed.data,
+    ...(signal.kind === "offer" || signal.kind === "answer" ? { sdp: signal.sdp } : {}),
+    ...(signal.kind === "candidate"
+      ? { candidate: signal.candidate, sdpMid: signal.sdpMid, sdpMLineIndex: signal.sdpMLineIndex }
+      : {}),
+    ...(signal.kind === "media-state" ? { muted: signal.muted, cameraOff: signal.cameraOff } : {}),
   });
   return apiOk({ relayed });
 }

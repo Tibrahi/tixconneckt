@@ -4,11 +4,12 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { Badge } from "@/components/ui/Card";
-import { EmptyState } from "@/components/ui/Feedback";
+import { EmptyState, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
-import { useSocket } from "@/components/realtime/SocketProvider";
+import { Icon } from "@/components/ui/Icon";
+import { useAbly } from "@/components/realtime/AblyProvider";
 import { readApi, type ChatFilter, type ConversationItem } from "./types";
 
 const FILTERS: Array<{ id: ChatFilter; label: string }> = [
@@ -25,6 +26,26 @@ function categoryLabel(c: ConversationItem): string {
   if (c.type === "provider") return c.providerKind ? `${c.providerKind} provider` : "Provider";
   if (c.type === "group") return "Group";
   return "Individual";
+}
+
+/** Compact relative timestamp for conversation rows. */
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (Number.isNaN(diff) || diff < 0) return "now";
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "now";
+  if (minutes < 60) return `${minutes}m`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  return new Date(iso).toLocaleDateString("en-US", { day: "numeric", month: "short" });
+}
+
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return (parts[0].charAt(0) || "?").toUpperCase();
+  return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 }
 
 function RowMenu({
@@ -76,6 +97,7 @@ function RowMenu({
       <button
         type="button"
         aria-label={`Conversation options for ${item.title}`}
+        title="Conversation options"
         aria-expanded={open}
         onClick={(e) => {
           e.preventDefault();
@@ -84,7 +106,7 @@ function RowMenu({
         }}
         className="rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-100 hover:text-black"
       >
-        •••
+        <Icon name="ellipsis" />
       </button>
       {open ? (
         <div className="absolute top-full right-0 z-20 w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
@@ -133,8 +155,22 @@ export function ConversationPanel({
   const [links, setLinks] = useState<Array<{ id: string; label: string }>>([]);
   const [linkId, setLinkId] = useState("");
   const [creating, setCreating] = useState(false);
-  const { onEvent, connected } = useSocket();
+  const [me, setMe] = useState<{ name: string; shortId: string } | null>(null);
+  const { onEvent, connected } = useAbly();
   const searchTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetch("/api/profile", { cache: "no-store" })
+      .then((res) => readApi<{ name: string; shortId: string }>(res))
+      .then((profile) => {
+        if (active) setMe({ name: profile.name, shortId: profile.shortId });
+      })
+      .catch(() => {});
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -160,9 +196,11 @@ export function ConversationPanel({
       if (document.visibilityState === "visible") void load();
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    // Personal-channel events: the server fans conversation:update out to
+    // every member's personal channel on each new message.
     const offs = [
-      onEvent("message:new", refresh),
-      onEvent("conversation:updated", refresh),
+      onEvent("conversation:update", refresh),
+      onEvent("notification:new", refresh),
     ];
     return () => {
       if (pollId !== undefined) window.clearInterval(pollId);
@@ -254,6 +292,24 @@ export function ConversationPanel({
 
   return (
     <div className="flex flex-col gap-3">
+      {!compact && me ? (
+        <div className="flex items-center gap-2.5 rounded-md border border-neutral-200 bg-white p-3">
+          <span aria-hidden="true" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-brand-600 text-sm font-semibold text-white">
+            {initials(me.name)}
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-sm font-semibold text-black">{me.name}</span>
+            <span className="flex items-center gap-1.5 text-xs text-neutral-600">
+              <span
+                aria-hidden="true"
+                className={`inline-block h-2 w-2 rounded-full ${connected ? "bg-green-600" : "bg-neutral-300"}`}
+              />
+              {connected ? "Online" : "Auto-refresh"}
+              <span className="font-mono">· {me.shortId}</span>
+            </span>
+          </span>
+        </div>
+      ) : null}
       <div className="flex gap-2">
         <div className="flex-1">
           <TextField
@@ -333,7 +389,7 @@ export function ConversationPanel({
       </div>
 
       {items === null ? (
-        <p className="text-sm text-neutral-600">Loading conversations…</p>
+        <SkeletonList rows={4} />
       ) : items.length === 0 ? (
         <EmptyState
           icon="message"
@@ -344,18 +400,35 @@ export function ConversationPanel({
         <ul className="flex flex-col gap-2">
           {items.map((c) => (
             <li key={c.id} className={`rounded-md border p-3 ${activeId === c.id ? "border-brand-600 bg-brand-50/50" : "border-neutral-200 bg-white"}`}>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2.5">
+                <span
+                  aria-hidden="true"
+                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${c.type === "group" ? "bg-neutral-700" : "bg-brand-600"}`}
+                >
+                  {c.type === "group" ? <Icon name="user-group" /> : initials(c.title)}
+                </span>
                 <Link href={ROUTES.chatThread(c.id)} className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-black">
-                    {c.pinned ? <span className="mr-1 text-xs font-semibold text-brand-700">Pinned</span> : null}
-                    {c.title}
+                  <span className="flex items-center gap-1.5">
+                    <span className="min-w-0 flex-1 truncate font-medium text-black">
+                      {c.title}
+                    </span>
+                    <span className="shrink-0 font-mono text-[11px] text-neutral-500" title={new Date(c.updatedAt).toLocaleString("en-US")}>
+                      {timeAgo(c.lastMessage?.createdAt ?? c.updatedAt)}
+                    </span>
                   </span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-neutral-600">
+                  <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-neutral-600">
                     <span className="capitalize">{categoryLabel(c)}</span>
                     {c.hasProject ? <span>· Project</span> : null}
-                    {c.muted ? <span>· Muted</span> : null}
-                    <span>·</span>
-                    <span className="font-mono">{new Date(c.updatedAt).toLocaleString("en-US")}</span>
+                    {c.muted ? (
+                      <span className="inline-flex items-center gap-0.5" title="Muted">
+                        · <Icon name="bell" /> Muted
+                      </span>
+                    ) : null}
+                    {c.pinned ? (
+                      <span className="font-semibold text-brand-700" title="Pinned">
+                        · Pinned
+                      </span>
+                    ) : null}
                   </span>
                   <span className="block truncate text-sm text-neutral-600">
                     {c.lastMessage ? c.lastMessage.preview : "No messages yet"}

@@ -36,7 +36,7 @@ export async function notify(input: NotifyInput): Promise<string> {
 
   await db.insert(notificationDeliveries).values({
     notificationId,
-    channel: "socket",
+    channel: "realtime",
     status: "pending",
   });
 
@@ -45,7 +45,7 @@ export async function notify(input: NotifyInput): Promise<string> {
   // sequentially kept user actions (project shares, connection requests)
   // stuck on loading for the sum of both latencies.
   const [delivered, emailResult] = await Promise.all([
-    emitToRoom(`user:${input.userId}`, "notification:new", {
+    emitToRoom(`private:user:${input.userId}`, "notification:new", {
       id: notificationId,
       type: input.type,
       title: input.title,
@@ -62,10 +62,10 @@ export async function notify(input: NotifyInput): Promise<string> {
   ]);
   await db.insert(notificationDeliveries).values({
     notificationId,
-    channel: "socket",
+    channel: "realtime",
     status: delivered ? "sent" : "failed",
     attempts: 1,
-    lastError: delivered ? null : "Realtime server unreachable",
+    lastError: delivered ? null : "Realtime delivery unreachable",
   });
 
   if (emailResult) {

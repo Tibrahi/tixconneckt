@@ -4,45 +4,46 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
-import { Button } from "@/components/ui/Button";
+import { Button, IconButton } from "@/components/ui/Button";
 import { LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { SelectField, TextField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
+import { Icon } from "@/components/ui/Icon";
 import { CallButtons } from "@/components/calls/CallProvider";
-import { useSocket } from "@/components/realtime/SocketProvider";
+import { useAbly } from "@/components/realtime/AblyProvider";
+import { useChat, useTyping, useTypingPublisher } from "@/hooks/use-chat";
 import { Composer } from "./Composer";
 import { DetailsPanel } from "./DetailsPanel";
 import { MessageBubble } from "./MessageBubble";
 import { groupByDay, readApi, type ChatMessage, type ConversationItem, type ThreadData } from "./types";
 
-interface TypingEntry {
-  name: string;
-  expires: number;
-}
-
 /**
  * Full conversation view: identified header, day-grouped history with an
- * unread marker, live updates with polling fallback, typing and presence,
- * in-conversation search, and the details panel.
+ * unread marker, optimistic sending, live updates with polling fallback,
+ * typing and presence, in-conversation search, and the details panel.
  */
 export function ThreadView({
   conversationId,
   myUserId,
+  myUserName,
   onError,
 }: {
   conversationId: string;
   myUserId: string;
+  myUserName: string;
   onError: (m: string) => void;
 }) {
   const [data, setData] = useState<ThreadData | null>(null);
   const [failed, setFailed] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const [typing, setTyping] = useState<Record<string, TypingEntry>>({});
+  const [pending, setPending] = useState<ChatMessage[]>([]);
+  const [deliveredIds, setDeliveredIds] = useState<Set<string>>(new Set());
   const [presence, setPresence] = useState<{ available: boolean; online: Record<string, boolean> }>({
     available: false,
     online: {},
   });
+  const [showBottom, setShowBottom] = useState(false);
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -64,11 +65,15 @@ export function ThreadView({
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [composerSeed, setComposerSeed] = useState<{ text: string; nonce: number } | null>(null);
 
-  const { onEvent, connected } = useSocket();
+  const { onEvent, connected, realtimeAvailable } = useAbly();
+  useChat(conversationId);
+  const typingNames = useTyping(conversationId, myUserId);
+  const { publishTyping, publishStopped } = useTypingPublisher(conversationId);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const typingAt = useRef(0);
   const [initialRead, setInitialRead] = useState<string | null | undefined>(undefined);
   const firstLoadRef = useRef(true);
+  const deliveredBeaconed = useRef(new Set<string>());
+  const [mountTime] = useState(() => Date.now());
 
   const nearBottom = useCallback(() => {
     const el = scrollRef.current;
@@ -104,6 +109,26 @@ export function ThreadView({
           }
           return next;
         });
+        // Drop optimistic bubbles the server has acknowledged, and confirm
+        // device delivery for messages that arrived since mount or were still
+        // unread — already-read history needs no beacon.
+        const serverIds = new Set(next.messages.map((m) => m.clientMessageId).filter(Boolean));
+        setPending((prev) => prev.filter((p) => p.clientMessageId && !serverIds.has(p.clientMessageId)));
+        const lastReadAt = next.myLastReadAt ? new Date(next.myLastReadAt).getTime() : 0;
+        const beaconAfter = Math.max(mountTime, lastReadAt);
+        for (const m of next.messages) {
+          if (
+            m.senderId &&
+            m.senderId !== myUserId &&
+            !deliveredBeaconed.current.has(m.id) &&
+            new Date(m.createdAt).getTime() > beaconAfter
+          ) {
+            deliveredBeaconed.current.add(m.id);
+            fetch(`/api/chat/${encodeURIComponent(conversationId)}/messages/${encodeURIComponent(m.id)}/delivered`, {
+              method: "POST",
+            }).catch(() => {});
+          }
+        }
         if (firstLoadRef.current) {
           setInitialRead(next.myLastReadAt);
           firstLoadRef.current = false;
@@ -118,7 +143,7 @@ export function ThreadView({
         if (!opts.silent) setFailed(true);
       }
     },
-    [conversationId, markRead, nearBottom, scrollToBottom],
+    [conversationId, markRead, mountTime, myUserId, nearBottom, scrollToBottom],
   );
 
   const hasMore = data?.hasMore ?? false;
@@ -165,7 +190,7 @@ export function ThreadView({
         if ((p as { conversationId?: string }).conversationId !== conversationId) return;
         load();
       }),
-      onEvent("message:edited", (p) => {
+      onEvent("message:edit", (p) => {
         const e = p as { id: string; body: string };
         setData((prev) =>
           prev
@@ -173,7 +198,7 @@ export function ThreadView({
             : prev,
         );
       }),
-      onEvent("message:deleted", (p) => {
+      onEvent("message:delete", (p) => {
         const e = p as { id: string };
         setData((prev) =>
           prev
@@ -186,7 +211,7 @@ export function ThreadView({
             : prev,
         );
       }),
-      onEvent("reaction:changed", (p) => {
+      onEvent("message:reaction", (p) => {
         const e = p as { messageId: string; reactions: Array<{ emoji: string; count: number; mine: boolean }> };
         setData((prev) =>
           prev
@@ -219,28 +244,19 @@ export function ThreadView({
             : prev,
         );
       }),
-      onEvent("typing", (p) => {
-        const e = p as { userId?: string; name?: string };
-        if (!e.userId || e.userId === myUserId) return;
-        setTyping((prev) => ({ ...prev, [e.userId as string]: { name: e.name ?? "Someone", expires: Date.now() + 6000 } }));
+      onEvent("message:delivered", (p) => {
+        const e = p as { id?: string; conversationId?: string; userId?: string };
+        if (e.conversationId !== conversationId || !e.id || e.userId === myUserId) return;
+        setDeliveredIds((prev) => new Set(prev).add(e.id as string));
+      }),
+      onEvent("presence:update", (p) => {
+        const e = p as { userId?: string; online?: boolean };
+        if (!e.userId || typeof e.online !== "boolean") return;
+        setPresence((prev) => ({ available: true, online: { ...prev.online, [e.userId as string]: e.online as boolean } }));
       }),
     ];
     return () => offs.forEach((off) => off());
   }, [conversationId, myUserId, load, onEvent]);
-
-  // Expire typing indicators.
-  useEffect(() => {
-    const id = setInterval(() => {
-      setTyping((prev) => {
-        const next: Record<string, TypingEntry> = {};
-        for (const [k, v] of Object.entries(prev)) {
-          if (v.expires > Date.now()) next[k] = v;
-        }
-        return next;
-      });
-    }, 2000);
-    return () => clearInterval(id);
-  }, []);
 
   const loadPresence = useCallback(async () => {
     try {
@@ -257,12 +273,54 @@ export function ThreadView({
     return () => clearInterval(id);
   }, [loadPresence, connected]);
 
-  function sendTyping() {
-    const now = Date.now();
-    if (now - typingAt.current < 4000) return;
-    typingAt.current = now;
-    fetch(`/api/chat/${encodeURIComponent(conversationId)}/typing`, { method: "POST" }).catch(() => {});
-  }
+  // Track scroll position for the scroll-to-bottom action.
+  const threadLoaded = data !== null;
+  useEffect(() => {
+    if (!threadLoaded) return;
+    const el = scrollRef.current;
+    if (!el) return;
+    const onScroll = () => {
+      setShowBottom(el.scrollHeight - el.scrollTop - el.clientHeight > 320);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, [threadLoaded]);
+
+  /** Append an optimistic bubble; reconciled against the server by clientMessageId. */
+  const handleSending = useCallback(
+    (draft: { clientMessageId: string; body: string; replyTo: ChatMessage | null }) => {
+      const optimistic: ChatMessage = {
+        id: `pending:${draft.clientMessageId}`,
+        kind: "user",
+        body: draft.body,
+        senderId: myUserId,
+        senderName: myUserName,
+        senderShortId: null,
+        clientMessageId: draft.clientMessageId,
+        createdAt: new Date().toISOString(),
+        editedAt: null,
+        deleted: false,
+        reply: draft.replyTo
+          ? { id: draft.replyTo.id, body: draft.replyTo.body.slice(0, 200), senderName: draft.replyTo.senderName }
+          : null,
+        metadata: {},
+        attachment: null,
+        reactions: [],
+        read: false,
+        readCount: null,
+      };
+      setPending((prev) => [...prev, optimistic]);
+      requestAnimationFrame(() => {
+        const el = scrollRef.current;
+        if (el) el.scrollTop = el.scrollHeight;
+      });
+    },
+    [myUserId, myUserName],
+  );
+
+  const handleSendFailed = useCallback((clientMessageId: string) => {
+    setPending((prev) => prev.filter((p) => p.clientMessageId !== clientMessageId));
+  }, []);
 
   async function jumpTo(messageId: string) {
     for (let attempt = 0; attempt < 4; attempt++) {
@@ -502,7 +560,6 @@ export function ThreadView({
         ? (presence.online[others[0].userId] ?? false)
         : null
       : null;
-  const typingNames = Object.values(typing).map((t) => t.name);
   const newMarkerId =
     initialRead === undefined
       ? null
@@ -512,16 +569,23 @@ export function ThreadView({
             m.senderId !== myUserId &&
             (initialRead === null || new Date(m.createdAt).getTime() > new Date(initialRead).getTime()),
         )?.id ?? null);
-  const showing = searchResults ?? data.messages;
+  const showing = searchResults ?? [...data.messages, ...pending];
   const groups = groupByDay(showing);
+  const peerInitial = (others[0]?.name ?? title).trim().charAt(0).toUpperCase() || "?";
 
   return (
     <div className="flex min-h-0 flex-1">
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-white px-4 py-2.5">
-          <Link href={ROUTES.chat} aria-label="Back to conversations" className="rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-100 lg:hidden">
-            ←
+      <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+        <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
+          <Link href={ROUTES.chat} aria-label="Back to conversations" title="Back to conversations" className="rounded-md p-2 text-neutral-600 hover:bg-neutral-100 hover:text-black lg:hidden">
+            <Icon name="arrow-left" />
           </Link>
+          <span
+            aria-hidden="true"
+            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${data.conversation.type === "group" ? "bg-neutral-700" : "bg-brand-600"}`}
+          >
+            {data.conversation.type === "group" ? <Icon name="user-group" /> : peerInitial}
+          </span>
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold text-black">
               {title}
@@ -529,34 +593,39 @@ export function ThreadView({
                 <span className="ml-2 font-mono text-xs font-normal text-neutral-500">{others[0].shortId}</span>
               ) : null}
             </p>
-            <p className="text-xs text-neutral-600">
-              {typeLabel} · {data.members.length} member{data.members.length === 1 ? "" : "s"}
-              {peerOnline === true ? " · Online" : ""}
-              {data.mySettings.muted ? " · Muted" : ""}
+            <p className="flex items-center gap-1.5 text-xs text-neutral-600">
+              {peerOnline !== null ? (
+                <span
+                  title={peerOnline ? "Online now" : "Offline or unavailable"}
+                  aria-label={peerOnline ? "Peer online" : "Peer offline"}
+                  className={`inline-block h-2 w-2 rounded-full ${peerOnline ? "bg-green-600" : "bg-neutral-300"}`}
+                />
+              ) : null}
+              <span>
+                {peerOnline === true ? "Online" : peerOnline === false ? "Offline" : typeLabel} · {data.members.length} member{data.members.length === 1 ? "" : "s"}
+                {data.mySettings.muted ? " · Muted" : ""}
+              </span>
             </p>
           </div>
-          {peerOnline !== null ? (
-            <span
-              title={peerOnline ? "Online now" : "Offline or unavailable"}
-              aria-label={peerOnline ? "Peer online" : "Peer offline"}
-              className={`h-2.5 w-2.5 rounded-full ${peerOnline ? "bg-green-600" : "bg-neutral-300"}`}
-            />
-          ) : null}
-          <Button size="sm" variant="secondary" onClick={() => { setSearchOpen(!searchOpen); setSearchResults(null); setQuery(""); }}>
-            Search
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setShareOpen(true)}>
-            Share
-          </Button>
-          <Button size="sm" variant="secondary" onClick={() => setDetailsOpen(!detailsOpen)}>
-            {detailsOpen ? "Hide details" : "Details"}
-          </Button>
+          <span className="flex items-center gap-1">
+            <IconButton label="Search in conversation" icon="search" onClick={() => { setSearchOpen(!searchOpen); setSearchResults(null); setQuery(""); }} />
+            <IconButton label="Share a reference" icon="share" onClick={() => setShareOpen(true)} />
+            <IconButton label={detailsOpen ? "Hide details" : "Show details"} icon="circle-info" onClick={() => setDetailsOpen(!detailsOpen)} />
+          </span>
           {data.conversation.type !== "group" ? (
             <CallButtons conversationId={data.conversation.id} calleeName={others[0]?.name ?? "Member"} />
           ) : (
             <span className="text-xs text-neutral-500">Calls are 1:1 only</span>
           )}
         </div>
+
+        {!connected ? (
+          <p role="status" className="border-b border-amber-200 bg-amber-50 px-4 py-1.5 text-xs text-amber-900">
+            {realtimeAvailable === false
+              ? "Live updates are unavailable — refreshing automatically."
+              : "Reconnecting… new messages will appear automatically."}
+          </p>
+        ) : null}
 
         {searchOpen ? (
           <div className="flex gap-2 border-b border-neutral-200 bg-white px-4 py-2">
@@ -615,6 +684,8 @@ export function ThreadView({
                           onTranscribe={transcribeMessage}
                           analyzing={analyzingId === m.id}
                           transcript={transcripts[m.id] ?? null}
+                          delivered={deliveredIds.has(m.id)}
+                          interactive={!m.id.startsWith("pending:")}
                           onError={onError}
                         />
                       </div>
@@ -626,6 +697,21 @@ export function ThreadView({
           )}
         </div>
 
+        {showBottom ? (
+          <button
+            type="button"
+            onClick={() => {
+              setUnseen(0);
+              scrollToBottom();
+              markRead();
+            }}
+            aria-label="Scroll to latest messages"
+            title="Scroll to latest"
+            className="absolute right-6 bottom-32 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 bg-white text-black shadow-md hover:border-black"
+          >
+            <Icon name="arrow-down" />
+          </button>
+        ) : null}
         {unseen > 0 ? (
           <button
             type="button"
@@ -640,7 +726,12 @@ export function ThreadView({
           </button>
         ) : null}
         {typingNames.length > 0 ? (
-          <p className="border-t border-neutral-200 bg-white px-4 py-1 text-xs text-neutral-600 italic">
+          <p className="flex items-center gap-2 border-t border-neutral-200 bg-white px-4 py-1.5 text-xs text-neutral-600 italic" role="status">
+            <span className="flex gap-0.5" aria-hidden="true">
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 [animation-delay:-0.3s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400 [animation-delay:-0.15s]" />
+              <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-neutral-400" />
+            </span>
             {typingNames.join(", ")} {typingNames.length === 1 ? "is" : "are"} typing…
           </p>
         ) : null}
@@ -649,8 +740,13 @@ export function ThreadView({
           conversationId={conversationId}
           replyTo={replyTo}
           onClearReply={() => setReplyTo(null)}
-          onTyping={sendTyping}
-          onSent={load}
+          onTyping={publishTyping}
+          onSent={() => {
+            publishStopped();
+            load();
+          }}
+          onSending={handleSending}
+          onSendFailed={handleSendFailed}
           onError={onError}
           seed={composerSeed}
         />

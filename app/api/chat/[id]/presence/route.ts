@@ -7,9 +7,9 @@ import { fetchPresence } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
 
 /**
- * Genuine presence for conversation members: backed by live socket
- * connections on the realtime server. Only co-members may query, and an
- * unreachable realtime server yields `available: false` — never a guess.
+ * Genuine presence for conversation members: backed by live Ably presence
+ * entries. Only co-members may query, and unconfigured or unreachable
+ * realtime yields `available: false` — never a guess.
  */
 export async function GET(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();

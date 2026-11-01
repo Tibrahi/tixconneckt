@@ -38,7 +38,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         eq(conversationMembers.userId, session.user.id),
       ),
     );
-  await emitToRoom(`user:${session.user.id}`, "conversation:updated", {
+  await emitToRoom(`private:user:${session.user.id}`, "conversation:update", {
     conversationId: id,
     settings,
   });

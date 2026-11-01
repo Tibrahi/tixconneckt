@@ -81,7 +81,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .set({ updatedAt: new Date() })
     .where(eq(conversations.id, target.conversation.id));
 
-  await emitToRoom(`conversation:${target.conversation.id}`, "message:new", {
+  await emitToRoom(`private:conversation:${target.conversation.id}`, "message:new", {
     id: inserted.id,
     conversationId: target.conversation.id,
     kind: "user",
@@ -97,6 +97,16 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     .from(conversationMembers)
     .innerJoin(users, eq(users.id, conversationMembers.userId))
     .where(eq(conversationMembers.conversationId, target.conversation.id));
+  await Promise.all(
+    members
+      .filter((m) => m.userId !== session.user.id)
+      .map((m) =>
+        emitToRoom(`private:user:${m.userId}`, "conversation:update", {
+          conversationId: target.conversation.id,
+          messageId: inserted.id,
+        }),
+      ),
+  );
   for (const m of members) {
     if (m.userId === session.user.id) continue;
     if (normalizeSettings(m.settings).muted) continue;

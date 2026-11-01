@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { ROUTES } from "@/lib/routes";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
+import { Icon } from "@/components/ui/Icon";
 import { formatBytes, readApi, type ChatAttachment, type ChatMessage } from "./types";
 
 export const EMOJI_PALETTE = ["👍", "❤️", "😂", "🎉", "😮", "😢", "🙏", "👏"];
@@ -135,6 +136,62 @@ function ReferenceCard({ reference }: { reference: { type: string; id: string; t
 }
 
 /**
+ * Genuine delivery state for my own messages: Sending (optimistic, not yet
+ * acknowledged), Sent (persisted), Delivered (a recipient device confirmed
+ * receipt), Read / Seen by N (recipient read receipts from the database).
+ */
+function DeliveryState({
+  sending,
+  read,
+  readCount,
+  delivered,
+}: {
+  sending: boolean;
+  read: boolean;
+  readCount: number | null;
+  delivered: boolean;
+}) {
+  if (sending) {
+    return (
+      <span className="inline-flex items-center gap-1" title="Sending">
+        <Icon name="clock" />
+        <span>Sending…</span>
+      </span>
+    );
+  }
+  if (read) {
+    return (
+      <span className="inline-flex items-center gap-1 text-brand-700" title="Read">
+        <Icon name="check-double" />
+        <span>Read</span>
+      </span>
+    );
+  }
+  if (readCount !== null && readCount > 0) {
+    return (
+      <span className="inline-flex items-center gap-1 text-brand-700" title={`Seen by ${readCount}`}>
+        <Icon name="check-double" />
+        <span>Seen by {readCount}</span>
+      </span>
+    );
+  }
+  if (delivered) {
+    return (
+      <span className="inline-flex items-center gap-1" title="Delivered">
+        <Icon name="check-double" />
+        <span>Delivered</span>
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1" title="Sent">
+      <Icon name="check" />
+      <span>Sent</span>
+    </span>
+  );
+}
+
+/**
  * One message: bubbles, replies, reactions, attachments, references,
  * read state, and the contextual action menu. System messages and
  * tombstones render plainly with no actions.
@@ -154,6 +211,8 @@ export function MessageBubble({
   onTranscribe,
   analyzing,
   transcript,
+  delivered,
+  interactive,
   onError,
 }: {
   message: ChatMessage;
@@ -170,6 +229,8 @@ export function MessageBubble({
   onTranscribe: (m: ChatMessage) => void;
   analyzing: boolean;
   transcript: string | null;
+  delivered: boolean;
+  interactive?: boolean;
   onError: (m: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -302,9 +363,14 @@ export function MessageBubble({
         <p className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] text-neutral-500">
           <span>{new Date(message.createdAt).toLocaleString("en-US")}</span>
           {message.editedAt ? <span>· edited</span> : null}
-          {message.read === true ? <span>· Read</span> : null}
-          {message.read === false ? <span>· Sent</span> : null}
-          {typeof message.readCount === "number" ? <span>· Seen by {message.readCount}</span> : null}
+          {mine && message.kind === "user" && !message.deleted ? (
+            <DeliveryState
+              sending={message.id.startsWith("pending:")}
+              read={message.read === true}
+              readCount={typeof message.readCount === "number" ? message.readCount : null}
+              delivered={delivered}
+            />
+          ) : null}
         </p>
         {message.reactions.length > 0 ? (
           <div className="mt-1 flex flex-wrap gap-1">
@@ -322,7 +388,7 @@ export function MessageBubble({
           </div>
         ) : null}
 
-        {!message.deleted ? (
+        {!message.deleted && interactive !== false ? (
           <div ref={menuRef} className="absolute -top-3 right-2">
             <button
               type="button"

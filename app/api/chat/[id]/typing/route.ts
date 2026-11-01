@@ -6,9 +6,10 @@ import { getSession } from "@/lib/session";
 
 /**
  * Typing indicator relay: membership-checked, ephemeral (never persisted).
- * Clients throttle calls and expire the indicator locally.
+ * Body `{ state: "start" | "stop" }` (default "start"). Clients throttle
+ * start calls and expire the indicator locally as a fallback.
  */
-export async function POST(_req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const rl = await rateLimit("typing", session.user.id, 120, "1 m");
@@ -18,7 +19,15 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
   const membership = await requireConversationMembership(id, session.user.id);
   if (!membership) return apiError("You are not a member of this conversation.", 403);
 
-  const live = await emitToRoom(`conversation:${id}`, "typing", {
+  let state = "start";
+  try {
+    const body = (await req.json()) as { state?: unknown };
+    if (body.state === "stop") state = "stop";
+  } catch {
+    /* empty body means start */
+  }
+
+  const live = await emitToRoom(`private:conversation:${id}`, state === "stop" ? "typing:stop" : "typing:start", {
     conversationId: id,
     userId: session.user.id,
     name: session.user.name,

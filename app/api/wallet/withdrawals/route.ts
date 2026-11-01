@@ -375,7 +375,7 @@ async function decideGroupWithdrawal(
       targetId: input.draw.id,
       ipAddress: clientIp(req),
     });
-    await emitToRoom(`group:${input.groupId}`, "wallet:updated", { kind: "withdrawal" });
+    await emitToRoom(`private:group:${input.groupId}`, "wallet:updated", { kind: "withdrawal" });
     return apiOk(result);
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Could not process this withdrawal.", 400);

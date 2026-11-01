@@ -15,9 +15,9 @@ const envSchema = z.object({
   UPSTASH_REDIS_REST_URL: z.string().default(""),
   UPSTASH_REDIS_REST_TOKEN: z.string().default(""),
   NEXT_PUBLIC_APP_URL: z.string().default("http://localhost:3000"),
-  NEXT_PUBLIC_REALTIME_URL: z.string().default(""),
-  REALTIME_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
-  INTERNAL_RELAY_SECRET: z.string().default(""),
+  ABLY_API_KEY: z.string().default(""),
+  TURN_USERNAME: z.string().default(""),
+  TURN_PASSWORD: z.string().default(""),
   CRON_SECRET: z.string().default(""),
   NODE_ENV: z.string().default("development"),
 });

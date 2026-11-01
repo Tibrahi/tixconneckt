@@ -23,10 +23,10 @@ export function resolveCallDecision(
 ): DecisionOutcome {
   if (current === "ringing") {
     if (actor === "callee" && decision === "accepted") {
-      return { status: "accepted", event: "call:accepted", notifyMissed: false };
+      return { status: "accepted", event: "call:accept", notifyMissed: false };
     }
     if (actor === "callee" && (decision === "declined" || decision === "ended")) {
-      return { status: "declined", event: "call:declined", notifyMissed: false };
+      return { status: "declined", event: "call:reject", notifyMissed: false };
     }
     if (actor === "caller" && decision === "ended") {
       return { status: "missed", event: "call:missed", notifyMissed: true };
@@ -35,7 +35,7 @@ export function resolveCallDecision(
   }
   if (current === "accepted") {
     if (decision === "ended") {
-      return { status: "ended", event: "call:ended", notifyMissed: false };
+      return { status: "ended", event: "call:end", notifyMissed: false };
     }
     return { error: "This call is already active." };
   }

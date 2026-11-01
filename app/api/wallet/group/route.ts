@@ -98,7 +98,7 @@ export async function POST(req: Request) {
       resourceId: wallet.id,
     });
   }
-  await emitToRoom(`group:${parsed.data.groupId}`, "wallet:updated", { kind: "contribution" });
+  await emitToRoom(`private:group:${parsed.data.groupId}`, "wallet:updated", { kind: "contribution" });
 
   return apiOk({ contributionId: contrib.id, entryId: entry.id, reference: entry.reference }, 201);
 }
@@ -199,7 +199,7 @@ export async function PATCH(req: Request) {
       targetId: contrib.id,
       ipAddress: clientIp(req),
     });
-    await emitToRoom(`group:${wallet.ownerId}`, "wallet:updated", { kind: "contribution" });
+    await emitToRoom(`private:group:${wallet.ownerId}`, "wallet:updated", { kind: "contribution" });
     return apiOk(result);
   } catch (error) {
     return apiError(error instanceof Error ? error.message : "Could not process this contribution.", 400);

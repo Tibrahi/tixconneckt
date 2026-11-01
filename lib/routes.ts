@@ -43,7 +43,7 @@ export const ROUTES = {
   adminSettings: "/admin/settings",
   api: {
     auth: "/api/auth",
-    socket: "/api/socket",
+    ablyToken: "/api/ably/token",
     cronActions: "/api/cron/actions",
     health: "/api/health",
   },

@@ -15,7 +15,7 @@ import { SelectField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs } from "@/components/ui/Tabs";
 import { useToast } from "@/components/ui/Toast";
-import { useSocket } from "@/components/realtime/SocketProvider";
+import { useAbly } from "@/components/realtime/AblyProvider";
 
 interface Preview {
   shortId: string;
@@ -106,7 +106,7 @@ function PreviewRow({
 
 /**
  * Paged server-driven list: initial skeleton, background refresh keeps data,
- * abort on unmount/page change, socket-driven updates where relevant.
+ * abort on unmount/page change, realtime-driven updates where relevant.
  */
 function usePagedList<T>(fetcher: (page: number, signal: AbortSignal) => Promise<{ items: T[]; total: number }>) {
   const [items, setItems] = useState<T[] | null>(null);
@@ -158,7 +158,7 @@ function ConnectedSection({ signal }: { signal: number }) {
     );
     return data;
   });
-  const { onEvent } = useSocket();
+  const { onEvent } = useAbly();
 
   useEffect(() => {
     return onEvent("connection:updated", () => list.reload());
@@ -221,7 +221,7 @@ function RequestsSection({ onSent }: { onSent: () => void }) {
   const [actingId, setActingId] = useState<string | null>(null);
   const sendOp = useOperation();
   const { success, error } = useToast();
-  const { onEvent } = useSocket();
+  const { onEvent } = useAbly();
   const abortRef = useRef<AbortController | null>(null);
 
   const load = useCallback(async (background = false) => {

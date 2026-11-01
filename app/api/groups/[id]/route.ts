@@ -129,7 +129,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     resourceId: id,
     emailTo: user.email,
   });
-  await emitToRoom(`group:${id}`, "group:members", {});
+  await emitToRoom(`private:group:${id}`, "group:members", {});
 
   // Sync the group's conversation: membership + a system message in history.
   const [groupConv] = await db
@@ -227,7 +227,7 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
     resourceType: "group_approval",
     resourceId: approval.id,
   });
-  await emitToRoom(`group:${id}`, "group:approval", { id: approval.id, status: parsed.data.decision });
+  await emitToRoom(`private:group:${id}`, "group:approval", { id: approval.id, status: parsed.data.decision });
 
   return apiOk({ decided: parsed.data.decision });
 }

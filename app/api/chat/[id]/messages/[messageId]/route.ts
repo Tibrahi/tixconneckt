@@ -74,7 +74,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     .update(messages)
     .set({ body: parsed.data.body.slice(0, 8000), editedAt: new Date() })
     .where(eq(messages.id, message.id));
-  await emitToRoom(`conversation:${id}`, "message:edited", {
+  await emitToRoom(`private:conversation:${id}`, "message:edit", {
     id: message.id,
     conversationId: id,
     body: parsed.data.body.slice(0, 8000),
@@ -127,7 +127,7 @@ export async function DELETE(req: Request, { params }: RouteContext) {
     .update(messages)
     .set({ body: DELETED_MESSAGE_BODY, deletedAt: new Date(), deletedBy: session.user.id, metadata: {} })
     .where(eq(messages.id, message.id));
-  await emitToRoom(`conversation:${id}`, "message:deleted", {
+  await emitToRoom(`private:conversation:${id}`, "message:delete", {
     id: message.id,
     conversationId: id,
   });

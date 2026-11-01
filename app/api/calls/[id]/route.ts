@@ -49,7 +49,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     .where(eq(calls.id, id));
 
   const otherId = actor === "caller" ? call.calleeId : call.callerId;
-  await emitToRoom(`user:${otherId}`, outcome.event, {
+  await emitToRoom(`private:user:${otherId}`, outcome.event, {
     callId: call.id,
     status: outcome.status,
   });

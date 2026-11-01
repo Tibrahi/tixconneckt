@@ -5,7 +5,15 @@ import { ErrorDialog } from "@/components/ui/Modal";
 import { ConversationPanel } from "./ConversationPanel";
 import { ThreadView } from "./ThreadView";
 
-export function ChatThreadPage({ conversationId, myUserId }: { conversationId: string; myUserId: string }) {
+export function ChatThreadPage({
+  conversationId,
+  myUserId,
+  myUserName,
+}: {
+  conversationId: string;
+  myUserId: string;
+  myUserName: string;
+}) {
   const [error, setError] = useState<string | null>(null);
   return (
     <>
@@ -14,7 +22,13 @@ export function ChatThreadPage({ conversationId, myUserId }: { conversationId: s
           <ConversationPanel activeId={conversationId} compact onError={setError} />
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white">
-          <ThreadView key={conversationId} conversationId={conversationId} myUserId={myUserId} onError={setError} />
+          <ThreadView
+            key={conversationId}
+            conversationId={conversationId}
+            myUserId={myUserId}
+            myUserName={myUserName}
+            onError={setError}
+          />
         </div>
       </div>
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} /> : null}
