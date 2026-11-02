@@ -42,8 +42,19 @@ export async function GET() {
     .orderBy(desc(documents.createdAt))
     .limit(50);
   const jobs = await db
-    .select()
+    .select({
+      id: parsingJobs.id,
+      documentId: parsingJobs.documentId,
+      status: parsingJobs.status,
+      proposedJson: parsingJobs.proposedJson,
+      extractionJson: parsingJobs.extractionJson,
+      error: parsingJobs.error,
+      destinationType: parsingJobs.destinationType,
+      createdAt: parsingJobs.createdAt,
+      filename: documents.filename,
+    })
     .from(parsingJobs)
+    .leftJoin(documents, eq(parsingJobs.documentId, documents.id))
     .where(eq(parsingJobs.requestedBy, session.user.id))
     .orderBy(desc(parsingJobs.createdAt))
     .limit(50);

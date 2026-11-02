@@ -17,7 +17,7 @@ const TASK_INSTRUCTIONS: Record<string, string> = {
   match_explain:
     "Explain in concrete terms why two profiles are compatible collaborators, citing the profile details that matter most.",
   parse_document:
-    "Extract exactly the information the goal asks for from the document text. Never invent fields that are not present; mark anything uncertain.",
+    "Read the supplied receipt or document faithfully. Return a concise transcription of all visible/relevant content, a structured list of extracted fields, and a transaction object when this is a payment receipt. Never invent values; use null for unknown transaction fields and mark uncertainty. The original document may be supplied as an image data URL.",
   project_analysis:
     "Structure the idea into a reviewable project outline: goal, scope, milestones, risks, and open questions.",
   interpret_action:
@@ -93,6 +93,14 @@ export async function runSparkTask(request: {
     `${taskInstruction} Respond with a single JSON object and nothing else.` +
     (request.schemaHint ? ` Shape: ${request.schemaHint}` : "");
   let res: Response;
+  const taskInput = request.input && typeof request.input === "object" ? request.input as Record<string, unknown> : {};
+  const imageDataUrl = typeof taskInput.imageDataUrl === "string" ? taskInput.imageDataUrl : null;
+  const userContent = imageDataUrl
+    ? [
+        { type: "text", text: JSON.stringify(Object.fromEntries(Object.entries(taskInput).filter(([key]) => key !== "imageDataUrl"))) },
+        { type: "image_url", image_url: { url: imageDataUrl } },
+      ]
+    : JSON.stringify(request.input);
   try {
     res = await fetch(url, {
       method: "POST",
@@ -104,7 +112,7 @@ export async function runSparkTask(request: {
         model,
         messages: [
           { role: "system", content: system },
-          { role: "user", content: JSON.stringify(request.input) },
+          { role: "user", content: userContent },
         ],
         response_format: request.outputSchema
           ? {

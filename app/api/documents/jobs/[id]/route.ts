@@ -8,6 +8,8 @@ import { validateFieldName, validateFieldValue } from "@/lib/flexible-records";
 import { splitExtraction } from "@/lib/proof";
 import { getSession } from "@/lib/session";
 import { transactionProposalSchema } from "@/lib/validation";
+import { documents } from "@/db/schema";
+import { getStoredDocumentBytes } from "@/lib/storage";
 
 /**
  * Run AI extraction on a parsing job. The result is validated against a Zod
@@ -28,15 +30,30 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
 
   await db.update(parsingJobs).set({ status: "processing", error: null }).where(eq(parsingJobs.id, id));
 
+  let inputText = job.inputText ?? "";
+  let imageDataUrl: string | undefined;
+  if (job.documentId) {
+    const [document] = await db.select().from(documents).where(eq(documents.id, job.documentId)).limit(1);
+    if (document) {
+      const bytes = await getStoredDocumentBytes(document);
+      if (bytes && document.mimeType.toLowerCase().startsWith("image/")) {
+        imageDataUrl = `data:${document.mimeType};base64,${bytes.toString("base64")}`;
+      } else if (bytes && document.mimeType === "text/plain") {
+        inputText = bytes.toString("utf8").slice(0, 20000);
+      }
+    }
+  }
+
   const spark = await callMuseSpark({
     task: "parse_document",
     input: {
-      text: job.inputText,
+      text: inputText || undefined,
+      imageDataUrl,
       documentId: job.documentId,
       destination: job.destinationType,
     },
     schemaHint:
-      "transaction: { amountMinor: int minor units, currency: 3-letter, direction: credit|debit, reference?: provider transaction ref, sender?, recipient?, provider?: payment provider name, paymentStatus?: e.g. completed/pending, description?, occurredAt?: ISO datetime, extractionConfidence?: 0..1 }. Extract only these fields.",
+      "documentText?: faithful transcription; fields?: object containing every relevant value found; transaction?: { amountMinor?: number, currency?: 3-letter, direction?: credit|debit, reference?, sender?, recipient?, provider?, paymentStatus?, description?, occurredAt?, extractionConfidence? }. Use null/omit when unreadable or absent. Never invent. Preserve all other useful information in fields.",
   });
 
   if (!spark.configured) {
@@ -51,18 +68,19 @@ export async function POST(_req: Request, { params }: { params: Promise<{ id: st
     return apiError(spark.error ?? "Extraction failed. You can retry safely.", 502);
   }
 
-  const split = splitExtraction(spark.data);
-  if (!split.ok) {
-    await db.update(parsingJobs).set({ status: "failed", error: split.error }).where(eq(parsingJobs.id, id));
-    return apiError(split.error, 502);
-  }
-  const proposed = { ...split.value.tx, extra: split.value.extra };
+  const raw = spark.data && typeof spark.data === "object" && !Array.isArray(spark.data)
+    ? spark.data as Record<string, unknown>
+    : { documentText: String(spark.data ?? "") };
+  const split = splitExtraction(raw);
+  const proposed = split.ok
+    ? { ...split.value.tx, extra: split.value.extra }
+    : { extra: raw.fields && typeof raw.fields === "object" ? raw.fields : {}, unverified: true, validationMessage: split.error };
 
   await db
     .update(parsingJobs)
-    .set({ status: "needs_review", proposedJson: proposed, error: null })
+    .set({ status: "needs_review", proposedJson: proposed, extractionJson: raw, error: null })
     .where(eq(parsingJobs.id, id));
-  return apiOk({ jobId: id, status: "needs_review", proposed });
+  return apiOk({ jobId: id, status: "needs_review", proposed, extraction: raw, unverified: !split.ok });
 }
 
 const approveSchema = z.object({

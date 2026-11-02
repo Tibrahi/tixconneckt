@@ -127,6 +127,13 @@
       "when": 1793640200002,
       "tag": "0018_payment_method_details",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793640200003,
+      "tag": "0019_document_extraction_history",
+      "breakpoints": true
     }
   ]
 }

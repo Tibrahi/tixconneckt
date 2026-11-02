@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { formatMoney } from "@/lib/currency";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
 import { Button } from "@/components/ui/Button";
@@ -39,6 +39,18 @@ export function DepositIntake({
   const [extractionFailed, setExtractionFailed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [extraction, setExtraction] = useState<Record<string, unknown> | null>(null);
+  const [history, setHistory] = useState<Array<{ id: string; filename: string | null; status: string; createdAt: string; error: string | null; destinationType: string | null }>>([]);
+
+  const loadHistory = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documents", { cache: "no-store" });
+      const data = await readApi<{ jobs: typeof history }>(res);
+      setHistory(data.jobs.filter((job) => job.destinationType === "wallet"));
+    } catch { /* Upload and extraction controls remain usable if history cannot load. */ }
+  }, []);
+
+  useEffect(() => { void loadHistory(); }, [loadHistory]);
 
   function reset(clearInput: boolean) {
     setJobId(null);
@@ -46,6 +58,7 @@ export function DepositIntake({
     setAiPending(null);
     setExtractionFailed(null);
     setDone(null);
+    setExtraction(null);
     if (clearInput) setPasted("");
   }
 
@@ -56,17 +69,23 @@ export function DepositIntake({
         pending?: boolean;
         pendingReason?: string;
         proposed?: ProposedTx;
+        extraction?: Record<string, unknown>;
       }>(res);
+      setExtraction(data.extraction ?? null);
       if (data.pending) {
         setAiPending(data.pendingReason ?? "AI parsing is not configured");
+        await loadHistory();
         return;
       }
-      if (data.proposed) setProposed(data.proposed);
+      if (data.proposed && "amountMinor" in data.proposed) setProposed(data.proposed);
+      else if (data.proposed) setExtractionFailed("The document was read, but the transaction details are incomplete. The original upload and extracted text are saved for manual review.");
+      await loadHistory();
     } catch (error) {
       // Extraction failed but the evidence is saved — offer manual review.
       setExtractionFailed(
         error instanceof Error ? error.message : "Automatic extraction failed for this evidence.",
       );
+      await loadHistory();
     }
   }
 
@@ -80,6 +99,7 @@ export function DepositIntake({
       const res = await fetch("/api/documents", { method: "POST", body: form });
       const data = await readApi<{ documentId: string; jobId: string }>(res);
       setJobId(data.jobId);
+      await loadHistory();
       await runExtraction(data.jobId);
     } catch (error) {
       // The evidence may still be saved server-side; surface honestly.
@@ -122,11 +142,12 @@ export function DepositIntake({
       if (data.queuedForManualReview) {
         setDone("manual");
       } else {
-        setDone(data.reference ?? "submitted");
+      setDone(data.reference ?? "submitted");
       }
       setProposed(null);
       setAiPending(null);
       onSubmitted();
+      await loadHistory();
     } catch (error) {
       onError(error instanceof Error ? error.message : "We couldn't submit this evidence. Please try again.");
     } finally {
@@ -221,6 +242,14 @@ export function DepositIntake({
             </div>
           ) : null}
 
+          {extraction ? (
+            <div className="rounded-md border border-neutral-200 p-3">
+              <p className="mb-2 text-sm font-semibold text-black">What Muse Spark read · unverified</p>
+              {typeof extraction.documentText === "string" ? <p className="whitespace-pre-wrap text-sm text-neutral-800">{extraction.documentText}</p> : null}
+              {extraction.fields && typeof extraction.fields === "object" ? <DynamicValue doc={extraction.fields as Record<string, unknown>} /> : null}
+            </div>
+          ) : null}
+
           {proposed ? (
             <div className="rounded-md border border-neutral-200 p-3">
               <p className="mb-2 text-sm font-semibold text-black">Extracted fields (read-only)</p>
@@ -268,6 +297,20 @@ export function DepositIntake({
           ) : null}
         </div>
       )}
+      <div className="mt-4 border-t border-neutral-200 pt-3">
+        <h3 className="text-sm font-semibold text-black">Upload and extraction history</h3>
+        {history.length === 0 ? <p className="mt-1 text-xs text-neutral-600">No wallet documents uploaded yet.</p> : (
+          <ul className="mt-2 flex flex-col gap-2">
+            {history.map((item) => (
+              <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2 text-xs">
+                <span>{item.filename ?? "Pasted transaction message"} · {new Date(item.createdAt).toLocaleString()}</span>
+                <span className="font-medium text-blue-800">{item.status === "approved" ? "Verified" : item.status === "needs_review" ? "Unverified · review needed" : item.status === "processing" ? "Reading document…" : item.status === "failed" ? "Extraction issue · evidence saved" : "Uploaded · unverified"}</span>
+                {item.error ? <span className="w-full text-neutral-600">{item.error}</span> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </div>
     </Card>
   );
 }

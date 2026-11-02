@@ -344,6 +344,14 @@ export async function resolveStoredBytes(
   };
 }
 
+/** Load original private document bytes for server-side AI extraction. */
+export async function getStoredDocumentBytes(
+  doc: { storageKey: string | null; data: Buffer | Uint8Array | null; mimeType: string },
+): Promise<Buffer | null> {
+  const resolved = await resolveStoredBytes(doc.storageKey, doc.data, doc.mimeType);
+  return resolved?.body ?? null;
+}
+
 /** Same-origin byte URL for PostgreSQL-mode documents (authorized server-side). */
 export function postgresDocumentUrl(documentId: string): string {
   return `/api/documents/${encodeURIComponent(documentId)}/file`;

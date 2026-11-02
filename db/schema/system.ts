@@ -193,6 +193,7 @@ export const parsingJobs = pgTable(
     /** pending | processing | needs_review | approved | failed */
     status: text("status").notNull().default("pending"),
     proposedJson: jsonb("proposed_json").$type<Record<string, unknown>>(),
+    extractionJson: jsonb("extraction_json").$type<Record<string, unknown>>(),
     error: text("error"),
     destinationType: text("destination_type"),
     destinationId: text("destination_id"),
