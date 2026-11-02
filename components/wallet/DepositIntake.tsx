@@ -39,6 +39,7 @@ export function DepositIntake({
   const [extractionFailed, setExtractionFailed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
+  const [extraction, setExtraction] = useState<Record<string, unknown> | null>(null);
   const [history, setHistory] = useState<Array<{ id: string; filename: string | null; status: string; createdAt: string; error: string | null; destinationType: string | null; destinationId: string | null }>>([]);
 
   const loadHistory = useCallback(async () => {
@@ -57,6 +58,7 @@ export function DepositIntake({
     setAiPending(null);
     setExtractionFailed(null);
     setDone(null);
+    setExtraction(null);
     if (clearInput) setPasted("");
   }
 
@@ -67,7 +69,9 @@ export function DepositIntake({
         pending?: boolean;
         pendingReason?: string;
         proposed?: ProposedTx;
+        extraction?: Record<string, unknown>;
       }>(res);
+      setExtraction(data.extraction ?? null);
       if (data.pending) {
         setAiPending(data.pendingReason ?? "AI parsing is not configured");
         await loadHistory();
@@ -218,7 +222,7 @@ export function DepositIntake({
               </p>
               <div>
                 <Button size="sm" variant="secondary" loading={busy} disabled={!jobId} onClick={submitForVerification}>
-                  Submit for manual review
+                  Save for manual review
                 </Button>
               </div>
             </div>
@@ -232,9 +236,15 @@ export function DepositIntake({
               </p>
               <div>
                 <Button size="sm" variant="secondary" loading={busy} disabled={!jobId} onClick={submitForVerification}>
-                  Submit for manual review
+                  Save for manual review
                 </Button>
               </div>
+            </div>
+          ) : null}
+
+          {extraction ? (
+            <div className="rounded-md border border-neutral-200 p-3">
+              <DynamicValue doc={extraction} />
             </div>
           ) : null}
 
@@ -278,7 +288,7 @@ export function DepositIntake({
               ) : null}
               <div className="mt-3">
                 <Button loading={busy} onClick={submitForVerification}>
-                  Submit for verification
+                  Save and submit for verification
                 </Button>
               </div>
             </div>
