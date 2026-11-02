@@ -86,12 +86,15 @@ export async function POST(req: Request) {
   const stored = { ...(job.proposedJson as Record<string, unknown>) };
   delete stored.extra;
   const tx = transactionProposalSchema.safeParse(stored);
-  if (!tx.success) return apiError("The extracted transaction data is invalid.", 400);
-  if (tx.data.direction !== "credit") {
-    return apiError("Only incoming deposits can be submitted here. Use withdrawals to send funds out.", 400);
+  if (!tx.success) {
+    await db.update(parsingJobs).set({ status: "failed", error: "Saved for manual review: transaction details need confirmation." }).where(eq(parsingJobs.id, job.id));
+    await audit({ actorId: session.user.id, action: "wallet.deposit.manual_queue", targetType: "parsing_job", targetId: job.id, ipAddress: clientIp(req) });
+    return apiOk({ queuedForManualReview: true }, 202);
   }
   if (!isSupportedCurrency(tx.data.currency)) {
-    return apiError(`Currency ${tx.data.currency} is not supported.`, 400);
+    await db.update(parsingJobs).set({ status: "failed", error: "Saved for manual review: currency needs confirmation." }).where(eq(parsingJobs.id, job.id));
+    await audit({ actorId: session.user.id, action: "wallet.deposit.manual_queue", targetType: "parsing_job", targetId: job.id, ipAddress: clientIp(req) });
+    return apiOk({ queuedForManualReview: true }, 202);
   }
 
   const account = await getOrCreateMemberAccount(session.user.id);
@@ -117,7 +120,12 @@ export async function POST(req: Request) {
   }
 
   const wallet = await ensureWallet("user", session.user.id, tx.data.currency);
+  // The member submitted this through the deposit flow, so the ledger
+  // candidate remains a credit. If Spark read an outgoing direction, flag
+  // it for reviewer confirmation and retain Spark's original direction.
+  const directionNeedsReview = tx.data.direction !== "credit";
   const completeness = extractionCompleteness(tx.data);
+  if (directionNeedsReview) completeness.complete = false;
 
   let entry: { id: string; reference: string };
   try {
@@ -139,6 +147,8 @@ export async function POST(req: Request) {
         description: tx.data.description,
         occurredAt: tx.data.occurredAt,
         extractionConfidence: tx.data.extractionConfidence,
+        extractedDirection: tx.data.direction,
+        directionNeedsReview,
         extractionComplete: completeness.complete,
         extractionMissing: completeness.missing,
       },
@@ -185,7 +195,7 @@ export async function POST(req: Request) {
     ipAddress: clientIp(req),
   });
 
-  return apiOk({ entryId: entry.id, reference: entry.reference }, 201);
+  return apiOk({ entryId: entry.id, reference: entry.reference, queuedForManualReview: directionNeedsReview }, 201);
 }
 
 const ownerActionSchema = z.object({

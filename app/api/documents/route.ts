@@ -49,6 +49,7 @@ export async function GET() {
       proposedJson: parsingJobs.proposedJson,
       extractionJson: parsingJobs.extractionJson,
       error: parsingJobs.error,
+      destinationId: parsingJobs.destinationId,
       destinationType: parsingJobs.destinationType,
       createdAt: parsingJobs.createdAt,
       filename: documents.filename,

@@ -39,8 +39,7 @@ export function DepositIntake({
   const [extractionFailed, setExtractionFailed] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string | null>(null);
-  const [extraction, setExtraction] = useState<Record<string, unknown> | null>(null);
-  const [history, setHistory] = useState<Array<{ id: string; filename: string | null; status: string; createdAt: string; error: string | null; destinationType: string | null }>>([]);
+  const [history, setHistory] = useState<Array<{ id: string; filename: string | null; status: string; createdAt: string; error: string | null; destinationType: string | null; destinationId: string | null }>>([]);
 
   const loadHistory = useCallback(async () => {
     try {
@@ -58,7 +57,6 @@ export function DepositIntake({
     setAiPending(null);
     setExtractionFailed(null);
     setDone(null);
-    setExtraction(null);
     if (clearInput) setPasted("");
   }
 
@@ -69,9 +67,7 @@ export function DepositIntake({
         pending?: boolean;
         pendingReason?: string;
         proposed?: ProposedTx;
-        extraction?: Record<string, unknown>;
       }>(res);
-      setExtraction(data.extraction ?? null);
       if (data.pending) {
         setAiPending(data.pendingReason ?? "AI parsing is not configured");
         await loadHistory();
@@ -242,14 +238,6 @@ export function DepositIntake({
             </div>
           ) : null}
 
-          {extraction ? (
-            <div className="rounded-md border border-neutral-200 p-3">
-              <p className="mb-2 text-sm font-semibold text-black">What Muse Spark read · unverified</p>
-              {typeof extraction.documentText === "string" ? <p className="whitespace-pre-wrap text-sm text-neutral-800">{extraction.documentText}</p> : null}
-              {extraction.fields && typeof extraction.fields === "object" ? <DynamicValue doc={extraction.fields as Record<string, unknown>} /> : null}
-            </div>
-          ) : null}
-
           {proposed ? (
             <div className="rounded-md border border-neutral-200 p-3">
               <p className="mb-2 text-sm font-semibold text-black">Extracted fields (read-only)</p>
@@ -304,7 +292,7 @@ export function DepositIntake({
             {history.map((item) => (
               <li key={item.id} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-neutral-200 px-3 py-2 text-xs">
                 <span>{item.filename ?? "Pasted transaction message"} · {new Date(item.createdAt).toLocaleString()}</span>
-                <span className="font-medium text-blue-800">{item.status === "approved" ? "Verified" : item.status === "needs_review" ? "Unverified · review needed" : item.status === "processing" ? "Reading document…" : item.status === "failed" ? "Extraction issue · evidence saved" : "Uploaded · unverified"}</span>
+                <span className="font-medium text-blue-800">{item.destinationId ? "Submitted · awaiting verification" : item.status === "approved" ? "Verified" : item.status === "needs_review" ? "Unverified · review needed" : item.status === "processing" ? "Reading document…" : item.status === "failed" ? "Saved for manual review" : "Uploaded · unverified"}</span>
                 {item.error ? <span className="w-full text-neutral-600">{item.error}</span> : null}
               </li>
             ))}
