@@ -1,6 +1,6 @@
-import { and, desc, eq, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { getDb } from "@/db";
-import { documents, organizations } from "@/db/schema";
+import { documents, organizationMembers, organizations } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import { organizationSchema } from "@/lib/validation";
@@ -31,18 +31,27 @@ export async function GET() {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const db = getDb();
+  const memberships = await db.select({ organizationId: organizationMembers.organizationId })
+    .from(organizationMembers)
+    .where(and(eq(organizationMembers.userId, session.user.id), eq(organizationMembers.status, "active")));
+  const visibleOwnerIds = [session.user.id];
+  const membershipIds = memberships.map((row) => row.organizationId);
   const rows = await db
     .select()
     .from(organizations)
     .where(
-      or(eq(organizations.visibility, "public"), eq(organizations.ownerId, session.user.id)),
+      or(
+        eq(organizations.visibility, "public"),
+        inArray(organizations.ownerId, visibleOwnerIds),
+        ...(membershipIds.length > 0 ? [inArray(organizations.id, membershipIds)] : []),
+      ),
     )
     .orderBy(desc(organizations.createdAt))
     .limit(100);
   return apiOk({
     organizations: rows.map((o) => ({
       ...o,
-      contactJson: o.ownerId === session.user.id ? o.contactJson : null,
+      contactJson: o.ownerId === session.user.id || membershipIds.includes(o.id) ? o.contactJson : null,
     })),
   });
 }
@@ -51,6 +60,7 @@ export async function GET() {
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
+  if (session.user.category === "individual" && session.user.role !== "admin") return apiError("Only university, government, and provider accounts can create organization profiles.", 403);
   let body: unknown;
   try {
     body = await req.json();
@@ -66,11 +76,11 @@ export async function POST(req: Request) {
     if (problem) return apiError(problem, 400);
   }
 
-  const [created] = await db
-    .insert(organizations)
-    .values({
+  const created = await db.transaction(async (tx) => {
+    const [org] = await tx.insert(organizations).values({
       ownerId: session.user.id,
       name: parsed.data.name,
+      kind: ["university", "government", "provider"].includes(session.user.category) ? session.user.category : null,
       description: parsed.data.description,
       category: parsed.data.category,
       website: parsed.data.website,
@@ -78,7 +88,9 @@ export async function POST(req: Request) {
       contactJson: parsed.data.contact ?? {},
       visibility: parsed.data.visibility ?? "public",
       logoDocumentId: parsed.data.logoDocumentId ?? null,
-    })
-    .returning({ id: organizations.id });
+    }).returning({ id: organizations.id });
+    await tx.insert(organizationMembers).values({ organizationId: org.id, userId: session.user.id, role: "owner", status: "active" });
+    return org;
+  });
   return apiOk({ organizationId: created.id }, 201);
 }

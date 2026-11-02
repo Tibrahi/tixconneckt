@@ -7,6 +7,9 @@ import {
   organizations,
   projectFiles,
   projectFolders,
+  organizationMembers,
+  supportRequestDocuments,
+  supportRequests,
 } from "@/db/schema";
 import { canViewFile, loadProjectWithAccess } from "./project-access";
 
@@ -35,6 +38,32 @@ export async function authorizeDocumentAccess(
 ): Promise<AccessDenied | null> {
   if (doc.ownerId === userId || userRole === "admin") return null;
   const db = getDb();
+  const grants = await db.select({ requestId: supportRequestDocuments.requestId })
+    .from(supportRequestDocuments)
+    .innerJoin(supportRequests, eq(supportRequests.id, supportRequestDocuments.requestId))
+    .where(and(
+      eq(supportRequestDocuments.documentId, doc.id),
+      sql`(${supportRequestDocuments.expiresAt} IS NULL OR ${supportRequestDocuments.expiresAt} > now())`,
+      sql`${supportRequests.status} <> 'pending_group_approval'`,
+    )).limit(20);
+  for (const grant of grants) {
+    const [caseRow] = await db.select({ providerId: supportRequests.targetProviderId, organizationId: supportRequests.targetOrganizationId, assignedUserId: supportRequests.assignedUserId })
+      .from(supportRequests).where(eq(supportRequests.id, grant.requestId)).limit(1);
+    if (!caseRow) continue;
+    if (caseRow.providerId === userId) return null;
+    if (caseRow.organizationId) {
+      const [member] = await db.select({ id: organizationMembers.id, role: organizationMembers.role })
+        .from(organizationMembers)
+        .innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
+        .where(and(
+          eq(organizationMembers.organizationId, caseRow.organizationId),
+          eq(organizationMembers.userId, userId),
+          eq(organizationMembers.status, "active"),
+          eq(organizations.verificationStatus, "verified"),
+        )).limit(1);
+      if (member && (member.role === "owner" || member.role === "admin" || caseRow.assignedUserId === userId)) return null;
+    }
+  }
   if (doc.module === "organization") {
     const [branded] = await db
       .select({ id: organizations.id })

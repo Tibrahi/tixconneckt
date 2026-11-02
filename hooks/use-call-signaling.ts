@@ -12,6 +12,7 @@ import { useAbly } from "@/components/realtime/AblyProvider";
 export interface CallSignal {
   callId: string;
   from?: string;
+  to?: string;
   sdp?: string;
   candidate?: string;
   sdpMid?: string | null;
@@ -23,18 +24,21 @@ export interface CallInvite {
   conversationId: string;
   kind: string;
   caller?: { name?: string };
+  groupCall?: boolean;
+  participants?: Array<{ id: string; name: string }>;
 }
 
 export interface CallSignalingHandlers {
   onInvite: (invite: CallInvite) => void;
-  onAccept: (event: { callId: string }) => void;
-  onReject: (event: { callId: string }) => void;
+  onAccept: (event: { callId: string; userId?: string }) => void;
+  onReject: (event: { callId: string; userId?: string }) => void;
   onEnd: (event: { callId: string }) => void;
   onMissed: (event: { callId: string }) => void;
   onOffer: (signal: CallSignal) => void;
   onAnswer: (signal: CallSignal) => void;
   onCandidate: (signal: CallSignal) => void;
   onMediaState: (state: { callId: string; from?: string; muted?: boolean; cameraOff?: boolean }) => void;
+  onParticipantLeft?: (event: { callId: string; userId: string }) => void;
 }
 
 export function useCallSignaling(handlers: CallSignalingHandlers): void {
@@ -42,8 +46,8 @@ export function useCallSignaling(handlers: CallSignalingHandlers): void {
   useEffect(() => {
     const offs = [
       onEvent("call:invite", (p) => handlers.onInvite(p as CallInvite)),
-      onEvent("call:accept", (p) => handlers.onAccept(p as { callId: string })),
-      onEvent("call:reject", (p) => handlers.onReject(p as { callId: string })),
+      onEvent("call:accept", (p) => handlers.onAccept(p as { callId: string; userId?: string })),
+      onEvent("call:reject", (p) => handlers.onReject(p as { callId: string; userId?: string })),
       onEvent("call:end", (p) => handlers.onEnd(p as { callId: string })),
       onEvent("call:missed", (p) => handlers.onMissed(p as { callId: string })),
       onEvent("webrtc:offer", (p) => handlers.onOffer(p as CallSignal)),
@@ -52,6 +56,7 @@ export function useCallSignaling(handlers: CallSignalingHandlers): void {
       onEvent("call:media-state", (p) =>
         handlers.onMediaState(p as { callId: string; from?: string; muted?: boolean; cameraOff?: boolean }),
       ),
+      onEvent("call:participant-left", (p) => handlers.onParticipantLeft?.(p as { callId: string; userId: string })),
     ];
     return () => offs.forEach((off) => off());
     // eslint-disable-next-line react-hooks/exhaustive-deps

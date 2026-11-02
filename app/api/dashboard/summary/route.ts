@@ -7,6 +7,8 @@ import {
   ledgerEntries,
   messages,
   notifications,
+  organizationMembers,
+  organizations,
   profiles,
   projects,
   scheduledActions,
@@ -117,11 +119,22 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       ) AS "funding",
       (SELECT COUNT(*)::int FROM "funding_requests"
         WHERE "status" IN ('pending', 'under_review') AND "provider_id" = ${userId}
+          AND EXISTS (SELECT 1 FROM "users" u JOIN "organizations" o ON o."owner_id" = u."id" JOIN "organization_members" om ON om."organization_id" = o."id" WHERE u."id" = ${userId} AND u."provider_kind" = 'loan' AND o."kind" = 'provider' AND o."category" = 'loan' AND o."verification_status" = 'verified' AND om."user_id" = u."id" AND om."role" IN ('owner', 'admin') AND om."status" = 'active')
       ) + (SELECT COUNT(*)::int FROM "provider_links"
         WHERE "status" = 'pending' AND "provider_id" = ${userId}
-      ) AS "providerQueue"
+          AND EXISTS (SELECT 1 FROM "users" u JOIN "organizations" o ON o."owner_id" = u."id" JOIN "organization_members" om ON om."organization_id" = o."id" WHERE u."id" = ${userId} AND u."provider_kind" = 'loan' AND o."kind" = 'provider' AND o."category" = 'loan' AND o."verification_status" = 'verified' AND om."user_id" = u."id" AND om."role" IN ('owner', 'admin') AND om."status" = 'active')
+      ) AS "providerQueue",
+      (SELECT COUNT(*)::int FROM "support_requests" sr
+        WHERE sr."status" IN ('pending', 'triage', 'awaiting_requester', 'accepted')
+          AND ((sr."target_provider_id" = ${userId} AND EXISTS (SELECT 1 FROM "users" u JOIN "organizations" o ON o."owner_id" = u."id" JOIN "organization_members" om ON om."organization_id" = o."id" WHERE u."id" = ${userId} AND u."provider_kind" = 'support' AND o."kind" = 'provider' AND o."category" = 'support' AND o."verification_status" = 'verified' AND om."user_id" = u."id" AND om."role" IN ('owner', 'admin') AND om."status" = 'active')) OR sr."assigned_user_id" = ${userId}
+            OR sr."requester_user_id" = ${userId}
+            OR sr."target_organization_id" IN (
+              SELECT "organization_id" FROM "organization_members"
+              WHERE "user_id" = ${userId} AND "status" = 'active' AND "role" IN ('owner', 'admin')
+            ))
+      ) AS "supportQueue"
   `));
-  const tally = (tallyRows.rows[0] ?? {}) as Partial<{ matching: number; approvals: number; funding: number; providerQueue: number }>;
+  const tally = (tallyRows.rows[0] ?? {}) as Partial<{ matching: number; approvals: number; funding: number; providerQueue: number; supportQueue: number }>;
   const myGroups = await withDbRead(() =>
     db
       .select({ groupId: groupMembers.groupId, role: groupMembers.role, name: groups.name })
@@ -135,6 +148,15 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       .from(wallets)
       .where(and(eq(wallets.ownerType, "user"), eq(wallets.ownerId, userId))),
   );
+  const myOrganizations = await withDbRead(() => db.select({
+    id: organizations.id,
+    name: organizations.name,
+    kind: organizations.kind,
+    verificationStatus: organizations.verificationStatus,
+    role: organizationMembers.role,
+  }).from(organizationMembers).innerJoin(organizations, eq(organizations.id, organizationMembers.organizationId))
+    .where(and(eq(organizationMembers.userId, userId), eq(organizationMembers.status, "active")))
+    .orderBy(desc(organizations.updatedAt)).limit(5));
 
   const myConversations = db
     .select({ id: conversationMembers.conversationId })
@@ -232,6 +254,8 @@ async function buildSummary(userId: string): Promise<Record<string, unknown>> {
       providerKind: identity?.providerKind ?? null,
     },
     providerQueue: tally?.providerQueue ?? 0,
+    supportQueue: tally?.supportQueue ?? 0,
+    organizations: myOrganizations,
     unreadChat: counts.chat,
     unreadNotifications: counts.notifications,
     pendingConnections: counts.conneckt,

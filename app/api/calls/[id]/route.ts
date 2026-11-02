@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { calls, users } from "@/db/schema";
+import { callParticipants, calls, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { resolveCallDecision, type CallActor, type CallStatus } from "@/lib/calls";
 import { postSystemMessage } from "@/lib/chat";
@@ -33,11 +33,67 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   const call = await loadParticipantCall(id, session.user.id);
   if (!call) return apiError("Call not found.", 404);
 
+  const db = getDb();
+  const participants = await db.select().from(callParticipants).where(eq(callParticipants.callId, id));
+  const isGroupCall = participants.length > 2;
+  if (isGroupCall) {
+    const participant = participants.find((row) => row.userId === session.user.id);
+    if (!participant) return apiError("You are not a participant in this call.", 403);
+    const now = new Date();
+    if (parsed.data.decision === "accepted") {
+      if (participant.status === "declined" || participant.status === "left" || call.status === "ended") {
+        return apiError("This call is no longer available.", 409);
+      }
+      await db.update(callParticipants).set({ status: "accepted", joinedAt: now, leftAt: null })
+        .where(eq(callParticipants.id, participant.id));
+      await db.update(calls).set({ status: "accepted", answeredAt: call.answeredAt ?? now, endedAt: null })
+        .where(eq(calls.id, id));
+      if (session.user.id !== call.callerId) {
+        await emitToRoom(`private:user:${call.callerId}`, "call:accept", { callId: id, userId: session.user.id });
+      }
+      return apiOk({ status: "accepted" });
+    }
+
+    if (parsed.data.decision === "declined") {
+      await db.update(callParticipants).set({ status: "declined", leftAt: now })
+        .where(eq(callParticipants.id, participant.id));
+      if (session.user.id !== call.callerId) {
+        await emitToRoom(`private:user:${call.callerId}`, "call:reject", { callId: id, userId: session.user.id });
+      }
+      const remaining = participants.filter((row) => row.userId !== session.user.id && row.status === "invited");
+      const accepted = participants.some((row) => row.userId !== session.user.id && row.status === "accepted");
+      if (remaining.length === 0 && !accepted) {
+        await db.update(calls).set({ status: "declined", endedAt: now }).where(eq(calls.id, id));
+      }
+      return apiOk({ status: "declined" });
+    }
+
+    if (parsed.data.decision === "ended" || parsed.data.decision === "failed") {
+      await db.update(callParticipants).set({ status: "left", leftAt: now })
+        .where(eq(callParticipants.id, participant.id));
+      if (session.user.id === call.callerId) {
+        await db.update(calls).set({ status: parsed.data.decision, endedAt: now })
+          .where(eq(calls.id, id));
+        await Promise.all(participants.filter((row) => row.userId !== session.user.id).map((row) =>
+          emitToRoom(`private:user:${row.userId}`, "call:end", { callId: id, status: parsed.data.decision }),
+        ));
+        await postSystemMessage(call.conversationId, `${call.kind === "video" ? "Video" : "Audio"} group call ended`, {
+          event: "call_ended", callId: id, kind: call.kind,
+        });
+        return apiOk({ status: parsed.data.decision });
+      }
+      await Promise.all(participants.filter((row) => row.userId !== session.user.id && row.status === "accepted").map((row) =>
+        emitToRoom(`private:user:${row.userId}`, "call:participant-left", { callId: id, userId: session.user.id }),
+      ));
+      return apiOk({ status: "left" });
+    }
+    return apiError("This action is unavailable for a group call.", 400);
+  }
+
   const actor: CallActor = call.callerId === session.user.id ? "caller" : "callee";
   const outcome = resolveCallDecision(call.status as CallStatus, parsed.data.decision, actor);
   if ("error" in outcome) return apiError(outcome.error, 409);
 
-  const db = getDb();
   const now = new Date();
   await db
     .update(calls)

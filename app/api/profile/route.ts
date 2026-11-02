@@ -37,8 +37,11 @@ export async function PATCH(req: Request) {
   const input = parsed.data;
   const db = getDb();
 
-  if (input.providerKind && session.user.role !== "provider") {
+  if (input.providerKind !== undefined && input.providerKind !== null && session.user.role !== "provider") {
     return apiError("Only provider accounts set a provider category.", 403);
+  }
+  if (input.providerKind !== undefined && session.user.role === "provider" && session.user.providerKind && input.providerKind !== session.user.providerKind) {
+    return apiError("Provider service type cannot be changed after onboarding. Contact support for a reviewed update.", 403);
   }
 
   // ISO codes normalize to uppercase; legacy calling codes (+250) pass through.
@@ -60,7 +63,7 @@ export async function PATCH(req: Request) {
           ...(input.phone !== undefined ? { phone: input.phone || null } : {}),
           ...(input.country !== undefined ? { country: input.country || null } : {}),
           ...(normalizedCountryCode !== undefined ? { countryCode: normalizedCountryCode } : {}),
-          ...(input.providerKind !== undefined ? { providerKind: input.providerKind } : {}),
+          ...(input.providerKind && session.user.role === "provider" && !session.user.providerKind ? { providerKind: input.providerKind } : {}),
         })
         .where(eq(users.id, session.user.id));
     }
@@ -108,6 +111,16 @@ export async function PATCH(req: Request) {
     targetId: session.user.id,
     ipAddress: clientIp(req),
   });
+  if (input.providerKind && session.user.role === "provider" && !session.user.providerKind) {
+    await audit({
+      actorId: session.user.id,
+      action: "provider.service_kind.set",
+      targetType: "user",
+      targetId: session.user.id,
+      ipAddress: clientIp(req),
+      metadata: { providerKind: input.providerKind },
+    });
+  }
 
   const profile = await getOwnProfile(session.user.id);
   return apiOk(profile);

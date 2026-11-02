@@ -50,6 +50,7 @@ export async function GET(req: Request) {
   const items = await db
     .select({
       id: projects.id,
+      groupId: projects.groupId,
       ownerId: projects.ownerId,
       ownerName: users.name,
       ownerShortId: users.shortId,

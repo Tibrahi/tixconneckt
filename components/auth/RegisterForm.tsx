@@ -2,13 +2,13 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
-import { useForm, type Resolver } from "react-hook-form";
+import { useEffect, useState, type FormEvent } from "react";
+import { useForm, useWatch, type Resolver } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { ROUTES } from "@/lib/routes";
 import { registerSchema, type RegisterInput } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
-import { SelectField, TextField } from "@/components/ui/Fields";
+import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { LegalModal } from "./LegalModal";
 import { OtpForm } from "./OtpForm";
@@ -21,6 +21,7 @@ interface CountryOption {
 
 export function RegisterForm() {
   const router = useRouter();
+  const [step, setStep] = useState(0);
   const [countries, setCountries] = useState<CountryOption[]>([]);
   const [modal, setModal] = useState<"privacy" | "terms" | "agreement" | null>(null);
   const [readDocs, setReadDocs] = useState({ privacy: false, terms: false, agreement: false });
@@ -49,6 +50,10 @@ export function RegisterForm() {
       acceptAgreement: false,
     } as unknown as RegisterInput,
   });
+  const category = useWatch({ control: form.control, name: "category" });
+  const steps = category === "individual"
+    ? ["Your account", "Contact and role", "Review and accept"]
+    : ["Your account", "Contact and role", "Organization details", "Review and accept"];
 
   useEffect(() => {
     fetch("/api/meta/countries")
@@ -86,6 +91,14 @@ export function RegisterForm() {
           for (const [field, messages] of Object.entries(body.details)) {
             form.setError(field as keyof RegisterInput, { message: messages[0] });
           }
+          const fields = Object.keys(body.details);
+          if (fields.some((field) => ["organizationName", "organizationType", "jobTitle", "mandate", "providerKind", "serviceDescription"].includes(field))) {
+            setStep(category === "individual" ? 1 : 2);
+          } else if (fields.some((field) => ["country", "countryCode", "phone", "category"].includes(field))) {
+            setStep(1);
+          } else if (fields.some((field) => ["name", "email", "password", "confirmPassword"].includes(field))) {
+            setStep(0);
+          }
         }
         setError(body.error ?? "We couldn't create your account. Your entered information is still available. Please try again.");
         return;
@@ -115,13 +128,36 @@ export function RegisterForm() {
   const checkboxClass =
     "h-4 w-4 rounded border-neutral-300 accent-[#1447e6]";
 
+  async function continueRegistration(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (step < steps.length - 1) {
+      const fields: (keyof RegisterInput)[] = step === 0
+        ? ["name", "email", "password", "confirmPassword"]
+        : step === 1
+          ? ["country", "countryCode", "phone", "category"]
+          : category === "provider"
+            ? ["providerKind", "organizationName", "serviceDescription"]
+            : category === "university"
+              ? ["organizationName", "organizationType", "jobTitle"]
+              : ["organizationName", "mandate", "jobTitle"];
+      if (await form.trigger(fields)) setStep((current) => current + 1);
+      return;
+    }
+    await form.handleSubmit(onSubmit)(event);
+  }
+
   return (
-    <section className="rounded-lg border border-neutral-200/90 bg-white p-6 shadow-card" aria-label="Create account">
-      <h1 className="text-lg font-semibold text-black">Create your account</h1>
-      <p className="mb-4 mt-1 text-sm text-neutral-600">
-        Read each legal document, then check the boxes to accept.
-      </p>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-4" noValidate>
+    <section className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card sm:p-6" aria-label="Create account">
+      <div className="mb-5">
+        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[#1447e6]">Create account · Step {step + 1} of {steps.length}</p>
+        <div className="mt-3 flex gap-1.5" aria-hidden="true">
+          {steps.map((label, index) => <span key={label} className={`h-1 flex-1 rounded-full ${index <= step ? "bg-[#1447e6]" : "bg-neutral-200"}`} />)}
+        </div>
+        <h1 className="mt-4 text-xl font-semibold tracking-tight text-black">{steps[step]}</h1>
+        <p className="mt-1 text-sm text-neutral-600">{step === 0 ? "Start with the details you use to sign in." : step === 1 ? "Add your contact details and choose how you will use TIXCONNECKT." : steps[step] === "Organization details" ? "Tell us the essential information for your organization profile." : "Review the legal documents and confirm your acceptance."}</p>
+      </div>
+      <form onSubmit={continueRegistration} className="flex flex-col gap-4" noValidate>
+        {step === 0 ? <>
         <TextField
           label="Full name"
           autoComplete="name"
@@ -155,6 +191,9 @@ export function RegisterForm() {
             error={form.formState.errors.confirmPassword?.message}
           />
         </div>
+        </> : null}
+
+        {step === 1 ? <>
         <div className="grid gap-4 sm:grid-cols-2">
           <SelectField
             label="Country"
@@ -187,8 +226,54 @@ export function RegisterForm() {
             { value: "provider", label: "Funding / support provider" },
           ]}
         />
+        </> : null}
 
-        <fieldset className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
+        {step === 2 && category === "provider" ? (
+          <fieldset className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4">
+            <legend className="px-1 text-sm font-semibold">Provider onboarding</legend>
+            <p className="text-sm text-neutral-600">Choose the service your account is responsible for. Verification is reviewed separately after email activation.</p>
+            <SelectField label="Service type" required {...form.register("providerKind")} options={[
+              { value: "", label: "Select a service" },
+              { value: "loan", label: "Funding / lending" },
+              { value: "support", label: "Non-financial support" },
+            ]} error={form.formState.errors.providerKind?.message} />
+            <TextField label="Provider or organization name" required {...form.register("organizationName")} error={form.formState.errors.organizationName?.message} />
+            <TextAreaField label="Service description" required {...form.register("serviceDescription")} error={form.formState.errors.serviceDescription?.message} hint="Describe the support or funding you offer." />
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-[#1447e6]">Add optional organization details</summary>
+              <div className="mt-3 flex flex-col gap-4">
+                <TextField label="Website (optional)" type="url" {...form.register("website")} error={form.formState.errors.website?.message} />
+                <TextField label="Official contact email (optional)" type="email" {...form.register("officialEmail")} error={form.formState.errors.officialEmail?.message} />
+                <TextField label="Coverage or service areas (optional)" {...form.register("jurisdiction")} />
+              </div>
+            </details>
+          </fieldset>
+        ) : null}
+
+        {step === 2 && (category === "university" || category === "government") ? (
+          <fieldset className="flex flex-col gap-4 rounded-md border border-neutral-200 p-4">
+            <legend className="px-1 text-sm font-semibold">{category === "university" ? "Institution onboarding" : "Agency onboarding"}</legend>
+            <p className="text-sm text-neutral-600">This creates a private, unverified organization profile. Email verification does not verify institutional authority.</p>
+            <TextField label={category === "university" ? "Institution name" : "Agency or ministry name"} required {...form.register("organizationName")} error={form.formState.errors.organizationName?.message} />
+            {category === "university" ? (
+              <TextField label="Institution type" required placeholder="University, college, research institute…" {...form.register("organizationType")} error={form.formState.errors.organizationType?.message} />
+            ) : (
+              <TextAreaField label="Mandate or program area" required {...form.register("mandate")} error={form.formState.errors.mandate?.message} />
+            )}
+            <TextField label="Your title or relationship" required {...form.register("jobTitle")} error={form.formState.errors.jobTitle?.message} />
+            <details className="text-sm">
+              <summary className="cursor-pointer font-medium text-[#1447e6]">Add optional organization details</summary>
+              <div className="mt-3 flex flex-col gap-4">
+                <TextField label="Department / faculty" {...form.register("department")} />
+                <TextField label="Website (optional)" type="url" {...form.register("website")} error={form.formState.errors.website?.message} />
+                <TextField label="Official contact email (optional)" type="email" {...form.register("officialEmail")} error={form.formState.errors.officialEmail?.message} />
+                {category === "government" ? <TextField label="Jurisdiction (optional)" {...form.register("jurisdiction")} /> : null}
+              </div>
+            </details>
+          </fieldset>
+        ) : null}
+
+        {step === steps.length - 1 ? <fieldset className="flex flex-col gap-2 rounded-md border border-neutral-200 p-3">
           <legend className="px-1 text-sm font-medium">Legal acceptance</legend>
           {(
             [
@@ -225,11 +310,14 @@ export function RegisterForm() {
               Reading and accepting all three documents is required.
             </p>
           ) : null}
-        </fieldset>
+        </fieldset> : null}
 
-        <Button variant="auth" type="submit" loading={form.formState.isSubmitting} className="w-full">
-          Create account
-        </Button>
+        <div className="flex gap-3 pt-1">
+          {step > 0 ? <Button variant="secondary" type="button" onClick={() => setStep((current) => current - 1)} className="flex-1">Back</Button> : null}
+          <Button variant="auth" type="submit" loading={form.formState.isSubmitting} className="flex-1">
+            {step === steps.length - 1 ? "Create account" : "Continue"}
+          </Button>
+        </div>
       </form>
       <p className="mt-4 text-center text-sm text-neutral-600">
         Already have an account?{" "}

@@ -5,6 +5,7 @@ import { agreements, fundingRequests, groupMembers, projects, users } from "@/db
 import { apiError, apiOk } from "@/lib/api-response";
 import { notify } from "@/lib/notify";
 import { getSession } from "@/lib/session";
+import { hasVerifiedProviderService } from "@/lib/provider-eligibility";
 import { agreementSchema } from "@/lib/validation";
 import { decideEntry, ensureWallet, recordPendingEntry } from "@/lib/wallet";
 
@@ -131,6 +132,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (loaded.request.providerId !== session.user.id) {
     return apiError("Only the assigned provider can review this request.", 403);
   }
+  if (session.user.role !== "provider" || session.user.providerKind !== "loan" || !(await hasVerifiedProviderService(session.user.id, "loan"))) {
+    return apiError("Funding decisions require an active verified funding service profile.", 403);
+  }
   if (!["pending", "under_review"].includes(loaded.request.status)) {
     return apiError("This request has already been decided.", 400);
   }
@@ -181,6 +185,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   if (!loaded) return apiError("Request not found.", 404);
   if (loaded.request.providerId !== session.user.id) {
     return apiError("Only the assigned provider can draft agreements.", 403);
+  }
+  if (session.user.role !== "provider" || session.user.providerKind !== "loan" || !(await hasVerifiedProviderService(session.user.id, "loan"))) {
+    return apiError("Funding agreements require an active verified funding service profile.", 403);
   }
   if (!["under_review", "approved", "pending"].includes(loaded.request.status)) {
     return apiError("Agreements cannot be added at this stage.", 400);

@@ -31,6 +31,7 @@ export const ROUTES = {
   organizationById: (id: string) => `/dashboard/organizations/${id}`,
   requests: "/dashboard/requests",
   requestById: (id: string) => `/dashboard/requests/${id}`,
+  support: "/dashboard/support",
   groups: "/dashboard/groups",
   groupById: (id: string) => `/dashboard/groups/${id}`,
   settings: "/dashboard/settings",
@@ -73,6 +74,7 @@ export const DASHBOARD_NAV: NavItem[] = [
   { href: ROUTES.projects, label: "Project", icon: "diagram-project" },
   { href: ROUTES.organizations, label: "Organizations", icon: "building" },
   { href: ROUTES.requests, label: "Request", icon: "file-signature" },
+  { href: ROUTES.support, label: "Support cases", icon: "handshake" },
   { href: ROUTES.groups, label: "Groups", icon: "user-group" },
   { href: ROUTES.settings, label: "Settings", icon: "gear" },
 ];

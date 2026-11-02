@@ -277,6 +277,7 @@ export function OwnProfilePage() {
                 <SelectField
                   label="Provider category"
                   value={draft.providerKind ?? ""}
+                  disabled={Boolean(profile.providerKind)}
                   onChange={(e) => setDraft({ ...draft, providerKind: e.target.value })}
                   options={[
                     { value: "", label: "Not set" },

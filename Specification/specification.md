@@ -59,7 +59,7 @@ Use the following technologies specified by the project.
 | Date and timezone | Intl, date-fns-tz |
 | Rate limiting | Upstash Redis and rate limiting |
 | HTML sanitization | DOMPurify |
-| User onboarding | Driver.js |
+| User onboarding | Contextual in-app guidance |
 | Currency conversion | Frankfurter |
 | Badges | SVG |
 | File storage | Private object storage with access controls |
@@ -834,7 +834,7 @@ Performance optimizations must not weaken authorization or expose private cached
 - Display validation errors next to the relevant fields.
 - Avoid relying on color alone to communicate status.
 
-Use Driver.js to introduce the application through optional, contextual onboarding. Do not block the user with repetitive tours.
+Provide optional, contextual onboarding through accessible in-app guidance. Do not block the user with repetitive tours.
 
 ## 29. Environment Variables and Configuration
 

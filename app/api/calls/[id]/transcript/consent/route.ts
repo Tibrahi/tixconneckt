@@ -7,7 +7,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
 import { callTranscriptConsentSchema } from "@/lib/validation";
-import { loadParticipantCall } from "../../_lib";
+import { getCallParticipantIds, loadParticipantCall } from "../../_lib";
 import { loadCallConsents } from "../_lib";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -48,7 +48,8 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     });
 
   const consents = await loadCallConsents(id);
-  const active = transcriptionActive(consents, [call.callerId, call.calleeId]);
+  const participantIds = await getCallParticipantIds(id);
+  const active = transcriptionActive(consents, participantIds.length ? participantIds : [call.callerId, call.calleeId]);
 
   await audit({
     actorId: session.user.id,
@@ -58,13 +59,18 @@ export async function PATCH(req: Request, { params }: RouteContext) {
     ipAddress: clientIp(req),
   });
 
-  const otherId = session.user.id === call.callerId ? call.calleeId : call.callerId;
-  await emitToRoom(`private:user:${otherId}`, "call:transcript-consent", {
-    callId: id,
-    userId: session.user.id,
+  await Promise.all(participantIds.filter((userId) => userId !== session.user.id).map((userId) =>
+    emitToRoom(`private:user:${userId}`, "call:transcript-consent", {
+      callId: id,
+      userId: session.user.id,
+      consented: parsed.data.consented,
+      active,
+    }),
+  ));
+
+  return apiOk({
     consented: parsed.data.consented,
     active,
+    peerConsented: consents.some((consent) => consent.userId !== session.user.id && consent.consented),
   });
-
-  return apiOk({ consented: parsed.data.consented, active });
 }

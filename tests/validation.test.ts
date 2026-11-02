@@ -58,6 +58,33 @@ describe("registerSchema", () => {
       registerSchema.safeParse({ ...valid, password: "short", confirmPassword: "short" }).success,
     ).toBe(false);
   });
+  it("requires a concrete service and organization for providers", () => {
+    const provider = { ...valid, category: "provider" };
+    expect(registerSchema.safeParse(provider).success).toBe(false);
+    expect(registerSchema.safeParse({
+      ...provider,
+      providerKind: "support",
+      organizationName: "Community Skills Network",
+      serviceDescription: "Mentoring and training for local project teams.",
+    }).success).toBe(true);
+  });
+  it("requires institution and agency onboarding details", () => {
+    expect(registerSchema.safeParse({ ...valid, category: "university" }).success).toBe(false);
+    expect(registerSchema.safeParse({
+      ...valid,
+      category: "university",
+      organizationName: "Eastland University",
+      organizationType: "University",
+      jobTitle: "Research coordinator",
+    }).success).toBe(true);
+    expect(registerSchema.safeParse({
+      ...valid,
+      category: "government",
+      organizationName: "District Development Office",
+      jobTitle: "Program officer",
+      mandate: "Coordinate community development programs.",
+    }).success).toBe(true);
+  });
 });
 
 describe("loginSchema", () => {

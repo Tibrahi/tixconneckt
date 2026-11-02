@@ -16,6 +16,8 @@ interface Summary {
   shortId: string;
   actor?: { role: string; category: string; providerKind: string | null };
   providerQueue?: number;
+  supportQueue?: number;
+  organizations?: Array<{ id: string; name: string; kind: string | null; verificationStatus: string; role: string }>;
   unreadChat: number;
   unreadNotifications: number;
   pendingConnections: number;
@@ -87,21 +89,22 @@ function ProjectList({ summary, title, emptyTitle, emptyMessage }: {
 function UniversityDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader title="University research workspace" description="Develop campus and research projects, organize academic teams, and coordinate external support from the project record." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
+      <PageHeader title="University research workspace" description="Coordinate research projects you own or have been added to, organize academic teams, and manage support cases assigned to your institution." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
       <div className="grid gap-5 xl:grid-cols-[1.6fr_0.9fr]">
-        <ProjectList summary={summary} title="Research and campus portfolio" emptyTitle="Start a campus project" emptyMessage="Create a research or campus workspace, then invite contributors and organize its documents." />
+        <ProjectList summary={summary} title="Research projects you own or joined" emptyTitle="No research projects yet" emptyMessage="Create a research workspace from your account or join a project when its owner invites you." />
         <div className="flex flex-col gap-5">
           <Card title="Academic teams" actions={<Link href={ROUTES.groups} className="text-sm font-medium text-brand-700 hover:underline">Open research groups</Link>}>
             <p className="text-3xl font-semibold tabular-nums">{summary.groupCount}</p>
             <p className="mt-1 text-sm text-neutral-600">Active groups connected to your account.</p>
             <p className="mt-3 text-sm font-medium">{summary.pendingApprovals} group approval{summary.pendingApprovals === 1 ? "" : "s"} awaiting action</p>
           </Card>
-          <Card title="Research support" actions={<Link href={ROUTES.requests} className="text-sm font-medium text-brand-700 hover:underline">Review requests</Link>}>
-            <p className="text-sm text-neutral-600">{summary.openFunding} open funding request{summary.openFunding === 1 ? "" : "s"} attached to projects you own. Prepare new requests from the relevant project workspace.</p>
-            <Link href={ROUTES.projects} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Choose a research project →</Link>
+          <Card title="Research support">
+            <p className="text-sm text-neutral-600">{summary.openFunding} open funding request{summary.openFunding === 1 ? "" : "s"} attached to your projects.</p>
+            <p className="mt-2 text-sm text-neutral-600">{summary.supportQueue ?? 0} active non-financial support case{summary.supportQueue === 1 ? "" : "s"} for you or your institution.</p>
+            <div className="mt-3 flex flex-wrap gap-3"><Link href={ROUTES.requests} className="text-sm font-medium text-brand-700 hover:underline">Review funding →</Link><Link href={ROUTES.support} className="text-sm font-medium text-brand-700 hover:underline">Open support cases →</Link></div>
           </Card>
           <Card title="Institution profile" actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage profile</Link>}>
-            <p className="text-sm text-neutral-600">Maintain your institution’s public presence and verification materials for prospective collaborators.</p>
+            <OrganizationVerification summary={summary} category="university" />
           </Card>
         </div>
       </div>
@@ -116,12 +119,12 @@ function UniversityDashboard({ summary, refreshing }: { summary: Summary; refres
 function GovernmentDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader title="Government program workspace" description="Coordinate public initiatives across agency teams, manage program funding requests, and keep partner decisions connected to each project." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
+      <PageHeader title="Government program coordination" description="Coordinate projects created by you or your groups, track funding requests, and manage assistance cases assigned to your agency." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
       <section aria-label="Program coordination actions" className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
-          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Public program portfolio</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Program coordination</p>
           <h2 className="mt-3 max-w-xl text-2xl font-semibold">Keep initiatives, teams, and support in one accountable workflow.</h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-100">Open a program workspace to coordinate collaborators, documents, and requests with the people assigned to the work.</p>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-brand-100">Use your project and group workspaces to coordinate collaborators, documents, and requests with people assigned to the work.</p>
           <Link href={ROUTES.projects} className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 hover:bg-brand-50">Open public programs</Link>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-1">
@@ -137,13 +140,19 @@ function GovernmentDashboard({ summary, refreshing }: { summary: Summary; refres
             <p className="text-sm text-neutral-600">Open requests from programs you own</p>
             <span className="mt-3 inline-block text-sm font-medium text-brand-700">Review program requests →</span>
           </Link>
+          <Link href={ROUTES.support} className="rounded-xl border border-neutral-200 bg-white p-5 shadow-card hover:border-brand-300">
+            <p className="text-xs font-semibold uppercase tracking-wide text-brand-700">Assistance cases</p>
+            <h2 className="mt-2 text-2xl font-semibold tabular-nums">{summary.supportQueue ?? 0}</h2>
+            <p className="text-sm text-neutral-600">Active non-financial cases for your agency</p>
+            <span className="mt-3 inline-block text-sm font-medium text-brand-700">Review assigned cases →</span>
+          </Link>
         </div>
       </section>
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[1.2fr_0.8fr]">
-        <ProjectList summary={summary} title="Active public initiatives" emptyTitle="No programs in your portfolio" emptyMessage="Create a public program workspace to bring its scope, collaborators, and support requests together." />
+        <ProjectList summary={summary} title="Projects you own or joined" emptyTitle="No projects in this workspace" emptyMessage="Create a project from your account or join an existing project when its owner invites you." />
         <div className="flex flex-col gap-5">
           <Card title="Agency identity" actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage agency profile</Link>}>
-            <p className="text-sm text-neutral-600">Keep the agency profile and verification materials current for people and organizations working with your programs.</p>
+            <OrganizationVerification summary={summary} category="government" />
           </Card>
           <Card title="External coordination" actions={<Link href={ROUTES.conneckt} className="text-sm font-medium text-brand-700 hover:underline">Open partner network</Link>}>
             <p className="text-sm text-neutral-600">Review partner connections and continue approved program conversations in chat.</p>
@@ -157,38 +166,46 @@ function GovernmentDashboard({ summary, refreshing }: { summary: Summary; refres
 
 function ProviderDashboard({ summary, providerKind, refreshing }: { summary: Summary; providerKind: string | null; refreshing: boolean }) {
   const focus = providerKind === "loan" ? "funding requests" : providerKind === "support" ? "support requests" : "assigned requests";
+  const queueHref = providerKind === "support" ? ROUTES.support : ROUTES.requests;
+  const queueCount = providerKind === "support" ? summary.supportQueue ?? 0 : summary.providerQueue ?? 0;
   return (
     <>
       <PageHeader title={providerKind === "loan" ? "Funding provider workspace" : providerKind === "support" ? "Support provider workspace" : "Provider workspace"} description={`Review ${focus}, respond to eligible projects, and manage the provider connections assigned to your account.`} actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
       <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Assigned work queue</p>
-          <h2 className="mt-3 text-3xl font-semibold tabular-nums">{summary.providerQueue ?? 0}</h2>
+          <h2 className="mt-3 text-3xl font-semibold tabular-nums">{queueCount}</h2>
           <p className="mt-2 max-w-lg text-sm leading-6 text-brand-100">{focus} and provider connection requests assigned to your account are managed in the review workspace.</p>
-          <Link href={ROUTES.requests} className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 hover:bg-brand-50">Review assigned work</Link>
+          <Link href={queueHref} className="mt-5 inline-flex rounded-lg bg-white px-4 py-2.5 text-sm font-semibold text-brand-900 hover:bg-brand-50">Review assigned work</Link>
         </div>
         <div className="flex flex-col gap-5">
           <Card title="Provider organization" actions={<Link href={ROUTES.organizations} className="text-sm font-medium text-brand-700 hover:underline">Manage profile</Link>}>
-            <p className="text-sm text-neutral-600">Maintain the provider profile and organization details requesters use to understand your service.</p>
+            <OrganizationVerification summary={summary} category="provider" />
           </Card>
           <Card title="Response conversations" actions={<Link href={ROUTES.chat} className="text-sm font-medium text-brand-700 hover:underline">Open provider chat</Link>}>
             {summary.recentMessages.length === 0 ? <p className="text-sm text-neutral-600">Messages for approved provider connections appear here.</p> : <ul className="flex flex-col gap-2">{summary.recentMessages.slice(0, 3).map((message) => <li key={message.id}><Link href={ROUTES.chatThread(message.conversationId)} className="block rounded-md border border-neutral-200 p-3 hover:border-brand-300"><span className="block text-sm font-medium">{message.senderName}</span><span className="block truncate text-sm text-neutral-600">{message.preview}</span></Link></li>)}</ul>}
           </Card>
         </div>
       </div>
-      <Card title="Provider-owned project work" className="mt-5" actions={<Link href={ROUTES.projects} className="text-sm font-medium text-brand-700 hover:underline">Open projects</Link>}>
-        <p className="text-sm text-neutral-600">Create project workspaces for your organization and collaborators. Funding and support responses remain in the assigned-request workflow.</p>
-        <Link href={ROUTES.projects} className="mt-3 inline-block text-sm font-medium text-brand-700 hover:underline">Create or manage a provider project →</Link>
+      <Card title="Scoped project information" className="mt-5">
+        <p className="text-sm text-neutral-600">Project details and files are available through the specific request that shares them. A funding decision or support response does not grant access to unrelated project records.</p>
       </Card>
       <Card title="How provider work proceeds" className="mt-5">
         <ol className="grid gap-4 md:grid-cols-3">
           <li><span className="font-mono text-xs font-semibold text-brand-700">01 · RECEIVE</span><p className="mt-1 text-sm text-neutral-600">Open requests and connection invitations assigned to your provider account.</p></li>
-          <li><span className="font-mono text-xs font-semibold text-brand-700">02 · RESPOND</span><p className="mt-1 text-sm text-neutral-600">Prepare a response and agreement in the project-linked request workspace.</p></li>
+          <li><span className="font-mono text-xs font-semibold text-brand-700">02 · RESPOND</span><p className="mt-1 text-sm text-neutral-600">{providerKind === "support" ? "Agree service goals, assign a specialist, and record milestones in the case." : "Prepare a documented offer and agreement in the funding request workspace."}</p></li>
           <li><span className="font-mono text-xs font-semibold text-brand-700">03 · FOLLOW THROUGH</span><p className="mt-1 text-sm text-neutral-600">Keep communications and recorded decisions with the request they belong to.</p></li>
         </ol>
       </Card>
     </>
   );
+}
+
+function OrganizationVerification({ summary, category }: { summary: Summary; category: "university" | "government" | "provider" }) {
+  const organization = summary.organizations?.find((item) => item.kind === category);
+  if (!organization) return <p className="text-sm text-neutral-600">No organization profile is linked to this account yet. Create one or request access to an existing profile.</p>;
+  const label = organization.verificationStatus === "verified" ? "Verified" : organization.verificationStatus === "pending" ? "Verification pending" : "Unverified";
+  return <div><p className="font-medium">{organization.name}</p><p className="mt-1 text-sm text-neutral-600">{label} · {organization.role}</p>{organization.verificationStatus !== "verified" ? <p className="mt-2 text-xs text-neutral-600">{category === "provider" ? "New provider work waits until the provider service profile is verified." : "Institutional authority is not enabled until verification is approved."}</p> : null}</div>;
 }
 
 export function DashboardHome() {
@@ -333,6 +350,7 @@ export function DashboardHome() {
           href={ROUTES.notifications}
           icon="bell"
         />
+        <StatCard label="Support cases" value={summary.supportQueue ?? 0} href={ROUTES.support} icon="handshake" />
       </div>
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-2">

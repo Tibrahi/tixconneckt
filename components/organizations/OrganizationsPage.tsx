@@ -16,6 +16,7 @@ import { api } from "@/components/projects/types";
 interface OrgRow {
   id: string;
   ownerId: string;
+  kind: string | null;
   name: string;
   description: string | null;
   category: string | null;
@@ -103,22 +104,22 @@ export function OrganizationsPage({ accountCategory = "individual" }: { accountC
           : isGovernment
             ? "Maintain your agency identity, public visibility, and verification materials for program partnerships."
             : "Organization profiles support discovery and partner verification. Only administrators grant verified status."}
-        actions={
+        actions={accountCategory !== "individual" ? (
           <Button size="sm" icon="plus" onClick={() => setOpen(true)}>
             {isUniversity ? "Create institution profile" : isGovernment ? "Create agency profile" : "New organization"}
           </Button>
-        }
+        ) : undefined}
       />
       {orgs.length === 0 ? (
         <EmptyState
           icon="building"
-          title={`No ${profileName.toLowerCase()} yet`}
-          message="Create the profile, choose its visibility, and submit verification evidence when ready."
-          action={
+          title={accountCategory === "individual" ? "No public organizations yet" : `No ${profileName.toLowerCase()} yet`}
+          message={accountCategory === "individual" ? "Verified organizations and public partner profiles will appear here." : "Create your organization profile, then submit evidence for an administrator to review its authority."}
+          action={accountCategory !== "individual" ? (
             <Button size="sm" onClick={() => setOpen(true)}>
               {isUniversity ? "Create institution profile" : isGovernment ? "Create agency profile" : "Create organization"}
             </Button>
-          }
+          ) : undefined}
         />
       ) : (
         <ul className="grid gap-3 md:grid-cols-2">
@@ -143,7 +144,7 @@ export function OrganizationsPage({ accountCategory = "individual" }: { accountC
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     <StatusBadge status={o.verificationStatus} />
                     <Badge tone="neutral">{o.visibility}</Badge>
-                    {myId === o.ownerId ? <Badge tone="info">mine</Badge> : null}
+                    {myId === o.ownerId ? <Badge tone="info">owner</Badge> : <Badge tone="neutral">{o.kind === "university" ? "institution" : o.kind === "government" ? "agency" : o.kind === "provider" ? "provider" : "organization"}</Badge>}
                   </div>
                 </div>
               </div>
@@ -174,7 +175,7 @@ export function OrganizationForm({ onClose, onDone, accountCategory = "individua
   const [category, setCategory] = useState("");
   const [website, setWebsite] = useState("");
   const [country, setCountry] = useState("");
-  const [visibility, setVisibility] = useState("public");
+  const [visibility, setVisibility] = useState("private");
   const [logoId, setLogoId] = useState<string | null>(null);
   const [logoName, setLogoName] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);

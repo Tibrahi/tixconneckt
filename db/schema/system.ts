@@ -9,6 +9,7 @@ import {
   uniqueIndex,
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
+import { supportRequests } from "./projects";
 
 const documentBytes = customType<{ data: Buffer | null; driverData: Buffer | null }>({
   dataType: () => "bytea",
@@ -156,6 +157,24 @@ export const documents = pgTable(
       .defaultNow(),
   },
   (t) => [index("document_owner_idx").on(t.ownerId, t.module)],
+);
+
+/** User-consented document access for a single support case. */
+export const supportRequestDocuments = pgTable(
+  "support_request_documents",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    requestId: text("request_id").notNull().references(() => supportRequests.id, { onDelete: "cascade" }),
+    documentId: text("document_id").notNull().references(() => documents.id, { onDelete: "cascade" }),
+    grantedBy: text("granted_by").notNull().references(() => users.id, { onDelete: "cascade" }),
+    permission: text("permission").notNull().default("view"),
+    expiresAt: timestamp("expires_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("support_request_document_unique").on(t.requestId, t.documentId),
+    index("support_request_document_lookup_idx").on(t.requestId, t.expiresAt),
+  ],
 );
 
 export const parsingJobs = pgTable(

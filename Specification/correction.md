@@ -310,13 +310,9 @@ Replace generic fake errors with structured handling for validation, authenticat
 
 Log technical diagnostics securely on the server. Never expose credentials, stack traces or sensitive data in user-facing errors.
 
-## 14. Guided Tour
+## 14. Contextual Onboarding
 
-Implement a complete, route-aware application tour using Driver.js.
-
-Cover the dashboard, profile, discovery, matching, projects, groups, chat, calls when available, funding, wallet, notifications, settings and privacy.
-
-Wait for the relevant page and element to render before displaying each step. Provide next, back, skip and finish controls. Skip unavailable or inaccessible features rather than pointing to nonexistent UI elements.
+Provide optional, role-aware contextual help using accessible in-app UI. Keep guidance relevant to the current page and the user’s permissions, and never block normal work or point to unavailable features.
 
 ## 15. Security and Validation
 

@@ -631,11 +631,10 @@ export function ThreadView({
             <IconButton label="Share a reference" icon="share" onClick={() => setShareOpen(true)} />
             <IconButton label={detailsOpen ? "Hide details" : "Show details"} icon="circle-info" onClick={() => setDetailsOpen(!detailsOpen)} />
           </span>
-          {data.conversation.type !== "group" ? (
-            <CallButtons conversationId={data.conversation.id} calleeName={others[0]?.name ?? "Member"} />
-          ) : (
-            <span className="text-xs text-neutral-500">Calls are 1:1 only</span>
-          )}
+          <CallButtons
+            conversationId={data.conversation.id}
+            calleeName={data.conversation.type === "group" ? data.conversation.title ?? "Group" : others[0]?.name ?? "Member"}
+          />
         </div>
 
         {!connected ? (
@@ -646,8 +645,7 @@ export function ThreadView({
           </p>
         ) : null}
 
-        {data.conversation.type !== "group" ? (
-          <div role="tablist" aria-label="Conversation sections" className="flex gap-1 border-b border-neutral-200 bg-white px-3 sm:px-4">
+        <div role="tablist" aria-label="Conversation sections" className="flex gap-1 border-b border-neutral-200 bg-white px-3 sm:px-4">
             <button
               type="button"
               role="tab"
@@ -670,15 +668,14 @@ export function ThreadView({
             >
               <Icon name="phone" /> Calls
             </button>
-          </div>
-        ) : null}
+        </div>
 
-        {tab === "calls" && data.conversation.type !== "group" ? (
+        {tab === "calls" ? (
           <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 px-4 py-4">
             <CallHistory
               conversationId={conversationId}
               myUserId={myUserId}
-              peerName={others[0]?.name ?? title}
+              peerName={data.conversation.type === "group" ? title : others[0]?.name ?? title}
               onError={onError}
             />
           </div>

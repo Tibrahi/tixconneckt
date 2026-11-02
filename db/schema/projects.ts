@@ -382,6 +382,8 @@ export const organizations = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     name: text("name").notNull(),
+    /** university | government | provider; descriptive category, not an auth role. */
+    kind: text("kind"),
     description: text("description"),
     category: text("category"),
     website: text("website"),
@@ -402,6 +404,96 @@ export const organizations = pgTable(
     index("organization_owner_idx").on(t.ownerId),
     index("organization_visibility_idx").on(t.visibility),
   ],
+);
+
+/** Shared organization access; all authority is scoped to one organization. */
+export const organizationMembers = pgTable(
+  "organization_members",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("staff"),
+    status: text("status").notNull().default("active"),
+    jobTitle: text("job_title"),
+    invitedBy: text("invited_by").references(() => users.id, { onDelete: "set null" }),
+    decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+  },
+  (t) => [
+    uniqueIndex("organization_member_unique").on(t.organizationId, t.userId),
+    index("organization_member_user_status_idx").on(t.userId, t.status),
+    index("organization_member_org_status_idx").on(t.organizationId, t.status),
+  ],
+);
+
+/** A user's explicit request to join an existing organization. */
+export const organizationAccessRequests = pgTable(
+  "organization_access_requests",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    organizationId: text("organization_id").notNull().references(() => organizations.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    jobTitle: text("job_title").notNull(),
+    message: text("message"),
+    status: text("status").notNull().default("pending"),
+    decidedBy: text("decided_by").references(() => users.id, { onDelete: "set null" }),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("organization_access_request_unique").on(t.organizationId, t.userId),
+    index("organization_access_request_queue_idx").on(t.organizationId, t.status, t.createdAt),
+  ],
+);
+
+/** Non-financial help cases; intentionally separate from funding lifecycle. */
+export const supportRequests = pgTable(
+  "support_requests",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    projectId: text("project_id").notNull().references(() => projects.id, { onDelete: "cascade" }),
+    requesterUserId: text("requester_user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    requesterGroupId: text("requester_group_id").references(() => groups.id, { onDelete: "set null" }),
+    targetOrganizationId: text("target_organization_id").references(() => organizations.id, { onDelete: "set null" }),
+    targetProviderId: text("target_provider_id").references(() => users.id, { onDelete: "set null" }),
+    serviceCategory: text("service_category").notNull(),
+    summary: text("summary").notNull(),
+    details: text("details"),
+    /** pending | triage | awaiting_requester | accepted | declined | resolved | withdrawn */
+    status: text("status").notNull().default("pending"),
+    /** normal | high */
+    priority: text("priority").notNull().default("normal"),
+    assignedUserId: text("assigned_user_id").references(() => users.id, { onDelete: "set null" }),
+    decisionNote: text("decision_note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow().$onUpdate(() => new Date()),
+    resolvedAt: timestamp("resolved_at", { withTimezone: true }),
+  },
+  (t) => [
+    index("support_request_project_idx").on(t.projectId, t.createdAt),
+    index("support_request_requester_idx").on(t.requesterUserId, t.status, t.createdAt),
+    index("support_request_org_queue_idx").on(t.targetOrganizationId, t.status, t.createdAt),
+    index("support_request_provider_queue_idx").on(t.targetProviderId, t.status, t.createdAt),
+    index("support_request_assignee_idx").on(t.assignedUserId, t.status),
+  ],
+);
+
+/** Immutable transition and assignment history for each support case. */
+export const supportRequestEvents = pgTable(
+  "support_request_events",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    requestId: text("request_id").notNull().references(() => supportRequests.id, { onDelete: "cascade" }),
+    actorId: text("actor_id").references(() => users.id, { onDelete: "set null" }),
+    event: text("event").notNull(),
+    fromStatus: text("from_status"),
+    toStatus: text("to_status"),
+    note: text("note"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("support_request_event_timeline_idx").on(t.requestId, t.createdAt)],
 );
 
 /** Verification evidence + review history (admins grant verified status). */

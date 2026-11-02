@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
-import { documents, organizationVerifications, organizations } from "@/db/schema";
+import { documents, organizationMembers, organizationVerifications, organizations } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import { organizationSchema } from "@/lib/validation";
@@ -13,7 +13,9 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
   const db = getDb();
   const [org] = await db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
   if (!org) return apiError("Organization not found.", 404);
-  const mine = org.ownerId === session.user.id;
+  const [membership] = await db.select({ role: organizationMembers.role }).from(organizationMembers)
+    .where(and(eq(organizationMembers.organizationId, id), eq(organizationMembers.userId, session.user.id), eq(organizationMembers.status, "active"))).limit(1);
+  const mine = org.ownerId === session.user.id || Boolean(membership);
   if (org.visibility !== "public" && !mine && session.user.role !== "admin") {
     return apiError("This organization is private.", 403);
   }
@@ -41,7 +43,11 @@ export async function GET(_req: Request, { params }: { params: Promise<{ id: str
       decidedAt: h.decidedAt,
       createdAt: h.createdAt,
     })),
-    viewer: { owner: mine },
+    viewer: {
+      owner: org.ownerId === session.user.id,
+      member: Boolean(membership),
+      canManage: session.user.role === "admin" || org.ownerId === session.user.id || membership?.role === "owner" || membership?.role === "admin",
+    },
   });
 }
 
@@ -62,7 +68,9 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   const db = getDb();
   const [org] = await db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
   if (!org) return apiError("Organization not found.", 404);
-  if (org.ownerId !== session.user.id) return apiError("Only the owner can edit this organization.", 403);
+  const [membership] = await db.select({ role: organizationMembers.role }).from(organizationMembers)
+    .where(and(eq(organizationMembers.organizationId, id), eq(organizationMembers.userId, session.user.id), eq(organizationMembers.status, "active"))).limit(1);
+  if (session.user.role !== "admin" && org.ownerId !== session.user.id && membership?.role !== "owner" && membership?.role !== "admin") return apiError("Only an organization owner or admin can edit this organization.", 403);
 
   if (parsed.data.logoDocumentId) {
     const [doc] = await db

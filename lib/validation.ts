@@ -27,14 +27,37 @@ export const registerSchema = z
     category: z
       .enum(["individual", "university", "government", "provider"])
       .default("individual"),
+    providerKind: z.enum(["loan", "support"]).optional(),
+    organizationName: z.string().trim().min(2).max(180).optional(),
+    organizationType: z.string().trim().max(120).optional(),
+    department: z.string().trim().max(160).optional(),
+    jobTitle: z.string().trim().max(120).optional(),
+    officialEmail: z.string().trim().toLowerCase().email().max(254).optional().or(z.literal("")),
+    website: z.string().trim().url().max(300).optional().or(z.literal("")),
+    jurisdiction: z.string().trim().max(160).optional(),
+    mandate: z.string().trim().max(1200).optional(),
+    serviceAreas: z.array(z.string().trim().min(1).max(100)).max(20).optional(),
+    serviceDescription: z.string().trim().max(1200).optional(),
     timezone: z.string().trim().max(80).optional(),
     acceptPrivacy: z.literal(true, "Privacy Policy acceptance is required"),
     acceptTerms: z.literal(true, "Terms acceptance is required"),
     acceptAgreement: z.literal(true, "Agreement acceptance is required"),
   })
-  .refine((v) => v.password === v.confirmPassword, {
-    message: "Passwords do not match",
-    path: ["confirmPassword"],
+  .superRefine((v, ctx) => {
+    if (v.password !== v.confirmPassword) {
+      ctx.addIssue({ code: "custom", message: "Passwords do not match", path: ["confirmPassword"] });
+    }
+    if (v.category === "provider") {
+      if (!v.providerKind) ctx.addIssue({ code: "custom", message: "Choose funding/lending or non-financial support.", path: ["providerKind"] });
+      if (!v.organizationName) ctx.addIssue({ code: "custom", message: "Provider organization name is required.", path: ["organizationName"] });
+      if (!v.serviceDescription) ctx.addIssue({ code: "custom", message: "Describe the service you provide.", path: ["serviceDescription"] });
+    }
+    if (v.category === "university" || v.category === "government") {
+      if (!v.organizationName) ctx.addIssue({ code: "custom", message: "Organization name is required.", path: ["organizationName"] });
+      if (!v.jobTitle) ctx.addIssue({ code: "custom", message: "Your role in the organization is required.", path: ["jobTitle"] });
+      if (v.category === "university" && !v.organizationType) ctx.addIssue({ code: "custom", message: "Choose the institution type.", path: ["organizationType"] });
+      if (v.category === "government" && !v.mandate) ctx.addIssue({ code: "custom", message: "Describe the agency mandate or program area.", path: ["mandate"] });
+    }
   });
 
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -202,14 +225,15 @@ export type CallCreateInput = z.infer<typeof callCreateSchema>;
 
 /** WebRTC signaling payloads relayed between the two call parties. */
 export const callSignalSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("offer"), sdp: z.string().min(1).max(32768) }).strict(),
-  z.object({ kind: z.literal("answer"), sdp: z.string().min(1).max(32768) }).strict(),
+  z.object({ kind: z.literal("offer"), sdp: z.string().min(1).max(32768), toUserId: z.string().min(1).max(128).optional() }).strict(),
+  z.object({ kind: z.literal("answer"), sdp: z.string().min(1).max(32768), toUserId: z.string().min(1).max(128).optional() }).strict(),
   z
     .object({
       kind: z.literal("candidate"),
       candidate: z.string().min(1).max(4096),
       sdpMid: z.string().max(64).nullable().optional(),
       sdpMLineIndex: z.number().int().min(0).max(64).nullable().optional(),
+      toUserId: z.string().min(1).max(128).optional(),
     })
     .strict(),
   z
@@ -217,6 +241,7 @@ export const callSignalSchema = z.discriminatedUnion("kind", [
       kind: z.literal("media-state"),
       muted: z.boolean().optional(),
       cameraOff: z.boolean().optional(),
+      toUserId: z.string().min(1).max(128).optional(),
     })
     .strict(),
 ]);

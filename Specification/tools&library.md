@@ -34,7 +34,7 @@
 | Intl API | Internationalization | Formats currencies, dates, numbers, and locale-sensitive values. |
 | date-fns-tz | Timezone handling | Converts and displays dates for scheduled actions, reminders, and user-specific timezones. |
 | Frankfurter | Currency conversion | Retrieves supported exchange rates for displaying currency conversions when needed. |
-| Driver.js | Guided onboarding | Guides users through dashboard navigation, matching, project creation, and other workflows. |
+| In-app guidance | Guided onboarding | Gives users optional, role-aware help for dashboard navigation and available workflows. |
 | SVG | Badge rendering | Displays earned profile badges and group or project achievement indicators. |
 | Background Job Queue / Worker | Scheduled processing | Executes scheduled actions, retries failed jobs, and processes asynchronous tasks independently of the user's device. |
 | Vitest | Unit and integration testing | Tests business logic, validation, matching rules, and application services. |

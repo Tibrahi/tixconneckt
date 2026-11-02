@@ -15,6 +15,7 @@ interface OrgDetail {
   organization: {
     id: string;
     ownerId: string;
+    kind: string | null;
     name: string;
     description: string | null;
     category: string | null;
@@ -33,7 +34,7 @@ interface OrgDetail {
     decidedAt: string | null;
     createdAt: string;
   }>;
-  viewer: { owner: boolean };
+  viewer: { owner: boolean; member: boolean; canManage: boolean };
 }
 
 export function OrganizationDetailPage({ orgId }: { orgId: string }) {
@@ -44,6 +45,12 @@ export function OrganizationDetailPage({ orgId }: { orgId: string }) {
   const [editOpen, setEditOpen] = useState(false);
   const [verifyOpen, setVerifyOpen] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [accountCategory, setAccountCategory] = useState("");
+  const [accessTitle, setAccessTitle] = useState("");
+  const [accessMessage, setAccessMessage] = useState("");
+  const [accessRequested, setAccessRequested] = useState(false);
+  const [accessSaving, setAccessSaving] = useState(false);
+  const [accessOpen, setAccessOpen] = useState(false);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -67,10 +74,27 @@ export function OrganizationDetailPage({ orgId }: { orgId: string }) {
 
   useEffect(() => {
     load();
-    api<{ role: string }>("/api/profile")
-      .then((p) => setIsAdmin(p.role === "admin"))
+    api<{ role: string; category: string }>("/api/profile")
+      .then((p) => { setIsAdmin(p.role === "admin"); setAccountCategory(p.category); })
       .catch(() => setIsAdmin(false));
   }, [load]);
+
+  async function requestOrganizationAccess() {
+    setAccessSaving(true);
+    setError(null);
+    try {
+      await api(`/api/organizations/${orgId}/members`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ jobTitle: accessTitle, message: accessMessage }),
+      });
+      setAccessRequested(true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't send the access request.");
+    } finally {
+      setAccessSaving(false);
+    }
+  }
 
   async function decide(verificationId: string, decision: "approved" | "rejected", reason?: string) {
     try {
@@ -112,14 +136,21 @@ export function OrganizationDetailPage({ orgId }: { orgId: string }) {
         description={[o.category, o.country, o.website].filter(Boolean).join(" · ") || "Organization profile"}
         actions={
           <span className="flex gap-1.5">
-            {detail.viewer.owner ? (
+            {detail.viewer.canManage ? (
               <Button size="sm" variant="secondary" icon="pen" onClick={() => setEditOpen(true)}>
                 Edit profile
               </Button>
             ) : null}
-            {detail.viewer.owner && !pending ? (
+            {detail.viewer.canManage && !pending ? (
               <Button size="sm" icon="id-card" onClick={() => setVerifyOpen(true)}>
                 Request verification
+              </Button>
+            ) : null}
+            {!detail.viewer.member && !detail.viewer.owner && accountCategory && accountCategory === o.kind ? (
+              <Button size="sm" icon="user-plus" disabled={accessSaving || accessRequested} onClick={() => {
+                setAccessOpen(true);
+              }}>
+                {accessSaving ? "Sending…" : accessRequested ? "Request sent" : "Request access"}
               </Button>
             ) : null}
           </span>
@@ -153,13 +184,16 @@ export function OrganizationDetailPage({ orgId }: { orgId: string }) {
               ) : null}
             </div>
           </div>
-          {o.contactJson && Object.keys(o.contactJson).length > 0 ? (
-            <div className="mt-3 rounded-md bg-neutral-50 p-2 text-xs text-black">
-              <p className="font-medium">Contact (visible to you)</p>
-              <pre className="mt-1 whitespace-pre-wrap">{JSON.stringify(o.contactJson, null, 2)}</pre>
-            </div>
+          {detail.viewer.member && o.contactJson && Object.keys(o.contactJson).length > 0 ? (
+            <dl className="mt-3 grid gap-1 rounded-md bg-neutral-50 p-3 text-sm text-black">
+              {Object.entries(o.contactJson).filter(([, value]) => typeof value === "string" && value.trim()).map(([key, value]) => (
+                <div key={key} className="flex flex-wrap gap-x-2"><dt className="font-medium">{key.replace(/([A-Z])/g, " $1").replace(/^./, (s) => s.toUpperCase())}:</dt><dd>{String(value)}</dd></div>
+              ))}
+            </dl>
           ) : null}
         </Card>
+
+        {detail.viewer.member ? <OrganizationTeam organizationId={orgId} canManage={detail.viewer.canManage} onError={setError} /> : null}
 
         <Card title="Verification history">
           {detail.verifications.length === 0 ? (
@@ -211,7 +245,87 @@ export function OrganizationDetailPage({ orgId }: { orgId: string }) {
         />
       ) : null}
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} /> : null}
+
+      {accessOpen && !detail.viewer.member && !detail.viewer.owner && accountCategory === o.kind && !accessRequested ? (
+        <Modal title="Request organization access" onClose={() => setAccessOpen(false)}>
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-neutral-600">Your access is reviewed by an organization owner. Approval adds staff access and does not change the organization’s verification status.</p>
+            <TextField label="Your title or relationship" required value={accessTitle} onChange={(event) => setAccessTitle(event.target.value)} />
+            <TextAreaField label="Message (optional)" value={accessMessage} onChange={(event) => setAccessMessage(event.target.value)} />
+            <Button loading={accessSaving} disabled={!accessTitle.trim()} onClick={() => { void requestOrganizationAccess().then(() => setAccessOpen(false)); }}>Send request</Button>
+          </div>
+        </Modal>
+      ) : null}
     </>
+  );
+}
+
+function OrganizationTeam({ organizationId, canManage, onError }: { organizationId: string; canManage: boolean; onError: (message: string) => void }) {
+  const [data, setData] = useState<{
+    members: Array<{ id: string; userId: string; name: string; role: string; jobTitle: string | null }>;
+    requests: Array<{ id: string; name: string; email: string; jobTitle: string; message: string | null; createdAt: string }>;
+  } | null>(null);
+  const [busyId, setBusyId] = useState("");
+  const refresh = useCallback(async () => {
+    try { setData(await api(`/api/organizations/${organizationId}/members`)); }
+    catch (error) { onError(error instanceof Error ? error.message : "Couldn't load the organization team."); }
+  }, [organizationId, onError]);
+  useEffect(() => { void refresh(); }, [refresh]);
+
+  async function decide(requestId: string, decision: "approved" | "rejected") {
+    setBusyId(requestId);
+    try {
+      await api(`/api/organizations/${organizationId}/members`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId, decision }),
+      });
+      await refresh();
+    } catch (error) { onError(error instanceof Error ? error.message : "Couldn't review the access request."); }
+    finally { setBusyId(""); }
+  }
+
+  async function revoke(memberId: string) {
+    setBusyId(memberId);
+    try {
+      await api(`/api/organizations/${organizationId}/members`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ memberId }),
+      });
+      await refresh();
+    } catch (error) { onError(error instanceof Error ? error.message : "Couldn't revoke staff access."); }
+    finally { setBusyId(""); }
+  }
+
+  if (!data) return <Card title="Organization team"><p className="text-sm text-neutral-600">Loading authorized team members…</p></Card>;
+  return (
+    <Card title="Organization team">
+      <ul className="flex flex-col gap-2">
+        {data.members.map((member) => (
+          <li key={member.id} className="flex items-center justify-between gap-3 rounded-md border border-neutral-200 px-3 py-2">
+            <span className="min-w-0"><span className="block truncate text-sm font-medium">{member.name}</span><span className="text-xs text-neutral-600">{member.jobTitle || "Team member"}</span></span>
+            <span className="flex shrink-0 items-center gap-2"><Badge tone={member.role === "owner" || member.role === "admin" ? "info" : "neutral"}>{member.role}</Badge>{canManage && member.role !== "owner" ? <Button size="sm" variant="secondary" disabled={busyId === member.id} onClick={() => void revoke(member.id)}>Remove access</Button> : null}</span>
+          </li>
+        ))}
+      </ul>
+      {canManage ? (
+        <div className="mt-4 border-t border-neutral-200 pt-3">
+          <h3 className="text-sm font-semibold">Access requests</h3>
+          {data.requests.length ? <ul className="mt-2 flex flex-col gap-2">
+            {data.requests.map((request) => <li key={request.id} className="rounded-md border border-neutral-200 p-3">
+              <p className="text-sm font-medium">{request.name} · {request.jobTitle}</p>
+              <p className="text-xs text-neutral-600">{request.email}</p>
+              {request.message ? <p className="mt-1 text-sm text-neutral-700">{request.message}</p> : null}
+              <div className="mt-2 flex gap-2">
+                <Button size="sm" disabled={busyId === request.id} onClick={() => void decide(request.id, "approved")}>Approve staff access</Button>
+                <Button size="sm" variant="secondary" disabled={busyId === request.id} onClick={() => void decide(request.id, "rejected")}>Decline</Button>
+              </div>
+            </li>)}
+          </ul> : <p className="mt-1 text-sm text-neutral-600">No pending access requests.</p>}
+        </div>
+      ) : null}
+    </Card>
   );
 }
 

@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
 import { groupApprovals, groupMembers, groups, profiles, providerLinks, users } from "@/db/schema";
@@ -8,6 +8,7 @@ import { publicProfileFilter } from "@/lib/discovery";
 import { notify } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
+import { hasVerifiedProviderService } from "@/lib/provider-eligibility";
 
 const linkRequestSchema = z.object({
   providerShortId: z.string().trim().length(4),
@@ -23,16 +24,20 @@ export async function GET(req: Request) {
   const url = new URL(req.url);
   const page = Math.max(1, Number(url.searchParams.get("page") ?? 1));
   const pageSize = Math.min(50, Math.max(1, Number(url.searchParams.get("pageSize") ?? 50)));
+  const requestedKind = url.searchParams.get("kind");
+  const kindFilter = requestedKind === "loan" || requestedKind === "support" ? requestedKind : undefined;
 
   // Discovery portion: public providers only. Private providers never leak
   // into listings (enforced in SQL, not by frontend filtering).
   const providers = await db
-    .select({ id: users.id, name: users.name, shortId: users.shortId, country: users.country })
+    .select({ id: users.id, name: users.name, shortId: users.shortId, country: users.country, providerKind: users.providerKind })
     .from(users)
     .leftJoin(profiles, eq(profiles.userId, users.id))
     .where(
       and(
         eq(users.role, "provider"),
+        kindFilter ? eq(users.providerKind, kindFilter) : undefined,
+        sql`EXISTS (SELECT 1 FROM organization_members om JOIN organizations o ON o.id = om.organization_id WHERE om.user_id = users.id AND om.status = 'active' AND om.role IN ('owner', 'admin') AND o.owner_id = users.id AND o.kind = 'provider' AND o.category = users.provider_kind AND o.verification_status = 'verified')`,
         eq(users.status, "active"),
         publicProfileFilter(),
       ),
@@ -130,9 +135,9 @@ export async function GET(req: Request) {
   const linkedProviders =
     missingLinked.length > 0
       ? await db
-          .select({ id: users.id, name: users.name, shortId: users.shortId, country: users.country })
+          .select({ id: users.id, name: users.name, shortId: users.shortId, country: users.country, providerKind: users.providerKind })
           .from(users)
-          .where(and(inArray(users.id, missingLinked), eq(users.status, "active")))
+          .where(and(inArray(users.id, missingLinked), eq(users.status, "active"), kindFilter ? eq(users.providerKind, kindFilter) : undefined))
       : [];
 
   return apiOk({
@@ -172,6 +177,9 @@ export async function POST(req: Request) {
     .limit(1);
   if (!provider || provider.status !== "active" || provider.role !== "provider") {
     return apiError("Provider not found.", 404);
+  }
+  if ((provider.providerKind !== "loan" && provider.providerKind !== "support") || !(await hasVerifiedProviderService(provider.id, provider.providerKind))) {
+    return apiError("This provider needs an active verified service profile before receiving new connections.", 409);
   }
   if (provider.id === session.user.id) {
     return apiError("You cannot link with yourself.", 400);

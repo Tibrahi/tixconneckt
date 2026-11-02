@@ -115,8 +115,8 @@ export function MatchingPage() {
       setAiPending(body.data?.aiPending ?? false);
       setStarted(true);
       setStep(0);
+      await load();
       success("Your matching answers were saved successfully.");
-      void load();
     } catch {
       setError("Your connection was interrupted. Your answers are still available. Please try again.");
     } finally {

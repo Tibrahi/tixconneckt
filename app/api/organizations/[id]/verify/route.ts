@@ -1,6 +1,6 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { documents, organizationVerifications, organizations } from "@/db/schema";
+import { documents, organizationMembers, organizationVerifications, organizations } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { notify } from "@/lib/notify";
 import { getSession } from "@/lib/session";
@@ -26,7 +26,9 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const db = getDb();
   const [org] = await db.select().from(organizations).where(eq(organizations.id, id)).limit(1);
   if (!org) return apiError("Organization not found.", 404);
-  if (org.ownerId !== session.user.id) return apiError("Only the owner can request verification.", 403);
+  const [membership] = await db.select({ role: organizationMembers.role }).from(organizationMembers)
+    .where(and(eq(organizationMembers.organizationId, id), eq(organizationMembers.userId, session.user.id), eq(organizationMembers.status, "active"))).limit(1);
+  if (org.ownerId !== session.user.id && membership?.role !== "owner" && membership?.role !== "admin") return apiError("Only an organization owner or admin can request verification.", 403);
 
   const owned = await db
     .select({ id: documents.id })

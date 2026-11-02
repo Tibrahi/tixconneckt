@@ -92,6 +92,27 @@
       "when": 1793630600000,
       "tag": "0013_payment_methods",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1793640000000,
+      "tag": "0014_organization_membership_onboarding",
+      "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "7",
+      "when": 1793640100000,
+      "tag": "0015_support_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 16,
+      "version": "7",
+      "when": 1793640200000,
+      "tag": "0016_group_call_participants",
+      "breakpoints": true
     }
   ]
 }

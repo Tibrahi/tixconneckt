@@ -3,7 +3,7 @@ import { rateLimit } from "@/lib/rate-limit";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
 import { callSignalSchema } from "@/lib/validation";
-import { loadParticipantCall } from "../_lib";
+import { getCallParticipantIds, loadParticipantCall } from "../_lib";
 
 /**
  * Relay a validated WebRTC signaling payload to the other call party over
@@ -34,8 +34,21 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
     return apiError("This call already finished.", 410);
   }
 
-  const otherId = call.callerId === session.user.id ? call.calleeId : call.callerId;
   const signal = parsed.data;
+  const participantIds = await getCallParticipantIds(call.id);
+  const targets = participantIds.filter((participantId) => participantId !== session.user.id);
+  if (signal.kind === "media-state" && !signal.toUserId) {
+    const relayed = await Promise.all(targets.map((otherId) => emitToRoom(`private:user:${otherId}`, "call:media-state", {
+      callId: call.id,
+      from: session.user.id,
+      to: otherId,
+      muted: signal.muted,
+      cameraOff: signal.cameraOff,
+    })));
+    return apiOk({ relayed: relayed.some(Boolean), recipients: relayed.length });
+  }
+  const otherId = signal.toUserId ?? (targets.length === 1 ? targets[0] : null);
+  if (!otherId || !targets.includes(otherId)) return apiError("Choose another participant in this call.", 400);
   const event =
     signal.kind === "offer"
       ? "webrtc:offer"
@@ -47,6 +60,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const relayed = await emitToRoom(`private:user:${otherId}`, event, {
     callId: call.id,
     from: session.user.id,
+    to: otherId,
     ...(signal.kind === "offer" || signal.kind === "answer" ? { sdp: signal.sdp } : {}),
     ...(signal.kind === "candidate"
       ? { candidate: signal.candidate, sdpMid: signal.sdpMid, sdpMLineIndex: signal.sdpMLineIndex }

@@ -1,4 +1,4 @@
-import { and, desc, eq, notInArray } from "drizzle-orm";
+import { and, desc, eq, notInArray, sql } from "drizzle-orm";
 import { getDb } from "@/db";
 import { profiles, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
@@ -116,6 +116,7 @@ export async function GET(req: Request) {
       and(
         eq(users.status, "active"),
         ...(providersOnly ? [eq(users.role, "provider")] : []),
+        ...(providersOnly ? [sql`EXISTS (SELECT 1 FROM organization_members om JOIN organizations o ON o.id = om.organization_id WHERE om.user_id = users.id AND om.status = 'active' AND om.role IN ('owner', 'admin') AND o.owner_id = users.id AND o.kind = 'provider' AND o.category = users.provider_kind AND o.verification_status = 'verified')`] : []),
         publicProfileFilter(),
         ...(excludeList.length > 0 ? [notInArray(users.id, excludeList)] : []),
       ),

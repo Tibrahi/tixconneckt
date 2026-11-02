@@ -7,7 +7,7 @@ import { transcriptionActive } from "@/lib/call-transcript";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
 import { callTranscriptSegmentsSchema } from "@/lib/validation";
-import { loadParticipantCall } from "../_lib";
+import { getCallParticipantIds, loadParticipantCall } from "../_lib";
 import { loadCallConsents } from "./_lib";
 
 type RouteContext = { params: Promise<{ id: string }> };
@@ -27,7 +27,7 @@ export async function GET(_req: Request, { params }: RouteContext) {
   if (!call) return apiError("Call not found.", 404);
 
   const db = getDb();
-  const [consents, segments] = await Promise.all([
+  const [consents, segments, participantIds] = await Promise.all([
     loadCallConsents(id),
     db
       .select({
@@ -41,10 +41,13 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .where(eq(callTranscripts.callId, id))
       .orderBy(callTranscripts.segmentIndex)
       .limit(MAX_SEGMENTS_PER_CALL),
+    getCallParticipantIds(id),
   ]);
   return apiOk({
     segments,
-    active: transcriptionActive(consents, [call.callerId, call.calleeId]),
+    active: transcriptionActive(consents, participantIds.length ? participantIds : [call.callerId, call.calleeId]),
+    mineConsented: consents.find((consent) => consent.userId === session.user.id)?.consented ?? false,
+    peerConsented: consents.some((consent) => consent.userId !== session.user.id && consent.consented),
     consents: consents.map((c) => ({ userId: c.userId, consented: c.consented, updatedAt: c.updatedAt })),
   });
 }
@@ -72,8 +75,9 @@ export async function POST(req: Request, { params }: RouteContext) {
   if (!parsed.success) return apiError("Invalid transcript segments.", 400);
 
   const consents = await loadCallConsents(id);
-  if (!transcriptionActive(consents, [call.callerId, call.calleeId])) {
-    return apiError("Transcription is off for this call. Both participants must consent before segments can be saved.", 409);
+  const participantIds = await getCallParticipantIds(id);
+  if (!transcriptionActive(consents, participantIds.length ? participantIds : [call.callerId, call.calleeId])) {
+    return apiError("Transcription is off for this call. Every participant must consent before segments can be saved.", 409);
   }
 
   const db = getDb();
@@ -109,8 +113,9 @@ export async function POST(req: Request, { params }: RouteContext) {
       });
   }
 
-  const otherId = session.user.id === call.callerId ? call.calleeId : call.callerId;
-  await emitToRoom(`private:user:${otherId}`, "call:transcript", { callId: id, count: accepted.length });
+  await Promise.all(participantIds.filter((userId) => userId !== session.user.id).map((userId) =>
+    emitToRoom(`private:user:${userId}`, "call:transcript", { callId: id, count: accepted.length }),
+  ));
 
   return apiOk({ saved: accepted.length, truncated: accepted.length < parsed.data.segments.length });
 }
@@ -136,7 +141,9 @@ export async function DELETE(req: Request, { params }: RouteContext) {
     ipAddress: clientIp(req),
   });
 
-  const otherId = session.user.id === call.callerId ? call.calleeId : call.callerId;
-  await emitToRoom(`private:user:${otherId}`, "call:transcript-deleted", { callId: id });
+  const participantIds = await getCallParticipantIds(id);
+  await Promise.all(participantIds.filter((userId) => userId !== session.user.id).map((userId) =>
+    emitToRoom(`private:user:${userId}`, "call:transcript-deleted", { callId: id }),
+  ));
   return apiOk({ deleted: true });
 }

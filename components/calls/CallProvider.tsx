@@ -13,6 +13,7 @@ import { Button, IconButton } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
 import { Modal } from "@/components/ui/Modal";
 import { useCallSignaling, type CallInvite, type CallSignal } from "@/hooks/use-call-signaling";
+import { useCallTranscription } from "@/hooks/use-call-transcription";
 import {
   callsSupported,
   createPeerConnection,
@@ -40,6 +41,9 @@ interface IncomingCall {
   conversationId: string;
   kind: CallKind;
   callerName: string;
+  callerId: string;
+  groupCall: boolean;
+  participants: Array<{ id: string; name: string }>;
 }
 
 interface ActiveCall {
@@ -50,6 +54,8 @@ interface ActiveCall {
   peerName: string;
   phase: "ringing" | "connecting" | "active";
   startedAt: number;
+  groupCall: boolean;
+  participants: Array<{ id: string; name: string }>;
 }
 
 interface CallContextValue {
@@ -114,9 +120,22 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [micState, setMicState] = useState<"live" | "muted" | "ended">("live");
   const [localStream, setLocalStream] = useState<MediaStream | null>(null);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
+  const [remoteParticipants, setRemoteParticipants] = useState<Array<{ id: string; name: string; stream: MediaStream }>>([]);
   const [now, setNow] = useState(() => Date.now());
+  const transcription = useCallTranscription({
+    callId: active?.callId ?? incoming?.callId ?? null,
+    capture: active?.role === "caller" && active.phase === "active",
+    localStream,
+    remoteStream,
+  });
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
+  const peerConnectionsRef = useRef<Map<string, RTCPeerConnection>>(new Map());
+  const peerNamesRef = useRef<Map<string, string>>(new Map());
+  const remoteStreamsRef = useRef<Map<string, MediaStream>>(new Map());
+  const groupAudioContextRef = useRef<AudioContext | null>(null);
+  const groupAudioDestinationsRef = useRef<Map<string, MediaStreamAudioDestinationNode>>(new Map());
+  const relayedAudioSourcesRef = useRef<Map<string, MediaStreamAudioSourceNode>>(new Map());
   const localRef = useRef<MediaStream | null>(null);
   const activeRef = useRef<ActiveCall | null>(null);
   const incomingRef = useRef<IncomingCall | null>(null);
@@ -156,11 +175,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const cleanupMedia = useCallback(() => {
     clearTimers();
     try {
-      pcRef.current?.close();
+      for (const connection of peerConnectionsRef.current.values()) connection.close();
     } catch {
       /* already closed */
     }
     pcRef.current = null;
+    peerConnectionsRef.current.clear();
+    peerNamesRef.current.clear();
+    remoteStreamsRef.current.clear();
+    groupAudioDestinationsRef.current.clear();
+    relayedAudioSourcesRef.current.clear();
+    void groupAudioContextRef.current?.close().catch(() => {});
+    groupAudioContextRef.current = null;
+    setRemoteParticipants([]);
     stopStream(localRef.current);
     localRef.current = null;
     pendingOfferRef.current = null;
@@ -213,13 +240,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
   }
 
   const attachPeerHandlers = useCallback(
-    (callId: string): void => {
-      const pc = pcRef.current;
-      if (!pc) return;
+    (callId: string, peerId: string, pc: RTCPeerConnection): void => {
     pc.onicecandidate = (event) => {
       if (event.candidate) {
         postSignal(callId, {
           kind: "candidate",
+          toUserId: peerId,
           candidate: event.candidate.candidate,
           sdpMid: event.candidate.sdpMid,
           sdpMLineIndex: event.candidate.sdpMLineIndex,
@@ -229,30 +255,56 @@ export function CallProvider({ children }: { children: ReactNode }) {
     pc.ontrack = (event) => {
       const [stream] = event.streams;
       if (stream) {
-        setRemoteStream(stream);
+        remoteStreamsRef.current.set(peerId, stream);
+        const groupAudioContext = groupAudioContextRef.current;
+        if (activeRef.current?.groupCall && groupAudioContext && stream.getAudioTracks().length > 0 && !relayedAudioSourcesRef.current.has(peerId)) {
+          try {
+            const source = groupAudioContext.createMediaStreamSource(stream);
+            relayedAudioSourcesRef.current.set(peerId, source);
+            for (const [targetId, destination] of groupAudioDestinationsRef.current) {
+              if (targetId !== peerId) source.connect(destination);
+            }
+          } catch {
+            setCallError("Group audio relay could not be started. Participants may not hear one another.");
+          }
+        }
+        setRemoteParticipants([...remoteStreamsRef.current.entries()].map(([id, remote]) => ({
+          id,
+          name: peerNamesRef.current.get(id) ?? "Participant",
+          stream: remote,
+        })));
+        const combined = new MediaStream();
+        for (const remote of remoteStreamsRef.current.values()) {
+          for (const track of remote.getTracks()) {
+            if (!combined.getTracks().some((existing) => existing.id === track.id)) combined.addTrack(track);
+          }
+        }
+        setRemoteStream(combined);
         setActive((a) => (a && a.callId === callId ? { ...a, phase: "active", startedAt: Date.now() } : a));
       }
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "failed") {
-        endLocally(
+        pc.close();
+        peerConnectionsRef.current.delete(peerId);
+        if (peerConnectionsRef.current.size === 0) endLocally(
           turnConfigured()
             ? "The connection failed — network conditions blocked the call. Hang up and try again."
             : "The connection failed — network conditions blocked the call, and no TURN relay is configured on this deployment.",
         );
-        decide(callId, "ended").catch(() => {});
+        if (peerConnectionsRef.current.size === 0) decide(callId, "ended").catch(() => {});
       } else if (pc.connectionState === "disconnected") {
         setActive((a) => (a && a.callId === callId ? { ...a, phase: "connecting" } : a));
       } else if (pc.connectionState === "connected") {
         setActive((a) => (a && a.callId === callId ? { ...a, phase: "active" } : a));
       }
     };
-    },
+      },
     [endLocally],
   );
 
-  async function flushPendingCandidates(): Promise<void> {
-    const pc = pcRef.current;
+  async function flushPendingCandidates(peerId?: string): Promise<void> {
+    const pc = peerId ? peerConnectionsRef.current.get(peerId) : pcRef.current;
     if (!pc || !pc.remoteDescription) return;
     const queued = pendingCandidatesRef.current;
     pendingCandidatesRef.current = [];
@@ -285,6 +337,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
         return;
       }
       let callId = "";
+      let callData: { call: { id: string; delivered: boolean }; invitees?: Array<{ id: string; name: string }>; groupCall?: boolean } | undefined;
       try {
         const res = await fetch("/api/calls", {
           method: "POST",
@@ -292,14 +345,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
           body: JSON.stringify({ conversationId, kind }),
         });
         const body = (await res.json()) as {
-          ok: boolean;
-          data?: { call: { id: string; delivered: boolean } };
+        ok: boolean;
+          data?: { call: { id: string; delivered: boolean }; invitees?: Array<{ id: string; name: string }>; groupCall?: boolean };
           error?: string;
         };
         if (!res.ok || !body.ok || !body.data) {
           setCallError(body.error ?? "We couldn't start the call. Please try again.");
           return;
         }
+        callData = body.data;
         callId = body.data.call.id;
         setRingingOffline(body.data.call.delivered === false);
       } catch {
@@ -315,6 +369,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         peerName,
         phase: "ringing",
         startedAt: Date.now(),
+        groupCall: Boolean(callData?.groupCall),
+        participants: callData?.invitees ?? [],
       });
 
       let stream: MediaStream;
@@ -328,15 +384,46 @@ export function CallProvider({ children }: { children: ReactNode }) {
       localRef.current = stream;
       setLocalStream(stream);
 
-      const pc = createPeerConnection(await getIceServers(), () => {});
-      pcRef.current = pc;
-      for (const track of stream.getTracks()) pc.addTrack(track, stream);
-      attachPeerHandlers(callId);
       try {
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-        const sent = await postSignal(callId, { kind: "offer", sdp: offer.sdp ?? "" });
-        if (!sent) throw new Error("signaling failed");
+        const invitees = callData?.invitees ?? [];
+        const peers = invitees.length ? invitees : [{ id: "", name: peerName }];
+        const iceServers = await getIceServers();
+        let groupAudio: AudioContext | null = null;
+        let microphoneSource: MediaStreamAudioSourceNode | null = null;
+        if (callData?.groupCall && stream.getAudioTracks().length > 0 && window.AudioContext) {
+          try {
+            groupAudio = new window.AudioContext();
+            await groupAudio.resume();
+            microphoneSource = groupAudio.createMediaStreamSource(new MediaStream(stream.getAudioTracks()));
+            groupAudioContextRef.current = groupAudio;
+          } catch {
+            groupAudio = null;
+            microphoneSource = null;
+          }
+        }
+        for (const peer of peers) {
+          const pc = createPeerConnection(iceServers, () => {});
+          peerConnectionsRef.current.set(peer.id, pc);
+          peerNamesRef.current.set(peer.id, peer.name);
+          if (!pcRef.current) pcRef.current = pc;
+          for (const track of stream.getTracks()) pc.addTrack(track, stream);
+          if (groupAudio && microphoneSource) {
+            const destination = groupAudio.createMediaStreamDestination();
+            microphoneSource.connect(destination);
+            groupAudioDestinationsRef.current.set(peer.id, destination);
+            for (const [sourceId, source] of relayedAudioSourcesRef.current) {
+              if (sourceId !== peer.id) source.connect(destination);
+            }
+            const audioSender = pc.getSenders().find((sender) => sender.track?.kind === "audio");
+            const mixedAudio = destination.stream.getAudioTracks()[0];
+            if (audioSender && mixedAudio) await audioSender.replaceTrack(mixedAudio);
+          }
+          attachPeerHandlers(callId, peer.id, pc);
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          const sent = await postSignal(callId, { kind: "offer", toUserId: peer.id || undefined, sdp: offer.sdp ?? "" });
+          if (!sent) throw new Error("signaling failed");
+        }
       } catch {
         await decide(callId, "ended").catch(() => {});
         endLocally("We couldn't reach the other side. Please try again.");
@@ -378,6 +465,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
       peerName: inv.callerName,
       phase: "connecting",
       startedAt: Date.now(),
+      groupCall: inv.groupCall,
+      participants: inv.participants,
     });
 
     let stream: MediaStream;
@@ -393,8 +482,10 @@ export function CallProvider({ children }: { children: ReactNode }) {
 
     const pc = createPeerConnection(await getIceServers(), () => {});
     pcRef.current = pc;
+    peerConnectionsRef.current.set(inv.callerId, pc);
+    peerNamesRef.current.set(inv.callerId, inv.callerName);
     for (const track of stream.getTracks()) pc.addTrack(track, stream);
-    attachPeerHandlers(inv.callId);
+    attachPeerHandlers(inv.callId, inv.callerId, pc);
 
     // The offer usually arrived while ringing; otherwise wait briefly.
     const waitStart = Date.now();
@@ -416,7 +507,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
       await flushPendingCandidates();
       const answer = await pc.createAnswer();
       await pc.setLocalDescription(answer);
-      await postSignal(inv.callId, { kind: "answer", sdp: answer.sdp ?? "" });
+      await postSignal(inv.callId, { kind: "answer", toUserId: inv.callerId, sdp: answer.sdp ?? "" });
     } catch {
       await decide(inv.callId, "ended").catch(() => {});
       endLocally("We couldn't establish the connection. Please try again.");
@@ -445,6 +536,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
         conversationId: String(data.conversationId),
         kind: data.kind === "video" ? "video" : "audio",
         callerName: String(data.caller?.name ?? "Unknown"),
+        callerId: String((data.caller as { id?: string } | undefined)?.id ?? ""),
+        groupCall: Boolean(data.groupCall),
+        participants: data.participants ?? [],
       });
       later(() => {
         // Ringing UI expires locally; the caller side still resolves the record.
@@ -459,10 +553,11 @@ export function CallProvider({ children }: { children: ReactNode }) {
     },
     onAnswer: (signal: CallSignal) => {
       if (activeRef.current?.callId !== String(signal.callId)) return;
-      const pc = pcRef.current;
+      const peerId = signal.from ?? "";
+      const pc = peerConnectionsRef.current.get(peerId) ?? pcRef.current;
       if (!pc || typeof signal.sdp !== "string") return;
       pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp: signal.sdp }))
-        .then(() => flushPendingCandidates())
+        .then(() => flushPendingCandidates(peerId))
         .catch(() => {});
       setActive((a) => (a ? { ...a, phase: "connecting" } : a));
       // Media must arrive promptly once the answer is in.
@@ -481,7 +576,8 @@ export function CallProvider({ children }: { children: ReactNode }) {
         sdpMid: signal.sdpMid,
         sdpMLineIndex: signal.sdpMLineIndex,
       };
-      const pc = pcRef.current;
+      const peerId = signal.from ?? "";
+      const pc = peerConnectionsRef.current.get(peerId) ?? pcRef.current;
       if (activeRef.current?.callId === String(signal.callId)) {
         if (pc && pc.remoteDescription) {
           pc.addIceCandidate(new RTCIceCandidate(init)).catch(() => {});
@@ -503,6 +599,12 @@ export function CallProvider({ children }: { children: ReactNode }) {
       setActive((a) => (a && data.callId === a.callId ? { ...a, phase: "connecting" } : a));
     },
     onReject: (data) => {
+      if (activeRef.current?.callId === data.callId && data.userId) {
+        peerConnectionsRef.current.get(data.userId)?.close();
+        peerConnectionsRef.current.delete(data.userId);
+        remoteStreamsRef.current.delete(data.userId);
+        if (peerConnectionsRef.current.size > 0) return;
+      }
       if (activeRef.current?.callId === data.callId) {
         endLocally("The call was declined.");
       }
@@ -513,6 +615,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
     },
     onMissed: (data) => {
       if (incomingRef.current?.callId === data.callId) setIncoming(null);
+    },
+    onParticipantLeft: (data) => {
+      if (activeRef.current?.callId !== data.callId) return;
+      peerConnectionsRef.current.get(data.userId)?.close();
+      peerConnectionsRef.current.delete(data.userId);
+      remoteStreamsRef.current.delete(data.userId);
+      relayedAudioSourcesRef.current.get(data.userId)?.disconnect();
+      relayedAudioSourcesRef.current.delete(data.userId);
+      groupAudioDestinationsRef.current.get(data.userId)?.stream.getTracks().forEach((track) => track.stop());
+      groupAudioDestinationsRef.current.delete(data.userId);
+      setRemoteParticipants([...remoteStreamsRef.current.entries()].map(([id, stream]) => ({ id, name: peerNamesRef.current.get(id) ?? "Participant", stream })));
+      const combined = new MediaStream();
+      for (const remote of remoteStreamsRef.current.values()) for (const track of remote.getTracks()) combined.addTrack(track);
+      setRemoteStream(combined);
     },
   });
 
@@ -542,6 +658,15 @@ export function CallProvider({ children }: { children: ReactNode }) {
     if (remoteAudioRef.current) remoteAudioRef.current.srcObject = remoteStream;
     playRemote();
   }, [remoteStream, active?.callId, playRemote]);
+  useEffect(() => {
+    for (const participant of remoteParticipants) {
+      const video = document.getElementById(`call-video-${participant.id}`) as HTMLVideoElement | null;
+      if (video) {
+        video.srcObject = participant.stream;
+        void video.play().catch(() => setNeedsResume(true));
+      }
+    }
+  }, [remoteParticipants, active?.callId]);
 
   // Microphone device disconnect/reconnect: when the local audio track
   // ends mid-call, re-acquire just the microphone and swap it onto the
@@ -689,6 +814,20 @@ export function CallProvider({ children }: { children: ReactNode }) {
             <span className="font-semibold text-black">{incoming.callerName}</span> is calling you.
             Your camera and microphone turn on only if you accept.
           </p>
+          <label className="mt-4 flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
+            <input
+              type="checkbox"
+              checked={transcription.mineConsented}
+              disabled={transcription.savingConsent}
+              onChange={(event) => void transcription.setConsent(event.currentTarget.checked)}
+              className="mt-0.5 h-4 w-4 accent-[#1447e6]"
+            />
+            <span>
+              <span className="font-medium text-black">Allow call transcription</span>
+              <span className="mt-0.5 block text-xs text-neutral-600">Optional. It starts only if both people agree. Only transcript text is saved; call audio is processed and discarded.</span>
+            </span>
+          </label>
+          {transcription.error ? <p role="alert" className="mt-2 text-xs text-red-700">{transcription.error}</p> : null}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" icon="phone-slash" onClick={() => void declineCall()}>
               Decline
@@ -738,21 +877,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
             </div>
 
             {active.kind === "video" ? (
-              <div ref={videoWrapRef} className={`grid gap-2 bg-white sm:grid-cols-[2fr_1fr] ${fullscreen ? "h-full content-center p-4" : ""}`}>
-                <div className="relative overflow-hidden rounded-lg border border-neutral-200 bg-black">
-                  <video
-                    ref={remoteVideoRef}
-                    autoPlay
-                    playsInline
-                    aria-label={`${active.peerName} video`}
-                    className="aspect-video w-full object-cover"
-                  />
-                  {peerMedia.cameraOff ? (
-                    <span className="absolute inset-0 flex items-center justify-center text-sm text-white">
-                      {active.peerName} turned their camera off
-                    </span>
-                  ) : null}
-                </div>
+              <div ref={videoWrapRef} className={`grid gap-2 bg-white sm:grid-cols-2 lg:grid-cols-3 ${fullscreen ? "h-full content-center p-4" : ""}`}>
+                {remoteParticipants.map((participant) => (
+                  <div key={participant.id} className="relative overflow-hidden rounded-lg border border-neutral-200 bg-black">
+                    <video id={`call-video-${participant.id}`} autoPlay playsInline muted aria-label={`${participant.name} video`} className="aspect-video w-full object-cover" />
+                    <span className="absolute bottom-2 left-2 rounded bg-black/60 px-2 py-1 text-xs text-white">{participant.name}</span>
+                  </div>
+                ))}
                 <div className="overflow-hidden rounded-lg border border-neutral-200 bg-black">
                   <video
                     ref={localVideoRef}
@@ -778,6 +909,19 @@ export function CallProvider({ children }: { children: ReactNode }) {
             )}
 
             <div className="flex flex-wrap items-center gap-2">
+              <label className="flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 px-3 text-xs">
+                <input
+                  type="checkbox"
+                  checked={transcription.mineConsented}
+                  disabled={transcription.savingConsent}
+                  onChange={(event) => void transcription.setConsent(event.currentTarget.checked)}
+                  className="h-4 w-4 accent-[#1447e6]"
+                />
+                Allow transcription
+              </label>
+              <span className="text-xs text-neutral-600" role="status" aria-live="polite">
+                {transcription.active ? "Transcription is on" : transcription.peerConsented ? "Waiting for your consent" : "Both people must agree"}
+              </span>
               <IconButton
                 label={muted ? "Unmute microphone" : "Mute microphone"}
                 icon={muted ? "microphone-slash" : "microphone"}
@@ -807,6 +951,7 @@ export function CallProvider({ children }: { children: ReactNode }) {
                 {callError}
               </p>
             ) : null}
+            {transcription.error ? <p role="alert" className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-800">{transcription.error}</p> : null}
             <p className="text-xs text-neutral-600">
               If the other side can&rsquo;t hear or see you, you are likely behind a restrictive network —
               voice and video need a direct peer connection.

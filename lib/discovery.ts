@@ -188,6 +188,7 @@ export async function listPublicUsers(
   const where = and(
     eq(users.status, "active"),
     ...(providersOnly ? [eq(users.role, "provider")] : []),
+    ...(providersOnly ? [sql`EXISTS (SELECT 1 FROM organization_members om JOIN organizations o ON o.id = om.organization_id WHERE om.user_id = users.id AND om.status = 'active' AND om.role IN ('owner', 'admin') AND o.owner_id = users.id AND o.kind = 'provider' AND o.category = users.provider_kind AND o.verification_status = 'verified')`] : []),
     publicProfileFilter(),
     ...(excludeIds.length > 0 ? [notInArray(users.id, excludeIds)] : []),
   );

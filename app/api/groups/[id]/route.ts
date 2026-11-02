@@ -1,12 +1,14 @@
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 import { getDb } from "@/db";
-import { conversationMembers, conversations, groupApprovals, groupMembers, groups, providerLinks, users } from "@/db/schema";
+import { conversationMembers, conversations, groupApprovals, groupMembers, groups, organizations, providerLinks, supportRequestDocuments, supportRequestEvents, supportRequests, users } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { postSystemMessage } from "@/lib/chat";
 import { notify } from "@/lib/notify";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
+import { ensureSupportConversation } from "@/lib/support-requests";
+import { hasVerifiedProviderService } from "@/lib/provider-eligibility";
 
 async function membership(db: ReturnType<typeof getDb>, groupId: string, userId: string) {
   const rows = await db
@@ -190,6 +192,27 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
   if (rows.length === 0) return apiError("Approval not found.", 404);
   const approval = rows[0];
 
+  if (parsed.data.decision === "approved" && approval.kind === "provider_connection" && approval.referenceId) {
+    const [provider] = await db.select({ role: users.role, providerKind: users.providerKind, status: users.status }).from(users).where(eq(users.id, approval.referenceId)).limit(1);
+    if (!provider || provider.role !== "provider" || provider.status !== "active" || (provider.providerKind !== "loan" && provider.providerKind !== "support") || !(await hasVerifiedProviderService(approval.referenceId, provider.providerKind))) {
+      return apiError("This provider needs an active verified service profile before a group can connect.", 409);
+    }
+  }
+  if (parsed.data.decision === "approved" && approval.kind === "support_request" && approval.referenceId) {
+    const [supportRequest] = await db.select().from(supportRequests).where(and(
+      eq(supportRequests.id, approval.referenceId), eq(supportRequests.requesterGroupId, id), eq(supportRequests.status, "pending_group_approval"),
+    )).limit(1);
+    if (!supportRequest) return apiError("This support request is no longer awaiting group approval.", 409);
+    if (supportRequest.targetProviderId) {
+      const [provider] = await db.select({ providerKind: users.providerKind, status: users.status, role: users.role }).from(users).where(eq(users.id, supportRequest.targetProviderId)).limit(1);
+      if (!provider || provider.role !== "provider" || provider.providerKind !== "support" || provider.status !== "active" || !(await hasVerifiedProviderService(supportRequest.targetProviderId, "support"))) return apiError("The selected support provider is not currently verified.", 409);
+    }
+    if (supportRequest.targetOrganizationId) {
+      const [organization] = await db.select({ verificationStatus: organizations.verificationStatus }).from(organizations).where(eq(organizations.id, supportRequest.targetOrganizationId)).limit(1);
+      if (organization?.verificationStatus !== "verified") return apiError("The selected organization is not currently verified.", 409);
+    }
+  }
+
   await db
     .update(groupApprovals)
     .set({ status: parsed.data.decision, decidedBy: session.user.id, decidedAt: new Date() })
@@ -216,6 +239,42 @@ export async function PATCH(req: Request, { params }: { params: Promise<{ id: st
         resourceId: inserted[0].id,
         emailTo: provider.email,
       });
+    }
+  }
+
+  if (approval.kind === "support_request" && approval.referenceId) {
+    const [supportRequest] = await db.select().from(supportRequests).where(and(
+      eq(supportRequests.id, approval.referenceId),
+      eq(supportRequests.requesterGroupId, id),
+      eq(supportRequests.status, "pending_group_approval"),
+    )).limit(1);
+    if (supportRequest) {
+      const toStatus = parsed.data.decision === "approved" ? "pending" : "declined";
+      await db.transaction(async (tx) => {
+        await tx.update(supportRequests).set({ status: toStatus, updatedAt: new Date(), ...(toStatus === "declined" ? { resolvedAt: new Date() } : {}) }).where(eq(supportRequests.id, supportRequest.id));
+        await tx.insert(supportRequestEvents).values({
+          requestId: supportRequest.id,
+          actorId: session.user.id,
+          event: "group_approval_decided",
+          fromStatus: "pending_group_approval",
+          toStatus,
+        });
+        if (toStatus === "declined") await tx.update(supportRequestDocuments).set({ expiresAt: new Date() }).where(eq(supportRequestDocuments.requestId, supportRequest.id));
+      });
+      if (toStatus === "pending") {
+        const conversationId = await ensureSupportConversation(supportRequest.id);
+        const [organization] = supportRequest.targetOrganizationId
+          ? await db.select({ ownerId: organizations.ownerId }).from(organizations).where(eq(organizations.id, supportRequest.targetOrganizationId)).limit(1)
+          : [];
+        const recipientId = supportRequest.targetProviderId ?? organization?.ownerId;
+        if (recipientId) {
+          await notify({ userId: recipientId, type: "support_request", title: "New group support request", body: supportRequest.summary, resourceType: "support_request", resourceId: supportRequest.id });
+        }
+        await notify({ userId: supportRequest.requesterUserId, type: "support_request", title: "Group approved your support request", body: "The request is now with the selected recipient.", resourceType: "support_request", resourceId: supportRequest.id });
+        await emitToRoom(`private:group:${id}`, "group:approval", { id: approval.id, status: parsed.data.decision, supportRequestId: supportRequest.id, conversationId });
+      } else {
+        await notify({ userId: supportRequest.requesterUserId, type: "support_request", title: "Group declined the support request", resourceType: "support_request", resourceId: supportRequest.id });
+      }
     }
   }
 

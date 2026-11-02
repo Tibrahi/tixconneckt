@@ -11,6 +11,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { users } from "./auth";
 import { groups } from "./social";
+import { supportRequests } from "./projects";
 
 export const conversations = pgTable(
   "conversations",
@@ -27,6 +28,7 @@ export const conversations = pgTable(
     providerLinkId: text("provider_link_id"),
     /** Structured negotiation thread for one funding request (Project.md §8). */
     requestId: text("request_id"),
+    supportRequestId: text("support_request_id").references(() => supportRequests.id, { onDelete: "cascade" }),
     createdBy: text("created_by")
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
@@ -42,6 +44,7 @@ export const conversations = pgTable(
     index("conversation_group_idx").on(t.groupId),
     index("conversation_updated_idx").on(t.updatedAt),
     uniqueIndex("conversation_request_unique").on(t.requestId),
+    uniqueIndex("conversation_support_request_unique").on(t.supportRequestId),
   ],
 );
 
@@ -255,6 +258,26 @@ export const calls = pgTable(
 );
 
 export type Call = typeof calls.$inferSelect;
+
+/** Participants and per-user lifecycle for a one-to-one or group call. */
+export const callParticipants = pgTable(
+  "call_participants",
+  {
+    id: text("id").primaryKey().$defaultFn(() => crypto.randomUUID()),
+    callId: text("call_id").notNull().references(() => calls.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+    role: text("role").notNull().default("participant"),
+    status: text("status").notNull().default("invited"),
+    invitedAt: timestamp("invited_at", { withTimezone: true }).notNull().defaultNow(),
+    joinedAt: timestamp("joined_at", { withTimezone: true }),
+    leftAt: timestamp("left_at", { withTimezone: true }),
+  },
+  (t) => [
+    uniqueIndex("call_participant_call_user_unique").on(t.callId, t.userId),
+    index("call_participant_user_status_idx").on(t.userId, t.status, t.invitedAt),
+    index("call_participant_call_status_idx").on(t.callId, t.status),
+  ],
+);
 
 /**
  * Per-call transcription consent (role-aware §B). Transcription is active

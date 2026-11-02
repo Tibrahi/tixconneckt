@@ -1,7 +1,8 @@
-import { and, count, desc, eq, inArray, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
 import {
   callHides,
+  callParticipants,
   callTranscriptConsents,
   callTranscripts,
   calls,
@@ -17,11 +18,7 @@ import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
 import { callCreateSchema } from "@/lib/validation";
 
-/**
- * Start a 1:1 call. Only direct conversations with exactly two members can
- * call — group conferences are honestly unsupported. The invite is delivered
- * over the realtime server; media itself flows peer-to-peer via WebRTC.
- */
+/** Start a direct or small group call; media remains peer-to-peer WebRTC. */
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
@@ -44,9 +41,7 @@ export async function POST(req: Request) {
     .where(eq(conversations.id, parsed.data.conversationId))
     .limit(1);
   if (!conv) return apiError("Conversation not found.", 404);
-  if (conv.type !== "direct") {
-    return apiError("Calls work one-to-one. Group calls aren't supported yet.", 400);
-  }
+  if (conv.type !== "direct" && conv.type !== "group") return apiError("Calls are available in direct and group conversations.", 400);
 
   const members = await db
     .select({ userId: conversationMembers.userId })
@@ -55,9 +50,11 @@ export async function POST(req: Request) {
   const mine = members.some((m) => m.userId === session.user.id);
   if (!mine) return apiError("You are not a member of this conversation.", 403);
   const others = members.filter((m) => m.userId !== session.user.id);
-  if (others.length !== 1) {
-    return apiError("Calls work one-to-one. Group calls aren't supported yet.", 400);
+  if (conv.type === "direct" && others.length !== 1) return apiError("This direct call needs one other participant.", 400);
+  if (conv.type === "group" && (others.length < 2 || others.length > 7)) {
+    return apiError("Group calls need 3–8 conversation members, including you.", 400);
   }
+  if (others.length === 0) return apiError("There is no one else in this conversation to call.", 400);
   const calleeId = others[0].userId;
 
   const live = await db
@@ -85,33 +82,41 @@ export async function POST(req: Request) {
     })
     .returning();
 
-  const [callee] = await db
+  await db.insert(callParticipants).values([
+    { callId: call.id, userId: session.user.id, role: "caller", status: "accepted", joinedAt: new Date() },
+    ...others.map((member) => ({ callId: call.id, userId: member.userId, role: "participant", status: "invited" })),
+  ]);
+
+  const invitees = await db
     .select({ id: users.id, name: users.name, shortId: users.shortId })
     .from(users)
-    .where(eq(users.id, calleeId))
-    .limit(1);
+    .where(inArray(users.id, others.map((member) => member.userId)));
 
-  const delivered = await emitToRoom(`private:user:${calleeId}`, "call:invite", {
-    callId: call.id,
-    conversationId: conv.id,
-    kind: call.kind,
-    caller: { id: session.user.id, name: session.user.name, shortId: session.user.shortId },
-  });
-
-  // Persistent invite so an offline callee still learns about the call.
-  await notify({
-    userId: calleeId,
-    type: "call",
-    title: `Incoming ${call.kind} call`,
-    body: `${session.user.name} is calling you.`,
-    resourceType: "conversation",
-    resourceId: conv.id,
-  });
+  const deliveredByUser = await Promise.all(others.map(async ({ userId }) => {
+    const delivered = await emitToRoom(`private:user:${userId}`, "call:invite", {
+      callId: call.id,
+      conversationId: conv.id,
+      kind: call.kind,
+      groupCall: conv.type === "group",
+      participants: [{ id: session.user.id, name: session.user.name }, ...invitees.map((person) => ({ id: person.id, name: person.name }))],
+      caller: { id: session.user.id, name: session.user.name, shortId: session.user.shortId },
+    });
+    await notify({
+      userId,
+      type: "call",
+      title: `${conv.type === "group" ? "Group " : ""}${call.kind} call`,
+      body: `${session.user.name} is calling${conv.type === "group" ? ` ${invitees.length} members` : " you"}.`,
+      resourceType: "conversation",
+      resourceId: conv.id,
+    });
+    return { userId, delivered };
+  }));
 
   return apiOk(
     {
-      call: { ...call, delivered },
-      callee: callee ?? { id: calleeId, name: "Unknown", shortId: "" },
+      call: { ...call, delivered: deliveredByUser.every((row) => row.delivered) },
+      invitees,
+      groupCall: conv.type === "group",
     },
     201,
   );
@@ -148,6 +153,11 @@ export async function GET(req: Request) {
   }
 
   const rows = await db
+    .select({ callId: callParticipants.callId })
+    .from(callParticipants)
+    .where(eq(callParticipants.userId, session.user.id));
+  const participantCallIds = rows.map((row) => row.callId);
+  const historyRows = participantCallIds.length === 0 ? [] : await db
     .select({
       id: calls.id,
       kind: calls.kind,
@@ -165,13 +175,13 @@ export async function GET(req: Request) {
     .where(
       and(
         eq(calls.conversationId, conversationId),
-        or(eq(calls.callerId, session.user.id), eq(calls.calleeId, session.user.id)),
+        inArray(calls.id, participantCallIds),
       ),
     )
     .orderBy(desc(calls.createdAt))
     .limit(20);
 
-  const ids = rows.map((r) => r.id);
+  const ids = historyRows.map((r) => r.id);
   const [hides, segmentCounts, consents] = ids.length === 0
     ? [[], [], []] as const
     : await Promise.all([
@@ -202,13 +212,21 @@ export async function GET(req: Request) {
     consentsByCall.set(c.callId, list);
   }
 
-  const history = rows
+  const participantRows = ids.length === 0 ? [] : await db.select({ callId: callParticipants.callId, userId: callParticipants.userId })
+    .from(callParticipants).where(inArray(callParticipants.callId, ids));
+  const participantIdsByCall = new Map<string, string[]>();
+  for (const participant of participantRows) {
+    const list = participantIdsByCall.get(participant.callId) ?? [];
+    list.push(participant.userId);
+    participantIdsByCall.set(participant.callId, list);
+  }
+  const history = historyRows
     .filter((row) => showHidden || !hiddenIds.has(row.id))
     .map((row) => ({
       ...row,
       durationMs: callDurationMs(row.answeredAt, row.endedAt),
       transcriptSegments: segmentsByCall.get(row.id) ?? 0,
-      transcriptActive: transcriptionActive(consentsByCall.get(row.id) ?? [], [row.callerId, row.calleeId]),
+      transcriptActive: transcriptionActive(consentsByCall.get(row.id) ?? [], participantIdsByCall.get(row.id) ?? [row.callerId, row.calleeId]),
       hidden: hiddenIds.has(row.id),
     }));
 
