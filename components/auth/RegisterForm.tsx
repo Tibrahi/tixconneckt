@@ -10,7 +10,6 @@ import { registerSchema, type RegisterInput } from "@/lib/validation";
 import { Button } from "@/components/ui/Button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
-import { LegalModal } from "./LegalModal";
 import { OtpForm } from "./OtpForm";
 import { stripSelectedCallingCode } from "@/lib/phone";
 import { countryFlagForCode } from "@/lib/country-flag";
@@ -26,8 +25,6 @@ export function RegisterForm() {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [countries, setCountries] = useState<CountryOption[]>([]);
-  const [modal, setModal] = useState<"privacy" | "terms" | "agreement" | null>(null);
-  const [readDocs, setReadDocs] = useState({ privacy: false, terms: false, agreement: false });
   const [error, setError] = useState<string | null>(null);
   const [registeredEmail, setRegisteredEmail] = useState<string | null>(null);
   const [emailPending, setEmailPending] = useState(false);
@@ -284,9 +281,9 @@ export function RegisterForm() {
           <legend className="px-1 text-sm font-medium">Legal acceptance</legend>
           {(
             [
-              { key: "acceptPrivacy", doc: "privacy", label: "Privacy Policy" },
-              { key: "acceptTerms", doc: "terms", label: "Terms of Service" },
-              { key: "acceptAgreement", doc: "agreement", label: "User Agreement" },
+              { key: "acceptPrivacy", label: "Privacy Policy" },
+              { key: "acceptTerms", label: "Terms of Service" },
+              { key: "acceptAgreement", label: "User Agreement" },
             ] as const
           ).map((item) => (
             <div key={item.key} className="flex items-start gap-2 text-sm">
@@ -294,27 +291,16 @@ export function RegisterForm() {
                 type="checkbox"
                 id={item.key}
                 className={`${checkboxClass} mt-0.5`}
-                disabled={!readDocs[item.doc]}
                 {...form.register(item.key)}
               />
-              <label htmlFor={item.key} className={!readDocs[item.doc] ? "text-neutral-500" : "text-black"}>
-                I accept the{" "}
-                <button
-                  type="button"
-                  onClick={() => setModal(item.doc)}
-                  className="font-medium text-[#1447e6] hover:underline"
-                >
-                  {item.label}
-                </button>
-                {!readDocs[item.doc] ? " (read it first to enable this checkbox)" : ""}
-              </label>
+              <label htmlFor={item.key} className="text-black">I accept the {item.label}.</label>
             </div>
           ))}
           {form.formState.errors.acceptPrivacy ||
           form.formState.errors.acceptTerms ||
           form.formState.errors.acceptAgreement ? (
             <p role="alert" className="text-xs font-medium text-[#1447e6]">
-              Reading and accepting all three documents is required.
+              Accepting all three documents is required to create an account.
             </p>
           ) : null}
         </fieldset> : null}
@@ -332,14 +318,6 @@ export function RegisterForm() {
           Sign in
         </Link>
       </p>
-      {modal ? (
-        <LegalModal
-          title={modal === "privacy" ? "Privacy Policy" : modal === "terms" ? "Terms of Service" : "User Agreement"}
-          docType={modal}
-          onAccept={() => setReadDocs((r) => ({ ...r, [modal]: true }))}
-          onClose={() => setModal(null)}
-        />
-      ) : null}
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} onRetry={() => setError(null)} /> : null}
     </section>
   );

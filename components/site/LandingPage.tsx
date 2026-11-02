@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
+import { LegalLinks } from "@/components/legal/LegalLinks";
 import { ROUTES } from "@/lib/routes";
 import {
   HOMEPAGE_CAPABILITIES,
@@ -232,13 +233,8 @@ export function LandingPage() {
         </section>
 
         <section id="privacy" className="scroll-mt-24 border-t border-slate-200 bg-slate-50 py-16 sm:py-20">
-          <div className="mx-auto flex max-w-7xl flex-col justify-between gap-8 px-4 sm:px-6 lg:flex-row lg:items-center lg:px-8">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="max-w-2xl"><p className="text-xs font-semibold uppercase tracking-[0.16em] text-blue-700">Your account</p><h2 className="mt-3 text-2xl font-semibold tracking-tight text-slate-950 sm:text-3xl">{sectionHeading("privacy")}</h2><p className="mt-3 text-sm leading-6 text-slate-600">Choose how to present your profile, work with the people and groups you belong to, and review the policies that govern participation.</p></div>
-            <div className="flex shrink-0 flex-wrap gap-3">
-              <Link href={ROUTES.legalPrivacy} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:border-blue-400">Privacy policy</Link>
-              <Link href={ROUTES.legalTerms} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:border-blue-400">Terms</Link>
-              <Link href={ROUTES.legalAgreement} className="rounded-lg border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-800 hover:border-blue-400">User agreement</Link>
-            </div>
           </div>
         </section>
 
@@ -259,7 +255,12 @@ export function LandingPage() {
             <Link href="#top" className="flex w-fit items-center gap-3"><Image src="/logo.png" alt="" width={40} height={40} className="h-10 w-10 rounded-lg" /><span className="font-bold text-slate-900">TIXCONNECKT</span></Link>
             <p className="mt-4 max-w-sm text-sm leading-6 text-slate-600">A shared place for people to find collaborators, develop digital projects, and coordinate practical support.</p>
           </div>
-          {HOMEPAGE_FOOTER_GROUPS.map((group) => (
+          {HOMEPAGE_FOOTER_GROUPS.map((group) => group.heading === "Policies" ? (
+            <nav key={group.heading} aria-label={`${group.heading} links`}>
+              <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{group.heading}</h2>
+              <LegalLinks className="mt-4 flex flex-col items-start gap-3 text-sm" linkClassName="text-slate-600 transition hover:text-blue-700" />
+            </nav>
+          ) : (
             <nav key={group.heading} aria-label={`${group.heading} links`}>
               <h2 className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{group.heading}</h2>
               <ul className="mt-4 space-y-3 text-sm text-slate-600">{group.links.map((item) => <li key={item.href}><Link href={item.href} className="transition hover:text-blue-700">{item.label}</Link></li>)}</ul>

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { ROUTES } from "@/lib/routes";
 import { Icon } from "@/components/ui/Icon";
+import { LegalLinks } from "@/components/legal/LegalLinks";
 
 export type AuthVariant = "login" | "register" | "forgot" | "reset" | "verify";
 
@@ -200,12 +201,12 @@ export function AuthLayout({ variant, children }: { variant: AuthVariant; childr
               </button>
             </div>
           </section>
-          <p className="mt-10 text-xs text-white/85">
-            Protected by server-side authorization. Read the{" "}
-            <Link href={ROUTES.legalPrivacy} className="underline hover:text-white">Privacy Policy</Link>,{" "}
-            <Link href={ROUTES.legalTerms} className="underline hover:text-white">Terms</Link>, and{" "}
-            <Link href={ROUTES.legalAgreement} className="underline hover:text-white">Agreement</Link>.
-          </p>
+          <p className="mt-10 text-xs text-white/85">Protected by server-side authorization. Read our policies when you need them:</p>
+          <LegalLinks
+            className="mt-2 flex flex-wrap gap-x-3 gap-y-1 text-xs"
+            linkClassName="text-white underline decoration-white/60 underline-offset-2 hover:decoration-white"
+            separator=", "
+          />
         </div>
       </div>
 

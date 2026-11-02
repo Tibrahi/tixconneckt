@@ -138,11 +138,7 @@ export const HOMEPAGE_FOOTER_GROUPS: Array<{ heading: string; links: HomepageLin
   },
   {
     heading: "Policies",
-    links: [
-      { label: "Privacy policy", href: ROUTES.legalPrivacy },
-      { label: "Terms of service", href: ROUTES.legalTerms },
-      { label: "User agreement", href: ROUTES.legalAgreement },
-    ],
+    links: [],
   },
 ];
 
@@ -154,9 +150,6 @@ export function homepageLinks(): HomepageLink[] {
     { label: "Explore the platform", href: "#platform" },
     { label: "Who it serves", href: "#people" },
     { label: "How work moves", href: "#workflows" },
-    { label: "Privacy policy", href: ROUTES.legalPrivacy },
-    { label: "Terms of service", href: ROUTES.legalTerms },
-    { label: "User agreement", href: ROUTES.legalAgreement },
     ...HOMEPAGE_FOOTER_GROUPS.flatMap((group) => group.links),
   ];
 }
