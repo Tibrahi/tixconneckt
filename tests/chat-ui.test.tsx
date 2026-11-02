@@ -3,6 +3,7 @@ import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Composer } from "@/components/chat/Composer";
+import { ConversationPanel } from "@/components/chat/ConversationPanel";
 import { MessageBubble } from "@/components/chat/MessageBubble";
 import { groupByDay, type ChatMessage } from "@/components/chat/types";
 import { extensionForMime } from "@/hooks/use-voice-recorder";
@@ -252,6 +253,122 @@ describe("voice recording", () => {
     });
     expect(onError).toHaveBeenCalledTimes(1);
     expect(String(onError.mock.calls[0][0])).toContain("unavailable in this browser");
+  });
+});
+
+describe("Chat in-flow trays (no overlay conflicts)", () => {
+  /** The tray must live in normal flow — never an absolutely-positioned overlay. */
+  function assertInFlow(el: Element, scope: Element) {
+    let node: Element | null = el;
+    while (node && node !== scope) {
+      const cls = node.getAttribute("class") ?? "";
+      expect(cls).not.toMatch(/(^|\s)(absolute|fixed)($|\s)/);
+      node = node.parentElement;
+    }
+  }
+
+  it("opens the message action tray in-flow inside the same bubble", () => {
+    const host = mount(<MessageBubble {...bubbleProps()} />);
+    act(() => {
+      (host.querySelector('[aria-label="Message actions"]') as HTMLButtonElement).click();
+    });
+    const panel = host.querySelector('[aria-label="Message actions panel"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.closest("li")).not.toBeNull();
+    expect(panel?.textContent).toContain("Reply");
+    expect(panel?.textContent).toContain("Forward");
+    assertInFlow(panel as Element, host);
+  });
+
+  it("opens the reaction picker in-flow and reacts on tap", () => {
+    const onReact = vi.fn();
+    const host = mount(<MessageBubble {...bubbleProps({ onReact })} />);
+    act(() => {
+      (host.querySelector('[aria-label="Message actions"]') as HTMLButtonElement).click();
+    });
+    const reactBtn = [...host.querySelectorAll("button")].find((b) => b.textContent === "React");
+    act(() => {
+      (reactBtn as HTMLButtonElement).click();
+    });
+    const picker = host.querySelector('[aria-label="Reaction picker"]');
+    expect(picker).not.toBeNull();
+    assertInFlow(picker as Element, host);
+    act(() => {
+      findButton(host, "React with 🎉").click();
+    });
+    expect(onReact).toHaveBeenCalledTimes(1);
+    expect(onReact.mock.calls[0][1]).toBe("🎉");
+  });
+
+  it("shows a short timestamp with the full date on hover", () => {
+    const host = mount(<MessageBubble {...bubbleProps()} />);
+    const time = host.querySelector("time");
+    expect(time).not.toBeNull();
+    expect(time?.getAttribute("title")).toContain(",");
+    expect(time?.textContent ?? "").toMatch(/^\d{1,2}:\d{2}\s?[AP]M$/i);
+  });
+
+  it("opens the composer emoji tray in-flow above the input", () => {
+    const host = mount(
+      <Composer
+        conversationId="conv1"
+        replyTo={null}
+        onClearReply={() => {}}
+        onTyping={() => {}}
+        onSent={() => {}}
+        onSending={() => {}}
+        onSendFailed={() => {}}
+        onError={() => {}}
+        seed={null}
+      />,
+    );
+    act(() => {
+      findButton(host, "Insert emoji").click();
+    });
+    const tray = host.querySelector('[aria-label="Emoji picker"]');
+    expect(tray).not.toBeNull();
+    assertInFlow(tray as Element, host);
+  });
+
+  it("opens conversation row options in-flow inside the same row", async () => {
+    const item = {
+      id: "c1",
+      type: "direct",
+      title: "Ama",
+      groupId: null,
+      updatedAt: new Date().toISOString(),
+      unread: 2,
+      lastMessage: { preview: "hey", createdAt: new Date().toISOString() },
+      memberCount: 2,
+      peerShortId: "AB12",
+      providerKind: null,
+      hasProject: false,
+      muted: false,
+      pinned: false,
+      archived: false,
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).startsWith("/api/profile")) {
+          return jsonResponse({ ok: true, data: { name: "Me", shortId: "ME01" } });
+        }
+        return jsonResponse({ ok: true, data: { individual: [item], group: [] } });
+      }),
+    );
+    const host = mount(<ConversationPanel onError={() => {}} />);
+    await act(async () => {});
+    const toggle = host.querySelector('[aria-label="Conversation options for Ama"]') as HTMLButtonElement;
+    expect(toggle).not.toBeNull();
+    act(() => {
+      toggle.click();
+    });
+    const panel = host.querySelector('[aria-label="Options for Ama"]');
+    expect(panel).not.toBeNull();
+    expect(panel?.closest("li")).not.toBeNull();
+    expect(panel?.textContent).toContain("Mute");
+    expect(panel?.textContent).toContain("Archive");
+    assertInFlow(panel as Element, host);
   });
 });
 

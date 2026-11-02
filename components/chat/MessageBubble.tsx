@@ -268,6 +268,7 @@ export function MessageBubble({
   transcript,
   delivered,
   interactive,
+  highlight,
   onError,
 }: {
   message: ChatMessage;
@@ -286,6 +287,7 @@ export function MessageBubble({
   transcript: string | null;
   delivered: boolean;
   interactive?: boolean;
+  highlight?: boolean;
   onError: (m: string) => void;
 }) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -329,11 +331,21 @@ export function MessageBubble({
   const analysis = message.metadata?.analysis as Record<string, unknown> | undefined;
   const canEdit = mine && message.kind === "user" && !message.deleted;
   const canDeleteEveryone = !message.deleted && (mine || canModerate);
-  const item = "block w-full px-3 py-1.5 text-left text-sm text-black hover:bg-neutral-100 disabled:opacity-50";
+  const showActions = !message.deleted && interactive !== false;
+  const actionBtn =
+    "rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-black hover:border-black";
+  const fullTime = new Date(message.createdAt).toLocaleString("en-US");
+  const shortTime = new Date(message.createdAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
 
   return (
-    <li id={`msg-${message.id}`} className={`group flex scroll-mt-24 ${mine ? "justify-end" : "justify-start"}`}>
-      <div className={`relative max-w-[85%] rounded-lg border px-3 py-2 sm:max-w-[75%] ${mine ? "border-brand-200 bg-brand-50" : "border-neutral-200 bg-white"}`}>
+    <li
+      id={`msg-${message.id}`}
+      className={`flex scroll-mt-24 ${mine ? "justify-end" : "justify-start"} ${highlight ? "rounded-lg ring-2 ring-brand-500" : ""}`}
+    >
+      <div
+        ref={showActions ? menuRef : undefined}
+        className={`max-w-[88%] rounded-lg border px-3 py-2 sm:max-w-[78%] lg:max-w-[70%] ${mine ? "border-brand-200 bg-brand-50" : "border-neutral-200 bg-white"}`}
+      >
         {!mine && message.senderName ? (
           <p className="text-xs font-medium text-neutral-600">
             {message.senderName}
@@ -415,8 +427,10 @@ export function MessageBubble({
             ) : null}
           </>
         )}
-        <p className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] text-neutral-500">
-          <span>{new Date(message.createdAt).toLocaleString("en-US")}</span>
+        <div className="mt-1 flex flex-wrap items-center gap-x-2 font-mono text-[11px] text-neutral-500">
+          <time dateTime={message.createdAt} title={fullTime}>
+            {shortTime}
+          </time>
           {message.editedAt ? <span>· edited</span> : null}
           {mine && message.kind === "user" && !message.deleted ? (
             <DeliveryState
@@ -426,7 +440,26 @@ export function MessageBubble({
               delivered={delivered}
             />
           ) : null}
-        </p>
+          {showActions ? (
+            <button
+              type="button"
+              aria-label="Message actions"
+              aria-expanded={menuOpen || pickerOpen}
+              onClick={() => {
+                if (menuOpen || pickerOpen) {
+                  setMenuOpen(false);
+                  setPickerOpen(false);
+                } else {
+                  setMenuOpen(true);
+                }
+              }}
+              title="Message actions"
+              className="ml-auto rounded-full px-1.5 py-0.5 font-sans text-xs text-neutral-500 hover:bg-neutral-100 hover:text-black"
+            >
+              •••
+            </button>
+          ) : null}
+        </div>
         {message.reactions.length > 0 ? (
           <div className="mt-1 flex flex-wrap gap-1">
             {message.reactions.map((r) => (
@@ -443,90 +476,77 @@ export function MessageBubble({
           </div>
         ) : null}
 
-        {!message.deleted && interactive !== false ? (
-          <div ref={menuRef} className="absolute -top-3 right-2">
+        {showActions && menuOpen ? (
+          <div className="mt-2 flex flex-wrap gap-1.5 border-t border-neutral-200/80 pt-2" role="group" aria-label="Message actions panel">
+            <button type="button" className={actionBtn} onClick={() => { setMenuOpen(false); onReply(message); }}>
+              Reply
+            </button>
+            <button type="button" className={actionBtn} onClick={() => { setMenuOpen(false); setPickerOpen(true); }}>
+              React
+            </button>
+            <button type="button" className={actionBtn} onClick={() => { setMenuOpen(false); onShareLink(message); }}>
+              Share link
+            </button>
             <button
               type="button"
-              aria-label="Message actions"
-              aria-expanded={menuOpen}
-              onClick={() => setMenuOpen(!menuOpen)}
-              className="rounded-full border border-neutral-300 bg-white px-2 py-0.5 text-xs text-neutral-600 shadow-sm hover:text-black focus:opacity-100 sm:opacity-0 sm:group-focus-within:opacity-100 sm:group-hover:opacity-100"
+              className={actionBtn}
+              onClick={() => {
+                setMenuOpen(false);
+                navigator.clipboard?.writeText(message.body).catch(() => onError("Copying failed in this browser."));
+              }}
             >
-              •••
+              Copy text
             </button>
-            {menuOpen ? (
-              <div className="absolute top-full right-0 z-20 w-44 rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
-                <button type="button" className={item} onClick={() => { setMenuOpen(false); onReply(message); }}>
-                  Reply
-                </button>
-                <button type="button" className={item} onClick={() => { setMenuOpen(false); setPickerOpen(true); }}>
-                  React
-                </button>
-                <button type="button" className={item} onClick={() => { setMenuOpen(false); onShareLink(message); }}>
-                  Share link
-                </button>
-                <button
-                  type="button"
-                  className={item}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    navigator.clipboard?.writeText(message.body).catch(() => onError("Copying failed in this browser."));
-                  }}
-                >
-                  Copy text
-                </button>
-                {canEdit ? (
-                  <button type="button" className={item} onClick={() => { setMenuOpen(false); setEditing(true); }}>
-                    Edit
-                  </button>
-                ) : null}
-                <button type="button" className={item} onClick={() => { setMenuOpen(false); onForward(message); }}>
-                  Forward
-                </button>
-                <button
-                  type="button"
-                  className={item}
-                  onClick={() => {
-                    setMenuOpen(false);
-                    onDelete(message, "me");
-                  }}
-                >
-                  Delete for me
-                </button>
-                {canDeleteEveryone ? (
-                  <button
-                    type="button"
-                    className={`${item} text-blue-700`}
-                    onClick={() => {
-                      setMenuOpen(false);
-                      onDelete(message, "everyone");
-                    }}
-                  >
-                    Delete for everyone
-                  </button>
-                ) : null}
-              </div>
+            {canEdit ? (
+              <button type="button" className={actionBtn} onClick={() => { setMenuOpen(false); setEditing(true); }}>
+                Edit
+              </button>
             ) : null}
-            {pickerOpen ? (
-              <div className="absolute top-full right-0 z-20 rounded-md border border-neutral-200 bg-white p-2 shadow-lg">
-                <div className="grid grid-cols-4 gap-1">
-                  {EMOJI_PALETTE.map((e) => (
-                    <button
-                      key={e}
-                      type="button"
-                      aria-label={`React with ${e}`}
-                      onClick={() => {
-                        setPickerOpen(false);
-                        onReact(message, e);
-                      }}
-                      className="rounded px-1 py-0.5 text-lg hover:bg-neutral-100"
-                    >
-                      {e}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            <button type="button" className={actionBtn} onClick={() => { setMenuOpen(false); onForward(message); }}>
+              Forward
+            </button>
+            <button
+              type="button"
+              className={actionBtn}
+              onClick={() => {
+                setMenuOpen(false);
+                onDelete(message, "me");
+              }}
+            >
+              Delete for me
+            </button>
+            {canDeleteEveryone ? (
+              <button
+                type="button"
+                className={`${actionBtn} border-blue-300 text-blue-700`}
+                onClick={() => {
+                  setMenuOpen(false);
+                  onDelete(message, "everyone");
+                }}
+              >
+                Delete for everyone
+              </button>
             ) : null}
+          </div>
+        ) : null}
+        {showActions && pickerOpen ? (
+          <div className="mt-2 border-t border-neutral-200/80 pt-2" role="group" aria-label="Reaction picker">
+            <div className="grid grid-cols-8 gap-1">
+              {EMOJI_PALETTE.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  aria-label={`React with ${e}`}
+                  onClick={() => {
+                    setPickerOpen(false);
+                    onReact(message, e);
+                  }}
+                  className="rounded-md px-1 py-1 text-xl hover:bg-neutral-100 sm:text-lg"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>

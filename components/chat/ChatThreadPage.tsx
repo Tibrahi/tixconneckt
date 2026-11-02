@@ -17,8 +17,8 @@ export function ChatThreadPage({
   const [error, setError] = useState<string | null>(null);
   return (
     <>
-      <div className="flex h-[calc(100dvh-8rem)] min-h-[32rem] gap-4">
-        <div className="hidden w-80 shrink-0 overflow-y-auto lg:block">
+      <div className="flex h-[calc(100dvh-7rem)] min-h-[28rem] gap-3 sm:h-[calc(100dvh-8rem)] sm:min-h-[32rem] lg:gap-4">
+        <div className="hidden w-72 shrink-0 overflow-y-auto lg:block xl:w-80">
           <ConversationPanel activeId={conversationId} compact onError={setError} />
         </div>
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden rounded-lg border border-neutral-200 bg-white">

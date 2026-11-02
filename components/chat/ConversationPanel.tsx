@@ -48,17 +48,19 @@ function initials(name: string): string {
   return `${parts[0].charAt(0)}${parts[parts.length - 1].charAt(0)}`.toUpperCase();
 }
 
-function RowMenu({
+function ConversationRow({
   item,
+  active,
   onChanged,
   onError,
 }: {
   item: ConversationItem;
+  active: boolean;
   onChanged: () => void;
   onError: (m: string) => void;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
     if (!open) return;
@@ -91,25 +93,64 @@ function RowMenu({
     }
   }
 
-  const btn = "block w-full px-3 py-1.5 text-left text-sm text-black hover:bg-neutral-100";
+  const btn =
+    "rounded-full border border-neutral-300 bg-white px-2.5 py-1 text-xs font-medium text-black hover:border-black";
   return (
-    <div ref={ref} className="relative shrink-0">
-      <button
-        type="button"
-        aria-label={`Conversation options for ${item.title}`}
-        title="Conversation options"
-        aria-expanded={open}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setOpen(!open);
-        }}
-        className="rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-100 hover:text-black"
-      >
-        <Icon name="ellipsis" />
-      </button>
+    <li ref={ref} className={`rounded-md border p-3 ${active ? "border-brand-600 bg-brand-50/50" : "border-neutral-200 bg-white"}`}>
+      <div className="flex items-center gap-2.5">
+        <span
+          aria-hidden="true"
+          className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${item.type === "group" ? "bg-neutral-700" : "bg-brand-600"}`}
+        >
+          {item.type === "group" ? <Icon name="user-group" /> : initials(item.title)}
+        </span>
+        <Link href={ROUTES.chatThread(item.id)} className="min-w-0 flex-1">
+          <span className="flex items-center gap-1.5">
+            <span className="min-w-0 flex-1 truncate font-medium text-black">
+              {item.title}
+            </span>
+            <span className="shrink-0 font-mono text-[11px] text-neutral-500" title={new Date(item.updatedAt).toLocaleString("en-US")}>
+              {timeAgo(item.lastMessage?.createdAt ?? item.updatedAt)}
+            </span>
+          </span>
+          <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-neutral-600">
+            <span className="capitalize">{categoryLabel(item)}</span>
+            {item.hasProject ? <span>· Project</span> : null}
+            {item.muted ? (
+              <span className="inline-flex items-center gap-0.5" title="Muted">
+                · <Icon name="bell" /> Muted
+              </span>
+            ) : null}
+            {item.pinned ? (
+              <span className="font-semibold text-brand-700" title="Pinned">
+                · Pinned
+              </span>
+            ) : null}
+          </span>
+          <span className="block truncate text-sm text-neutral-600">
+            {item.lastMessage ? item.lastMessage.preview : "No messages yet"}
+          </span>
+        </Link>
+        <span className="flex shrink-0 flex-col items-end gap-1">
+          {item.unread > 0 ? <Badge tone="info">{item.unread} unread</Badge> : null}
+          <button
+            type="button"
+            aria-label={`Conversation options for ${item.title}`}
+            title="Conversation options"
+            aria-expanded={open}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen(!open);
+            }}
+            className="rounded-md px-2 py-1 text-neutral-600 hover:bg-neutral-100 hover:text-black"
+          >
+            <Icon name="ellipsis" />
+          </button>
+        </span>
+      </div>
       {open ? (
-        <div className="absolute top-full right-0 z-20 w-40 rounded-md border border-neutral-200 bg-white py-1 shadow-lg">
+        <div className="mt-2 flex flex-wrap gap-1.5 border-t border-neutral-200/80 pt-2" role="group" aria-label={`Options for ${item.title}`}>
           <button type="button" className={btn} onClick={() => set("muted", !item.muted)}>
             {item.muted ? "Unmute" : "Mute"}
           </button>
@@ -121,7 +162,7 @@ function RowMenu({
           </button>
         </div>
       ) : null}
-    </div>
+    </li>
   );
 }
 
@@ -399,47 +440,7 @@ export function ConversationPanel({
       ) : (
         <ul className="flex flex-col gap-2">
           {items.map((c) => (
-            <li key={c.id} className={`rounded-md border p-3 ${activeId === c.id ? "border-brand-600 bg-brand-50/50" : "border-neutral-200 bg-white"}`}>
-              <div className="flex items-center gap-2.5">
-                <span
-                  aria-hidden="true"
-                  className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white ${c.type === "group" ? "bg-neutral-700" : "bg-brand-600"}`}
-                >
-                  {c.type === "group" ? <Icon name="user-group" /> : initials(c.title)}
-                </span>
-                <Link href={ROUTES.chatThread(c.id)} className="min-w-0 flex-1">
-                  <span className="flex items-center gap-1.5">
-                    <span className="min-w-0 flex-1 truncate font-medium text-black">
-                      {c.title}
-                    </span>
-                    <span className="shrink-0 font-mono text-[11px] text-neutral-500" title={new Date(c.updatedAt).toLocaleString("en-US")}>
-                      {timeAgo(c.lastMessage?.createdAt ?? c.updatedAt)}
-                    </span>
-                  </span>
-                  <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-xs text-neutral-600">
-                    <span className="capitalize">{categoryLabel(c)}</span>
-                    {c.hasProject ? <span>· Project</span> : null}
-                    {c.muted ? (
-                      <span className="inline-flex items-center gap-0.5" title="Muted">
-                        · <Icon name="bell" /> Muted
-                      </span>
-                    ) : null}
-                    {c.pinned ? (
-                      <span className="font-semibold text-brand-700" title="Pinned">
-                        · Pinned
-                      </span>
-                    ) : null}
-                  </span>
-                  <span className="block truncate text-sm text-neutral-600">
-                    {c.lastMessage ? c.lastMessage.preview : "No messages yet"}
-                  </span>
-                </Link>
-                <span className="flex shrink-0 flex-col items-end gap-1">
-                  {c.unread > 0 ? <Badge tone="info">{c.unread} unread</Badge> : null}
-                  <RowMenu item={c} onChanged={load} onError={onError} />
-                </span>
-              </div>
-            </li>
+            <ConversationRow key={c.id} item={c} active={activeId === c.id} onChanged={load} onError={onError} />
           ))}
         </ul>
       )}

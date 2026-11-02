@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { convertToTranscribableWav } from "@/lib/audio-convert";
 import { ROUTES } from "@/lib/routes";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
@@ -67,6 +67,7 @@ export function ThreadView({
   const [transcripts, setTranscripts] = useState<Record<string, string>>({});
   const [composerSeed, setComposerSeed] = useState<{ text: string; nonce: number } | null>(null);
   const [tab, setTab] = useState<"messages" | "calls">("messages");
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const { onEvent, connected, realtimeAvailable } = useAbly();
   useChat(conversationId);
@@ -595,47 +596,65 @@ export function ThreadView({
   return (
     <div className="flex min-h-0 flex-1">
       <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
-          <Link href={ROUTES.chat} aria-label="Back to conversations" title="Back to conversations" className="rounded-md p-2 text-neutral-600 hover:bg-neutral-100 hover:text-black lg:hidden">
+        <div className="flex items-center gap-2 border-b border-neutral-200 bg-white px-3 py-2 sm:px-4">
+          <Link href={ROUTES.chat} aria-label="Back to conversations" title="Back to conversations" className="shrink-0 rounded-md p-2 text-neutral-600 hover:bg-neutral-100 hover:text-black lg:hidden">
             <Icon name="arrow-left" />
           </Link>
           <span
             aria-hidden="true"
-            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white ${data.conversation.type === "group" ? "bg-neutral-700" : "bg-brand-600"}`}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white sm:h-10 sm:w-10 ${data.conversation.type === "group" ? "bg-neutral-700" : "bg-brand-600"}`}
           >
             {data.conversation.type === "group" ? <Icon name="user-group" /> : peerInitial}
           </span>
           <div className="min-w-0 flex-1">
-            <p className="truncate font-semibold text-black">
+            <p className="truncate text-sm font-semibold text-black sm:text-base">
               {title}
               {data.conversation.type === "direct" && others[0]?.shortId ? (
-                <span className="ml-2 font-mono text-xs font-normal text-neutral-500">{others[0].shortId}</span>
+                <span className="ml-2 hidden font-mono text-xs font-normal text-neutral-500 sm:inline">{others[0].shortId}</span>
               ) : null}
             </p>
-            <p className="flex items-center gap-1.5 text-xs text-neutral-600">
+            <p className="flex items-center gap-1.5 truncate text-xs text-neutral-600">
               {peerOnline !== null ? (
                 <span
                   title={peerOnline ? "Online now" : "Offline or unavailable"}
                   aria-label={peerOnline ? "Peer online" : "Peer offline"}
-                  className={`inline-block h-2 w-2 rounded-full ${peerOnline ? "bg-blue-600" : "bg-neutral-300"}`}
+                  className={`inline-block h-2 w-2 shrink-0 rounded-full ${peerOnline ? "bg-blue-600" : "bg-neutral-300"}`}
                 />
               ) : null}
-              <span>
+              <span className="truncate">
                 {peerOnline === true ? "Online" : peerOnline === false ? "Offline" : typeLabel} · {data.members.length} member{data.members.length === 1 ? "" : "s"}
                 {data.mySettings.muted ? " · Muted" : ""}
               </span>
             </p>
           </div>
-          <span className="flex items-center gap-1">
+          <span className="hidden shrink-0 items-center gap-1 sm:flex">
             <IconButton label="Search in conversation" icon="search" onClick={() => { setSearchOpen(!searchOpen); setSearchResults(null); setQuery(""); }} />
             <IconButton label="Share a reference" icon="share" onClick={() => setShareOpen(true)} />
             <IconButton label={detailsOpen ? "Hide details" : "Show details"} icon="circle-info" onClick={() => setDetailsOpen(!detailsOpen)} />
           </span>
-          <CallButtons
-            conversationId={data.conversation.id}
-            calleeName={data.conversation.type === "group" ? data.conversation.title ?? "Group" : others[0]?.name ?? "Member"}
-          />
+          <span className="shrink-0 sm:hidden">
+            <IconButton label="More conversation actions" icon="ellipsis" onClick={() => setMoreOpen(!moreOpen)} />
+          </span>
+          <span className="shrink-0">
+            <CallButtons
+              conversationId={data.conversation.id}
+              calleeName={data.conversation.type === "group" ? data.conversation.title ?? "Group" : others[0]?.name ?? "Member"}
+            />
+          </span>
         </div>
+        {moreOpen ? (
+          <div className="flex gap-1.5 overflow-x-auto border-b border-neutral-200 bg-white px-3 py-2 sm:hidden" role="group" aria-label="Conversation actions">
+            <Button size="sm" variant="secondary" onClick={() => { setMoreOpen(false); setSearchOpen(!searchOpen); setSearchResults(null); setQuery(""); }}>
+              Search
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { setMoreOpen(false); setShareOpen(true); }}>
+              Share
+            </Button>
+            <Button size="sm" variant="secondary" onClick={() => { setMoreOpen(false); setDetailsOpen(!detailsOpen); }}>
+              {detailsOpen ? "Hide details" : "Details"}
+            </Button>
+          </div>
+        ) : null}
 
         {!connected ? (
           <p role="status" className="border-b border-blue-200 bg-blue-50 px-4 py-1.5 text-xs text-blue-900">
@@ -671,13 +690,15 @@ export function ThreadView({
         </div>
 
         {tab === "calls" ? (
-          <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 px-4 py-4">
-            <CallHistory
-              conversationId={conversationId}
-              myUserId={myUserId}
-              peerName={data.conversation.type === "group" ? title : others[0]?.name ?? title}
-              onError={onError}
-            />
+          <div className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 px-3 py-4 sm:px-4">
+            <div className="mx-auto w-full max-w-3xl">
+              <CallHistory
+                conversationId={conversationId}
+                myUserId={myUserId}
+                peerName={data.conversation.type === "group" ? title : others[0]?.name ?? title}
+                onError={onError}
+              />
+            </div>
           </div>
         ) : (
           <>
@@ -697,76 +718,78 @@ export function ThreadView({
           </div>
         ) : null}
 
-        <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 px-4 py-4">
-          {searchResults === null && data.hasMore ? (
-            <div className="mb-3 flex justify-center">
-              <Button size="sm" variant="secondary" loading={loadingMore} onClick={() => loadOlder()}>
-                Load older messages
-              </Button>
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto bg-neutral-50 px-3 py-4 sm:px-4">
+            <div className="mx-auto flex w-full max-w-3xl flex-col">
+              {searchResults === null && data.hasMore ? (
+                <div className="mb-3 flex justify-center">
+                  <Button size="sm" variant="secondary" loading={loadingMore} onClick={() => loadOlder()}>
+                    Load older messages
+                  </Button>
+                </div>
+              ) : null}
+              {searching ? (
+                <p className="text-center text-sm text-neutral-600">Searching…</p>
+              ) : showing.length === 0 ? (
+                <p className="text-center text-sm text-neutral-600">
+                  {searchResults !== null ? "No matches in this conversation." : "No messages yet. Say hello."}
+                </p>
+              ) : (
+                groups.map((g) => (
+                  <div key={g.day}>
+                    <p className="my-3 text-center text-xs font-medium text-neutral-500">{g.day}</p>
+                    <ul className="flex flex-col gap-2">
+                      {g.items.map((m) => (
+                        <Fragment key={m.id}>
+                          {m.id === newMarkerId && searchResults === null ? (
+                            <li aria-hidden="true" className="my-2 border-t border-brand-300 pt-1 text-center text-xs font-medium text-brand-700">
+                              New messages
+                            </li>
+                          ) : null}
+                          <MessageBubble
+                            message={m}
+                            mine={m.senderId === myUserId}
+                            canModerate={data.myRole === "admin"}
+                            onReply={(msg) => setReplyTo(msg)}
+                            onReact={toggleReact}
+                            onEdit={saveEdit}
+                            onDelete={removeMessage}
+                            onForward={openForward}
+                            onShareLink={shareLink}
+                            onJump={jumpTo}
+                            onAnalyze={analyzeMessage}
+                            onTranscribe={transcribeMessage}
+                            analyzing={analyzingId === m.id}
+                            transcript={transcripts[m.id] ?? null}
+                            delivered={deliveredIds.has(m.id)}
+                            interactive={!m.id.startsWith("pending:")}
+                            highlight={m.id === highlightId}
+                            onError={onError}
+                          />
+                        </Fragment>
+                      ))}
+                    </ul>
+                  </div>
+                ))
+              )}
             </div>
+          </div>
+          {showBottom ? (
+            <button
+              type="button"
+              onClick={() => {
+                setUnseen(0);
+                scrollToBottom();
+                markRead();
+              }}
+              aria-label="Scroll to latest messages"
+              title="Scroll to latest"
+              className="absolute right-4 bottom-4 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 bg-white text-black shadow-md hover:border-black"
+            >
+              <Icon name="arrow-down" />
+            </button>
           ) : null}
-          {searching ? (
-            <p className="text-center text-sm text-neutral-600">Searching…</p>
-          ) : showing.length === 0 ? (
-            <p className="text-center text-sm text-neutral-600">
-              {searchResults !== null ? "No matches in this conversation." : "No messages yet. Say hello."}
-            </p>
-          ) : (
-            groups.map((g) => (
-              <div key={g.day}>
-                <p className="my-3 text-center text-xs font-medium text-neutral-500">{g.day}</p>
-                <ul className="flex flex-col gap-2">
-                  {g.items.map((m) => (
-                    <div key={m.id}>
-                      {m.id === newMarkerId && searchResults === null ? (
-                        <p className="my-2 border-t border-brand-300 pt-1 text-center text-xs font-medium text-brand-700">
-                          New messages
-                        </p>
-                      ) : null}
-                      <div className={m.id === highlightId ? "rounded-lg ring-2 ring-brand-500" : ""}>
-                        <MessageBubble
-                          message={m}
-                          mine={m.senderId === myUserId}
-                          canModerate={data.myRole === "admin"}
-                          onReply={(msg) => setReplyTo(msg)}
-                          onReact={toggleReact}
-                          onEdit={saveEdit}
-                          onDelete={removeMessage}
-                          onForward={openForward}
-                          onShareLink={shareLink}
-                          onJump={jumpTo}
-                          onAnalyze={analyzeMessage}
-                          onTranscribe={transcribeMessage}
-                          analyzing={analyzingId === m.id}
-                          transcript={transcripts[m.id] ?? null}
-                          delivered={deliveredIds.has(m.id)}
-                          interactive={!m.id.startsWith("pending:")}
-                          onError={onError}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </ul>
-              </div>
-            ))
-          )}
         </div>
-
-        {showBottom ? (
-          <button
-            type="button"
-            onClick={() => {
-              setUnseen(0);
-              scrollToBottom();
-              markRead();
-            }}
-            aria-label="Scroll to latest messages"
-            title="Scroll to latest"
-            className="absolute right-6 bottom-32 z-10 flex h-10 w-10 items-center justify-center rounded-full border border-neutral-300 bg-white text-black shadow-md hover:border-black"
-          >
-            <Icon name="arrow-down" />
-          </button>
-        ) : null}
         {unseen > 0 ? (
           <button
             type="button"
@@ -810,7 +833,7 @@ export function ThreadView({
       </div>
 
       {detailsOpen ? (
-        <aside className="hidden w-80 shrink-0 overflow-y-auto border-l border-neutral-200 lg:block">
+        <aside className="hidden w-72 shrink-0 overflow-y-auto border-l border-neutral-200 lg:block xl:w-80">
           <DetailsPanel
             conversationId={conversationId}
             peerShortId={data.conversation.type === "direct" ? (others[0]?.shortId ?? null) : null}
@@ -827,11 +850,13 @@ export function ThreadView({
             </Button>
           </div>
           <div className="h-full overflow-y-auto pb-16">
-            <DetailsPanel
-              conversationId={conversationId}
-              peerShortId={data.conversation.type === "direct" ? (others[0]?.shortId ?? null) : null}
-              onError={onError}
-            />
+            <div className="mx-auto w-full max-w-2xl">
+              <DetailsPanel
+                conversationId={conversationId}
+                peerShortId={data.conversation.type === "direct" ? (others[0]?.shortId ?? null) : null}
+                onError={onError}
+              />
+            </div>
           </div>
         </div>
       ) : null}

@@ -13,7 +13,9 @@ export function ChatListPage() {
         title="Chat"
         description="Individual, group, provider, and project conversations stay here — always in sync."
       />
-      <ConversationPanel onError={setError} />
+      <div className="mx-auto w-full max-w-3xl">
+        <ConversationPanel onError={setError} />
+      </div>
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} /> : null}
     </>
   );

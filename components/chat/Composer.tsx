@@ -189,7 +189,8 @@ export function Composer({
   }, [voice.error]);
 
   return (
-    <div className="border-t border-neutral-200 bg-white p-3">
+    <div className="border-t border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
+      <div className="mx-auto flex w-full max-w-3xl flex-col">
       {replyTo ? (
         <div className="mb-2 flex items-center justify-between gap-2 rounded-md bg-neutral-100 px-3 py-1.5 text-xs">
           <p className="truncate text-neutral-600">
@@ -249,46 +250,44 @@ export function Composer({
           </button>
         </div>
       ) : null}
-      <div className="flex items-end gap-1.5">
-        <div className="relative">
-          <button
-            type="button"
-            aria-label="Insert emoji"
-            title="Insert emoji"
-            aria-expanded={emojiOpen}
-            onClick={() => setEmojiOpen(!emojiOpen)}
-            className="rounded-md border border-neutral-300 px-2.5 py-2 text-neutral-700 hover:bg-neutral-100"
-          >
-            <Icon name="face-smile" />
-          </button>
-          {emojiOpen ? (
-            <div className="absolute bottom-full left-0 z-20 mb-1 rounded-md border border-neutral-200 bg-white p-2 shadow-lg">
-              <div className="grid grid-cols-4 gap-1">
-                {EMOJI_PALETTE.map((e) => (
-                  <button
-                    key={e}
-                    type="button"
-                    aria-label={`Insert ${e}`}
-                    onClick={() => {
-                      setText((t) => `${t}${e}`);
-                      setEmojiOpen(false);
-                      areaRef.current?.focus();
-                    }}
-                    className="rounded px-1 py-0.5 text-lg hover:bg-neutral-100"
-                  >
-                    {e}
-                  </button>
-                ))}
-              </div>
-            </div>
-          ) : null}
+      {emojiOpen ? (
+        <div className="mb-2 rounded-md border border-neutral-200 bg-neutral-50 p-2" role="group" aria-label="Emoji picker">
+          <div className="grid grid-cols-8 gap-1">
+            {EMOJI_PALETTE.map((e) => (
+              <button
+                key={e}
+                type="button"
+                aria-label={`Insert ${e}`}
+                onClick={() => {
+                  setText((t) => `${t}${e}`);
+                  setEmojiOpen(false);
+                  areaRef.current?.focus();
+                }}
+                className="rounded-md px-1 py-1 text-xl hover:bg-white sm:text-lg"
+              >
+                {e}
+              </button>
+            ))}
+          </div>
         </div>
+      ) : null}
+      <div className="flex items-end gap-1.5">
+        <button
+          type="button"
+          aria-label="Insert emoji"
+          title="Insert emoji"
+          aria-expanded={emojiOpen}
+          onClick={() => setEmojiOpen(!emojiOpen)}
+          className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-2 text-neutral-700 hover:bg-neutral-100"
+        >
+          <Icon name="face-smile" />
+        </button>
         <button
           type="button"
           aria-label="Attach a file"
           title="Attach a file"
           onClick={() => fileRef.current?.click()}
-          className="rounded-md border border-neutral-300 px-2.5 py-2 text-neutral-700 hover:bg-neutral-100"
+          className="shrink-0 rounded-md border border-neutral-300 px-2.5 py-2 text-neutral-700 hover:bg-neutral-100"
         >
           <Icon name="paperclip" />
         </button>
@@ -309,7 +308,7 @@ export function Composer({
           aria-label={voiceBusy ? "Stop recording" : voice.state === "preview" ? "Discard voice note" : "Record a voice note"}
           title={voiceBusy ? "Stop recording" : voice.state === "preview" ? "Discard voice note" : "Record a voice note"}
           onClick={toggleRecording}
-          className={`rounded-md border px-2.5 py-2 ${voiceBusy ? "border-blue-300 bg-blue-100 text-blue-700" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}
+          className={`shrink-0 rounded-md border px-2.5 py-2 ${voiceBusy ? "border-blue-300 bg-blue-100 text-blue-700" : "border-neutral-300 text-neutral-700 hover:bg-neutral-100"}`}
         >
           <Icon name={voiceBusy ? "microphone-slash" : "microphone"} />
         </button>
@@ -345,6 +344,7 @@ export function Composer({
         >
           <Icon name={sending ? "spinner" : "send"} spin={sending} />
         </button>
+      </div>
       </div>
     </div>
   );
