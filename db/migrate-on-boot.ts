@@ -70,6 +70,26 @@ export async function migrateOnBoot(): Promise<void> {
     const pool = new Pool({ connectionString: url, max: 1, connectionTimeoutMillis: 10_000 });
     try {
       await migrate(drizzle(pool), { migrationsFolder: folder });
+      const schema = await pool.query<{
+        call_interpretations: string | null;
+        payment_method_columns: string[];
+      }>(`
+        SELECT
+          (SELECT to_regclass('public.call_interpretations')::text) AS call_interpretations,
+          COALESCE(array_agg(column_name) FILTER (WHERE column_name IS NOT NULL), ARRAY[]::text[]) AS payment_method_columns
+        FROM information_schema.columns
+        WHERE table_schema = 'public'
+          AND table_name = 'payment_methods'
+          AND column_name IN ('method_option', 'details')
+      `);
+      const currentSchema = schema.rows[0];
+      const missing = [
+        ...(!currentSchema?.call_interpretations ? ["public.call_interpretations"] : []),
+        ...(["method_option", "details"].filter((column) => !currentSchema?.payment_method_columns.includes(column)).map((column) => `payment_methods.${column}`)),
+      ];
+      if (missing.length) {
+        throw new Error(`migration journal advanced but schema is still missing ${missing.join(", ")}`);
+      }
       console.log("[db] migrations are up to date");
     } catch (error) {
       console.error(

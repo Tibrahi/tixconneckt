@@ -1,5 +1,5 @@
 import { desc, eq } from "drizzle-orm";
-import { getDb } from "@/db";
+import { dbFailureCode, getDb } from "@/db";
 import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { paymentMethods } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
@@ -15,23 +15,29 @@ export async function GET() {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
   const db = getDb();
-  const rows = await withMigrationRetry(() =>
-    db
-      .select({
-        id: paymentMethods.id,
-        type: paymentMethods.type,
-        methodOption: paymentMethods.methodOption,
-        details: paymentMethods.details,
-        displayLabel: paymentMethods.displayLabel,
-        providerRef: paymentMethods.providerRef,
-        status: paymentMethods.status,
-        createdAt: paymentMethods.createdAt,
-      })
-      .from(paymentMethods)
-      .where(eq(paymentMethods.userId, session.user.id))
-      .orderBy(desc(paymentMethods.createdAt))
-      .limit(20),
-  );
+  let rows;
+  try {
+    rows = await withMigrationRetry(() =>
+      db
+        .select({
+          id: paymentMethods.id,
+          type: paymentMethods.type,
+          methodOption: paymentMethods.methodOption,
+          details: paymentMethods.details,
+          displayLabel: paymentMethods.displayLabel,
+          providerRef: paymentMethods.providerRef,
+          status: paymentMethods.status,
+          createdAt: paymentMethods.createdAt,
+        })
+        .from(paymentMethods)
+        .where(eq(paymentMethods.userId, session.user.id))
+        .orderBy(desc(paymentMethods.createdAt))
+        .limit(20),
+    );
+  } catch (error) {
+    console.error(`[payment-methods:read] database query failed (${dbFailureCode(error)})`);
+    return apiError("Payment methods are temporarily unavailable. Please try again.", 503);
+  }
   return apiOk({ methods: rows });
 }
 
@@ -81,28 +87,34 @@ export async function POST(req: Request) {
   }
 
   const db = getDb();
-  const row = await withMigrationRetry(async () => {
-    const existing = await db
-      .select({ id: paymentMethods.id })
-      .from(paymentMethods)
-      .where(eq(paymentMethods.userId, session.user.id))
-      .limit(20);
-    if (existing.length >= 20) return null;
+  let row;
+  try {
+    row = await withMigrationRetry(async () => {
+      const existing = await db
+        .select({ id: paymentMethods.id })
+        .from(paymentMethods)
+        .where(eq(paymentMethods.userId, session.user.id))
+        .limit(20);
+      if (existing.length >= 20) return null;
 
-    const [inserted] = await db
-      .insert(paymentMethods)
-      .values({
-        userId: session.user.id,
-        type: parsed.data.type,
-        methodOption: methodOptionValue,
-        details,
-        displayLabel,
-        providerRef: parsed.data.providerRef || null,
-        status: "pending",
-      })
-      .returning({ id: paymentMethods.id });
-    return inserted;
-  });
+      const [inserted] = await db
+        .insert(paymentMethods)
+        .values({
+          userId: session.user.id,
+          type: parsed.data.type,
+          methodOption: methodOptionValue,
+          details,
+          displayLabel,
+          providerRef: parsed.data.providerRef || null,
+          status: "pending",
+        })
+        .returning({ id: paymentMethods.id });
+      return inserted;
+    });
+  } catch (error) {
+    console.error(`[payment-methods:save] database write failed (${dbFailureCode(error)})`);
+    return apiError("Payment method could not be saved because storage is temporarily unavailable. Please try again.", 503);
+  }
   if (!row) return apiError("You have reached the limit of 20 payment methods.", 400);
 
   try {

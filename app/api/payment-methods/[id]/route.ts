@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { getDb } from "@/db";
+import { dbFailureCode, getDb } from "@/db";
 import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { paymentMethods } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
@@ -52,9 +52,20 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   }
   const { id } = await params;
   const db = getDb();
-  const [row] = await withMigrationRetry(() => db.select({ id: paymentMethods.id }).from(paymentMethods)
-    .where(and(eq(paymentMethods.id, id), eq(paymentMethods.userId, session.user.id))).limit(1));
+  let row;
+  try {
+    [row] = await withMigrationRetry(() => db.select({ id: paymentMethods.id }).from(paymentMethods)
+      .where(and(eq(paymentMethods.id, id), eq(paymentMethods.userId, session.user.id))).limit(1));
+  } catch (error) {
+    console.error(`[payment-methods:edit-read] database query failed (${dbFailureCode(error)})`);
+    return apiError("Payment method could not be loaded. Please try again.", 503);
+  }
   if (!row) return apiError("Payment method not found.", 404);
-  await withMigrationRetry(() => db.update(paymentMethods).set({ type: parsed.data.type, methodOption: methodOptionValue, details, displayLabel, providerRef: parsed.data.providerRef || null, status: "pending" }).where(eq(paymentMethods.id, id)));
+  try {
+    await withMigrationRetry(() => db.update(paymentMethods).set({ type: parsed.data.type, methodOption: methodOptionValue, details, displayLabel, providerRef: parsed.data.providerRef || null, status: "pending" }).where(eq(paymentMethods.id, id)));
+  } catch (error) {
+    console.error(`[payment-methods:edit-save] database write failed (${dbFailureCode(error)})`);
+    return apiError("Payment method could not be saved. Please try again.", 503);
+  }
   return apiOk({ updated: true, status: "pending", underConstruction: true });
 }

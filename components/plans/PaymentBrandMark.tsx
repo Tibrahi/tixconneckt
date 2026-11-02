@@ -1,4 +1,5 @@
 import type { MethodOptionKey } from "@/lib/payment-method-fields";
+import Image from "next/image";
 
 /** Familiar provider wordmarks for the payment rails offered in this form. */
 export function PaymentBrandMark({ method, selected = false }: { method: MethodOptionKey; selected?: boolean }) {
@@ -27,20 +28,27 @@ export function PaymentBrandMark({ method, selected = false }: { method: MethodO
 
   if (method === "mtn") {
     return (
-      <svg className={className} viewBox="0 0 48 30" role="img" aria-label="MTN Mobile Money">
-        <path fill="#FFCC00" d="M4 6.5A5.5 5.5 0 0 1 9.5 1h29A5.5 5.5 0 0 1 44 6.5v14a5.5 5.5 0 0 1-5.5 5.5H20l-8 3v-3H9.5A5.5 5.5 0 0 1 4 20.5v-14Z" />
-        <text x="24" y="18.5" textAnchor="middle" fill="#111" fontFamily="Arial, sans-serif" fontSize="12" fontWeight="800" fontStyle="italic">MTN</text>
-      </svg>
+      <Image
+        className={`${className} object-contain`}
+        src="https://momoapi.mtn.com/content/momo_mtnb.png"
+        width={96}
+        height={48}
+        unoptimized
+        alt="MTN MoMo"
+      />
     );
   }
 
   if (method === "airtel") {
     return (
-      <svg className={className} viewBox="0 0 48 30" role="img" aria-label="Airtel Money">
-        <rect x=".5" y=".5" width="47" height="29" rx="4" fill="white" />
-        <path fill="#E40000" d="M13.5 21.5 21 6h5.5l7.9 15.5h-5.2l-1.5-3.2h-7.8l-1.4 3.2h-5Zm8-6.9h4.3l-2.2-4.8-2.1 4.8Z" />
-        <path fill="none" stroke="#E40000" strokeWidth="2.2" strokeLinecap="round" d="M36.8 9.4c2.5 2.8 2.5 7.1 0 9.9M39.4 6.8c4 4.2 4 11 0 15.1" />
-      </svg>
+      <Image
+        className={`${className} object-contain`}
+        src="https://s3-ap-southeast-1.amazonaws.com/bsy/iportal/images/airtel-logo-red-text-horizontal.jpg"
+        width={96}
+        height={48}
+        unoptimized
+        alt="Airtel"
+      />
     );
   }
 
