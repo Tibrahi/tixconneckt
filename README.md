@@ -61,6 +61,10 @@
 - [Installation and Setup](#installation-and-setup)
 - [Environment Variables](#environment-variables)
 - [Usage Guide](#usage-guide)
+- [System Tour](#system-tour)
+  - [Page Inventory](#page-inventory)
+  - [Core User Workflows](#core-user-workflows)
+  - [Cross-Page Relationships](#cross-page-relationships)
 - [Screenshots and Demonstrations](#screenshots-and-demonstrations)
 - [API Documentation](#api-documentation)
 - [Security](#security)
@@ -650,6 +654,134 @@ Every name below is referenced in code. Values shown are placeholders/shapes onl
 5. **Providers** register with `category=provider` and a kind (`loan`/`support`) determining their queue and response workflow.
 6. **Admins** use `/admin/*` (Overview, Users, Groups, Projects, Requests, Audit log, Settings).
 7. **Key flows**: connect → chat/call → create or join a project → invite groups/orgs → submit requests → providers respond → track wallet/contributions; use Actions for reminders/automation and Matching + AI explanations to find collaborators.
+
+---
+
+## System Tour
+
+A guided map of the whole application as one interconnected system: every page, the workflows that connect them, and how to verify them. Figures below were inventoried from the App Router (`app/`), navigation map (`lib/routes.ts`), page components (`components/`), and the API calls each component makes.
+
+> **Want the hands-on version?** Follow [Internal Testing Tour](internal%20testing%20tour.md) — a step-by-step QA walkthrough (stops, checks, expected results, API/DB cross-checks, and a results log) built from this same inventory.
+
+### Page Inventory
+
+33 page files, 3 layouts (`app/layout.tsx`, `app/dashboard/layout.tsx`, `app/admin/layout.tsx`), resolving to 37+ routes. Roles: **Public** (no session), **Member** (any active session), **Provider** (member with provider category/kind), **Admin**.
+
+**Public pages**
+
+| Page | Route | Source file | Main component | Key APIs / tables |
+|---|---|---|---|---|
+| Landing | `/` | `app/page.tsx` | `site/LandingPage` | Redirects active sessions to dashboards; copy from `lib/site-content.ts` |
+| Login | `/login` | `app/login/page.tsx` | `auth/LoginForm` + `OtpForm` | `/api/auth/login`, `/api/auth/verify-login` → `users`, `sessions`, `otp_challenges` |
+| Register | `/register` | `app/register/page.tsx` | `auth/RegisterForm` | `/api/auth/register`, `/api/meta/countries`, `/api/legal/*` → `users`, `profiles`, `legal_consents` |
+| Verify email | `/verify-email` | `app/verify-email/page.tsx` | `auth/OtpForm` | `/api/auth/verify-registration`, `/api/auth/resend-otp` → `otp_challenges` |
+| Forgot password | `/forgot-password` | `app/forgot-password/page.tsx` | `auth/ForgotPasswordForm` | `/api/auth/recovery/request` → `otp_challenges` |
+| Reset password | `/reset-password` | `app/reset-password/page.tsx` | `auth/ResetPasswordForm` + `OtpForm` | `/api/auth/recovery/confirm` → `users`, `sessions` (revocation) |
+| Legal document | `/legal/privacy`, `/legal/terms`, `/legal/agreement` | `app/legal/[type]/page.tsx` | Static `lib/legal-content.ts` + `/api/legal/[type]` modal variant | `/api/legal/[type]` → `legal_documents` |
+| Welcome (legacy) | `/welcome` | `app/welcome/page.tsx` | — (redirect) | Redirects to `/` |
+| Offline | `/offline` | `app/offline/page.tsx` | Static fallback | Serwist PWA fallback |
+| Not found | `*` | `app/not-found.tsx` | Static 404 | — |
+
+**Member pages** (all under `/dashboard/*`, `proxy.ts` + server session guard)
+
+| Page | Route | Source file | Main component | Key APIs / tables |
+|---|---|---|---|---|
+| Home | `/dashboard` | `app/dashboard/page.tsx` | `dashboard/DashboardHome` | `/api/dashboard/summary`, `/api/dashboard/counts` (badges) |
+| Own profile | `/dashboard/profile` | `app/dashboard/profile/page.tsx` | `profile/OwnProfilePage` | `/api/profile`, `/api/profile/media`, `/api/profile/voice-assist` → `users`, `profiles`, `profile_media` |
+| Public profile | `/dashboard/profile/[shortId]` | `app/dashboard/profile/[shortId]/page.tsx` | `profile/UserProfilePage` | `/api/profile/[shortId]`, `/api/connections` |
+| Conneckt | `/dashboard/conneckt` | `app/dashboard/conneckt/page.tsx` | `conneckt/ConnecktPage` | `/api/connections`, `/api/discovery`, `/api/providers` → `connections` |
+| Chat list | `/dashboard/chat` | `app/dashboard/chat/page.tsx` | `chat/ChatListPage` + `ConversationPanel` | `/api/chat`, `/api/chat/search`, `/api/groups`, `/api/providers` |
+| Chat thread | `/dashboard/chat/[id]` | `app/dashboard/chat/[id]/page.tsx` | `chat/ChatThreadPage` + `ThreadView` | `/api/chat/[id]/messages*`, `/presence`, `/typing`, `/summarize`, `/forward`, `…/analyze`, `/api/calls*`, Ably live |
+| Matching | `/dashboard/matching` | `app/dashboard/matching/page.tsx` | `matching/MatchingPage` | `/api/matching` (+ Spark `match_explain`) → `matching_profiles`, `match_results` |
+| Wallet | `/dashboard/wallet` | `app/dashboard/wallet/page.tsx` | `wallet/WalletPage` (+ `ReviewQueue`, `WithdrawPanel`, `DepositIntake`) | `/api/wallet*`, `/api/documents*`, `/api/wallet/reviews*` → `wallets`, `ledger_entries`, `withdrawals`, `savings_goals` |
+| Plan | `/dashboard/plans` | `app/dashboard/plans/page.tsx` | `plans/PlansPage` + `PaymentMethods` | `/api/plans`, `/api/payment-methods` → `plans`, `subscriptions`, `payment_methods` |
+| Action | `/dashboard/actions` | `app/dashboard/actions/page.tsx` | `actions/ActionsPage` | `/api/actions`, `/api/actions/interpret` (+ Spark), `/api/chat` → `scheduled_actions`, `action_attempts` |
+| Notifications | `/dashboard/notifications` | `app/dashboard/notifications/page.tsx` | `notifications/NotificationsPage` | `/api/notifications` → `notifications`, `notification_deliveries` |
+| Projects | `/dashboard/projects` | `app/dashboard/projects/page.tsx` | `projects/ProjectsPage` | `/api/projects` → `projects` |
+| Project workspace | `/dashboard/projects/[id]` | `app/dashboard/projects/[id]/page.tsx` | `projects/WorkspacePage` (+ `DocEditor`, `AssistantPanel`, dialogs) | `/api/projects/[id]/*` (workspace, members, folders, files, versions, uploads, images, shares, assist, export, activity) → `project_*`, `documents` |
+| Organizations | `/dashboard/organizations` | `app/dashboard/organizations/page.tsx` | `organizations/OrganizationsPage` | `/api/organizations`, `/api/documents`, `/api/profile` → `organizations` |
+| Organization detail | `/dashboard/organizations/[id]` | `app/dashboard/organizations/[id]/page.tsx` | `organizations/OrganizationDetailPage` | `/api/organizations/[id]*` (members, verify) → `organization_members`, `organization_verifications`, `organization_access_requests` |
+| Requests | `/dashboard/requests` | `app/dashboard/requests/page.tsx` | `requests/RequestsPage` | `/api/requests`, `/api/providers`, `/api/projects?mine=1` → `funding_requests`, `provider_links` |
+| Request detail | `/dashboard/requests/[id]` | `app/dashboard/requests/[id]/page.tsx` | `requests/RequestDetailPage` | `/api/requests/[id]*` (responses, conversation, files), `/api/organizations`, `/api/documents/*/url` |
+| Support cases | `/dashboard/support` | `app/dashboard/support/page.tsx` | `support/SupportRequestsPage` | `/api/support-requests*`, `/api/projects`, `/api/groups`, `/api/providers?kind=support` → `support_requests`, `support_request_events`, `support_request_documents` |
+| Groups | `/dashboard/groups` | `app/dashboard/groups/page.tsx` | `groups/GroupsPage` | `/api/groups`, `/api/groups/[id]/join` → `groups`, `group_members` |
+| Group detail | `/dashboard/groups/[id]` | `app/dashboard/groups/[id]/page.tsx` | `groups/GroupDetailPage` + `GroupProfileMedia` | `/api/groups/[id]*` (members, media), `/api/chat` → `group_members`, `group_approvals`, `group_media` |
+| Settings | `/dashboard/settings` | `app/dashboard/settings/page.tsx` | `settings/SettingsPage` | `/api/settings` → `users`, `sessions` |
+
+**Admin pages** (all under `/admin/*`, `admin` role required)
+
+| Page | Route | Source file | Main component | Key APIs / tables |
+|---|---|---|---|---|
+| Overview | `/admin` | `app/admin/page.tsx` | `admin/AdminOverview` | `/api/admin/overview` (aggregates) |
+| Users | `/admin/users` | `app/admin/users/page.tsx` | `admin/AdminUsers` | `/api/admin/users` → `users` |
+| Groups | `/admin/groups` | `app/admin/groups/page.tsx` | `admin/ModerationQueue` | `/api/admin/moderation` |
+| Projects | `/admin/projects` | `app/admin/projects/page.tsx` | `admin/ModerationQueue` | `/api/admin/moderation` |
+| Requests | `/admin/requests` | `app/admin/requests/page.tsx` | `admin/ModerationQueue` | `/api/admin/moderation` |
+| Audit log | `/admin/audit` | `app/admin/audit/page.tsx` | `admin/AdminAudit` | `/api/admin/audit` → `audit_logs`, `security_events` |
+| Settings | `/admin/settings` | `app/admin/settings/page.tsx` | `admin/AdminSettings` | `/api/admin/payments`, `/api/health` (+ `/api/admin/storage/reconciliation` via API) |
+
+### Core User Workflows
+
+Real end-to-end paths assembled from the inventory (each step names the actual route):
+
+1. **Join & verify** — `/` → `/register` (read 3 legal docs → checkboxes unlock → submit) → `/verify-email` (OTP) → `/login` (credentials + verification) → `/dashboard`.
+2. **Become visible & connect** — `/dashboard/profile` (complete objectives/skills, avatar) → `/dashboard/conneckt` (discover, send request) → other member accepts → `/dashboard/profile/[shortId]` cross-links.
+3. **Message & meet** — `/dashboard/chat` (new thread) → `/dashboard/chat/[id]` (send, react, attach, forward, AI summary) → start call → consent → transcript.
+4. **Shape the work** — `/dashboard/projects` (create) → `/dashboard/projects/[id]` (folders, TipTap docs, uploads, versions, shares, members, activity) → AI assist / analysis / export.
+5. **Team up** — `/dashboard/groups` (create/join) → `/dashboard/groups/[id]` (members, approvals, media, group wallet) → linked `/dashboard/chat/[id]` thread.
+6. **Get support** — project → `/dashboard/requests` (create, attach) → `/dashboard/requests/[id]` (provider responds, conversation, decision) → `/dashboard/support` for non-financial cases.
+7. **Money trail** — `/dashboard/wallet` (self-fund with proof → goals → withdrawals → reviews) → `/dashboard/plans` (subscriptions, payment methods).
+8. **Automate** — `/dashboard/actions` (describe instruction → AI interpretation → review → schedule) → cron worker executes → `/dashboard/notifications` confirms.
+9. **Govern** — `/admin/*`: overview → users/roles → moderation queues → audit log → settings/payments/storage health.
+
+### Cross-Page Relationships
+
+| Source page | Action | Destination page | Expected result |
+|---|---|---|---|
+| `/` | Authenticated visit | `/dashboard` or `/admin` | Role-based redirect, no landing flash |
+| `/register` | Submit valid form | `/verify-email?email=…` | OTP step starts |
+| `/verify-email` | Correct OTP | `/login` | Account activated |
+| `/login` | Verified login | `/dashboard` | Session cookie set, shell badges load |
+| `/dashboard/profile` | Save profile | `/dashboard/profile/[shortId]` | Public view reflects edits |
+| `/dashboard/conneckt` | Accept request | `/dashboard/chat` | New thread available |
+| `/dashboard/chat` | Open thread | `/dashboard/chat/[id]` | History + presence + receipts load |
+| `/dashboard/chat/[id]` | AI summary | Same thread | Summary renders; record saved where implemented |
+| `/dashboard/projects` | Create project | `/dashboard/projects/[id]` | Workspace with activity entry |
+| `/dashboard/projects/[id]` | Share / request support | `/dashboard/requests/[id]` | Request anchored to project |
+| `/dashboard/groups/[id]` | Open conversation | `/dashboard/chat/[id]` | Group-linked thread |
+| `/dashboard/requests` | Open request | `/dashboard/requests/[id]` | Detail + responses + files |
+| `/dashboard/wallet` | Withdraw | Same + review queue | Withdrawal tracked; provider callback reconciles |
+| `/dashboard/actions` | Confirm interpretation | Same list | `scheduled_actions` row; worker executes on tick |
+| Any dashboard | Logout (shell) | `/login` | Session revoked, protected routes redirect |
+| Direct URL to `/admin/*` as member | Navigate | Redirect / denied | Backend also rejects (frontend denial is not the only gate) |
+| `/welcome` | Visit | `/` | Legacy alias redirect |
+
+```mermaid
+flowchart LR
+    Landing["/ landing"] --> Register["/register"]
+    Register --> Verify["/verify-email"]
+    Verify --> Login["/login"]
+    Login --> Home["/dashboard home"]
+    Home --> Profile["profile"]
+    Home --> Conneckt["conneckt"]
+    Conneckt --> Chat["chat"]
+    Chat --> Thread["chat/[id]"]
+    Thread --> Calls["calls + transcripts"]
+    Home --> Projects["projects"]
+    Projects --> Workspace["projects/[id]"]
+    Workspace --> Requests["requests/[id]"]
+    Home --> Groups["groups/[id]"]
+    Groups --> Thread
+    Home --> Wallet["wallet"]
+    Wallet --> Plans["plans"]
+    Home --> Actions["actions"]
+    Actions --> Notifications["notifications"]
+    Home --> Admin["/admin"]
+    Admin --> Audit["audit log"]
+    Welcome["/welcome"] --> Landing
+```
+
+Test-evidence status: automated suites (`tests/`, `e2e/`) cover the flows they cover (see [Testing](#testing)); manual page-by-page results are recorded by whoever runs the [Internal Testing Tour](internal%20testing%20tour.md) — no manual PASS/FAIL is claimed here without execution.
 
 ---
 
