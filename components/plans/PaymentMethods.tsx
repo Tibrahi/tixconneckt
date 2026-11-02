@@ -16,7 +16,7 @@ import { Card, StatusBadge } from "@/components/ui/Card";
 import { EmptyState, SkeletonList } from "@/components/ui/Feedback";
 import { SelectField, TextField } from "@/components/ui/Fields";
 import { Button } from "@/components/ui/Button";
-import { Icon } from "@/components/ui/Icon";
+import { PaymentBrandMark } from "@/components/plans/PaymentBrandMark";
 
 interface BoundMethod {
   id: string;
@@ -61,8 +61,12 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/payment-methods", { cache: "no-store" });
-      const body = (await res.json()) as { ok: boolean; data?: { methods: BoundMethod[] }; error?: string };
-      if (!res.ok || !body.ok || !body.data) throw new Error(body.error ?? "Could not load payment methods.");
+      const body = (await res.json().catch(() => null)) as
+        | { ok: boolean; data?: { methods: BoundMethod[] }; error?: string }
+        | null;
+      if (!res.ok || !body?.ok || !body.data) {
+        throw new Error(body?.error ?? "Payment methods could not be loaded. Please try again.");
+      }
       setMethods(body.data.methods);
     } catch (error) {
       onError(error instanceof Error ? error.message : "Could not load payment methods.");
@@ -144,8 +148,8 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
           body: JSON.stringify(payload),
         },
       );
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "Could not save this payment method.");
+      const body = (await res.json().catch(() => null)) as { ok: boolean; error?: string } | null;
+      if (!res.ok || !body?.ok) throw new Error(body?.error ?? "Could not save this payment method. Please try again.");
       resetForm();
       setNotice(
         "Saved. Payment processing is under construction — these details are stored and will be used to proceed to the next step. A notification was sent to your inbox.",
@@ -179,12 +183,6 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
     return null;
   }
 
-  function rowIcon(m: BoundMethod): string {
-    const opt = m.methodOption ? methodOption(m.methodOption) : undefined;
-    if (opt) return opt.icon;
-    return m.type === "mobile_money" ? "mobile-screen" : m.type === "crypto" ? "coins" : m.type === "bank" ? "landmark" : "credit-card";
-  }
-
   return (
     <Card title="Payment methods">
       <p className="mb-3 text-sm text-neutral-600">
@@ -214,9 +212,13 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
             <li key={m.id} className="rounded-md border border-neutral-200 p-3 text-sm">
               <span className="flex flex-wrap items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2 font-medium text-black">
-                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-neutral-900 text-sm text-white" aria-hidden="true">
-                    <Icon name={rowIcon(m)} />
-                  </span>
+                  {m.methodOption && methodOption(m.methodOption) ? (
+                    <PaymentBrandMark method={m.methodOption as MethodOptionKey} />
+                  ) : (
+                    <span className="flex h-8 w-12 shrink-0 items-center justify-center rounded border border-neutral-300 bg-white text-xs text-neutral-700" aria-hidden="true">
+                      {m.type === "mobile_money" ? "MoMo" : m.type === "crypto" ? "₿" : m.type === "bank" ? "BANK" : "CARD"}
+                    </span>
+                  )}
                   <span className="min-w-0">
                     <span className="block truncate">
                       {(m.methodOption && methodOption(m.methodOption)?.label) ||
@@ -268,7 +270,7 @@ export function PaymentMethods({ onError }: { onError: (m: string) => void }) {
                     selected ? "border-black bg-neutral-900 text-white" : "border-neutral-300 bg-white text-black hover:border-black"
                   }`}
                 >
-                  <Icon name={o.icon} />
+                  <PaymentBrandMark method={o.key} selected={selected} />
                   <span>
                     <span className="block font-medium">{o.label}</span>
                     <span className={`block text-[11px] leading-tight ${selected ? "text-neutral-300" : "text-neutral-500"}`}>

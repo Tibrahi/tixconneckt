@@ -1,5 +1,6 @@
 import { and, eq } from "drizzle-orm";
 import { getDb } from "@/db";
+import { withMigrationRetry } from "@/db/migrate-on-boot";
 import { paymentMethods } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
@@ -51,9 +52,9 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   }
   const { id } = await params;
   const db = getDb();
-  const [row] = await db.select({ id: paymentMethods.id }).from(paymentMethods)
-    .where(and(eq(paymentMethods.id, id), eq(paymentMethods.userId, session.user.id))).limit(1);
+  const [row] = await withMigrationRetry(() => db.select({ id: paymentMethods.id }).from(paymentMethods)
+    .where(and(eq(paymentMethods.id, id), eq(paymentMethods.userId, session.user.id))).limit(1));
   if (!row) return apiError("Payment method not found.", 404);
-  await db.update(paymentMethods).set({ type: parsed.data.type, methodOption: methodOptionValue, details, displayLabel, providerRef: parsed.data.providerRef || null, status: "pending" }).where(eq(paymentMethods.id, id));
+  await withMigrationRetry(() => db.update(paymentMethods).set({ type: parsed.data.type, methodOption: methodOptionValue, details, displayLabel, providerRef: parsed.data.providerRef || null, status: "pending" }).where(eq(paymentMethods.id, id)));
   return apiOk({ updated: true, status: "pending", underConstruction: true });
 }
