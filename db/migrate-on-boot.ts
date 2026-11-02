@@ -42,7 +42,11 @@ export async function migrateOnBoot(): Promise<void> {
   const lockClient = new Client({ connectionString: url, connectionTimeoutMillis: 10_000 });
   try {
     await lockClient.connect();
-  } catch {
+  } catch (error) {
+    console.error(
+      `[db] automatic migration could not connect (${error instanceof Error ? error.message.split("\n")[0] || "connection failed" : String(error)}). ` +
+        "Check DATABASE_URL and database network access; pending schema changes remain unapplied.",
+    );
     return;
   }
   try {
@@ -81,8 +85,8 @@ export async function migrateOnBoot(): Promise<void> {
   }
 }
 
-/** True when the error (or anything in its cause chain) is Postgres 42703. */
-export function isMissingColumnError(error: unknown): boolean {
+/** True when the error (or anything in its cause chain) carries one of the given Postgres codes. */
+function hasPgCode(error: unknown, codes: ReadonlySet<string>): boolean {
   const pending: unknown[] = [error];
   const visited = new Set<object>();
   while (pending.length > 0) {
@@ -90,18 +94,30 @@ export function isMissingColumnError(error: unknown): boolean {
     if (!current || typeof current !== "object" || visited.has(current)) continue;
     visited.add(current);
     const candidate = current as { cause?: unknown; code?: unknown };
-    if (candidate.code === "42703") return true;
+    if (typeof candidate.code === "string" && codes.has(candidate.code)) return true;
     pending.push(candidate.cause);
   }
   return false;
 }
 
+const BEHIND_SCHEMA_CODES = new Set(["42703", "42P01"]);
+
+/** True when the error (or anything in its cause chain) is Postgres 42703. */
+export function isMissingColumnError(error: unknown): boolean {
+  return hasPgCode(error, new Set(["42703"]));
+}
+
+/** True when the error (or anything in its cause chain) is Postgres 42P01 (missing table). */
+export function isMissingTableError(error: unknown): boolean {
+  return hasPgCode(error, new Set(["42P01"]));
+}
+
 /**
  * Run a storage query, self-healing once when the schema is behind the code:
- * on Postgres 42703 (undefined column) it applies pending migrations and
- * retries a single time. Every other error — and a retry that still fails —
- * propagates untouched. The migrate step is injectable so tests never touch
- * a database.
+ * on Postgres 42703 (undefined column) or 42P01 (undefined table) it
+ * applies pending migrations and retries a single time. Every other
+ * error — and a retry that still fails — propagates untouched. The migrate
+ * step is injectable so tests never touch a database.
  */
 export async function withMigrationRetry<T>(
   fn: () => Promise<T>,
@@ -110,8 +126,8 @@ export async function withMigrationRetry<T>(
   try {
     return await fn();
   } catch (error) {
-    if (!isMissingColumnError(error)) throw error;
-    console.log("[db] schema is behind the code (42703); applying migrations and retrying once");
+    if (!hasPgCode(error, BEHIND_SCHEMA_CODES)) throw error;
+    console.log("[db] schema is behind the code; applying migrations and retrying once");
     await migrate();
     return await fn();
   }

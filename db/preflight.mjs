@@ -28,10 +28,20 @@ async function main() {
     await client.connect();
     await client.query("select 1");
   } catch (error) {
-    const detail = error instanceof Error ? error.message.split("\n")[0] : String(error);
+    const details = [];
+    const seen = new Set();
+    let current = error;
+    while (current && typeof current === "object" && !seen.has(current)) {
+      seen.add(current);
+      const code = typeof current.code === "string" ? current.code : "";
+      const message = typeof current.message === "string" ? current.message.trim().split("\n")[0] : "";
+      if (code || message) details.push([code, message].filter(Boolean).join(": "));
+      current = current.cause;
+    }
+    const detail = [...new Set(details)].join("; ") || "connection failed without a driver diagnostic";
     console.error(
       `db: cannot reach Neon PostgreSQL (${redactDatabaseUrl(url)}): ${detail}\n` +
-        "db: check DATABASE_URL in .env (see .env.example), your network, and that the Neon project is active.",
+        "db: check DNS/network access, DATABASE_URL in .env (see .env.example), TLS settings, and that the Neon project is active.",
     );
     process.exit(1);
   } finally {

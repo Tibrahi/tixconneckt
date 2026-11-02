@@ -1,5 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
+import { isMissingTableError, withMigrationRetry } from "@/db/migrate-on-boot";
 import { callInterpretations, callTranscripts, users } from "@/db/schema";
 import { callMuseSpark, sparkModelId, validateSparkJson } from "@/lib/ai";
 import { apiError, apiOk } from "@/lib/api-response";
@@ -31,17 +32,19 @@ export async function POST(_req: Request, { params }: RouteContext) {
   if (!call) return apiError("Call not found.", 404);
 
   const db = getDb();
-  const segments = await db
-    .select({
-      segmentIndex: callTranscripts.segmentIndex,
-      speaker: callTranscripts.speaker,
-      text: callTranscripts.text,
-      final: callTranscripts.final,
-    })
-    .from(callTranscripts)
-    .where(eq(callTranscripts.callId, id))
-    .orderBy(callTranscripts.segmentIndex)
-    .limit(MAX_SEGMENTS_PER_RUN);
+  const segments = await withMigrationRetry(() =>
+    db
+      .select({
+        segmentIndex: callTranscripts.segmentIndex,
+        speaker: callTranscripts.speaker,
+        text: callTranscripts.text,
+        final: callTranscripts.final,
+      })
+      .from(callTranscripts)
+      .where(eq(callTranscripts.callId, id))
+      .orderBy(callTranscripts.segmentIndex)
+      .limit(MAX_SEGMENTS_PER_RUN),
+  );
   const usable = segments.filter((s) => s.final && s.text.trim());
   if (usable.length === 0) {
     return apiError("No transcript saved for this call yet.", 404);
@@ -77,23 +80,35 @@ export async function POST(_req: Request, { params }: RouteContext) {
     return apiError(validated.error, 502);
   }
 
-  const [row] = await db
-    .insert(callInterpretations)
-    .values({
-      callId: id,
-      result: validated.doc,
-      model: spark.model ?? sparkModelId(),
-      segmentCount: usable.length,
-      createdBy: session.user.id,
-    })
-    .returning({
-      id: callInterpretations.id,
-      result: callInterpretations.result,
-      model: callInterpretations.model,
-      segmentCount: callInterpretations.segmentCount,
-      createdBy: callInterpretations.createdBy,
-      createdAt: callInterpretations.createdAt,
-    });
+  let row;
+  try {
+    [row] = await withMigrationRetry(() =>
+      db
+        .insert(callInterpretations)
+        .values({
+          callId: id,
+          result: validated.doc,
+          model: spark.model ?? sparkModelId(),
+          segmentCount: usable.length,
+          createdBy: session.user.id,
+        })
+        .returning({
+          id: callInterpretations.id,
+          result: callInterpretations.result,
+          model: callInterpretations.model,
+          segmentCount: callInterpretations.segmentCount,
+          createdBy: callInterpretations.createdBy,
+          createdAt: callInterpretations.createdAt,
+        }),
+    );
+  } catch (error) {
+    if (!isMissingTableError(error)) throw error;
+    console.error("[calls:interpret] call_interpretations missing; run `npm run db:migrate` to enable stored interpretations.");
+    return apiError("Stored interpretations are unavailable right now — the database update is still pending. The dialogue above is unaffected.", 503);
+  }
+  if (!row) {
+    return apiError("The interpretation could not be saved. You can retry safely.", 502);
+  }
 
   await Promise.all(
     participantIds

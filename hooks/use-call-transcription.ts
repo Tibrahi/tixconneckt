@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { convertToTranscribableWav } from "@/lib/audio-convert";
+import { readApi } from "@/components/chat/types";
 
 interface ConsentState {
   active: boolean;
@@ -57,11 +58,10 @@ export function useCallTranscription({ callId, capture, localStream, remoteStrea
     const refresh = async () => {
       try {
         const response = await fetch(`/api/calls/${encodeURIComponent(callId)}/transcript`, { cache: "no-store" });
-        const body = (await response.json()) as { ok: boolean; data?: ConsentState; error?: string };
-        if (!response.ok || !body.ok || !body.data) throw new Error(body.error ?? "Could not load call transcription status.");
-        if (!stopped) setConsents(body.data);
+        const data = await readApi<ConsentState>(response);
+        if (!stopped) setConsents(data);
       } catch (cause) {
-        if (!stopped && cause instanceof Error) setError(cause.message);
+        if (!stopped) setError(cause instanceof Error ? cause.message : "Could not load call transcription status.");
       }
     };
     void refresh();
@@ -101,13 +101,12 @@ export function useCallTranscription({ callId, capture, localStream, remoteStrea
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consented }),
       });
-      const body = (await response.json()) as { ok: boolean; data?: { consented: boolean; active: boolean; peerConsented: boolean }; error?: string };
-      if (!response.ok || !body.ok || !body.data) throw new Error(body.error ?? "Could not update transcription consent.");
+      const data = await readApi<{ consented: boolean; active: boolean; peerConsented: boolean }>(response);
       setConsents((previous) => ({
         ...previous,
-        active: body.data!.active,
-        mineConsented: body.data!.consented,
-        peerConsented: body.data!.peerConsented,
+        active: data.active,
+        mineConsented: data.consented,
+        peerConsented: data.peerConsented,
       }));
       return true;
     } catch (cause) {
@@ -135,8 +134,16 @@ export function useCallTranscription({ callId, capture, localStream, remoteStrea
         form.append("audio", wav, "call-segment.wav");
         form.append("context", "call");
         const response = await fetch("/api/ai/voice/stream", { method: "POST", body: form });
-        const result = (await response.json()) as { ok: boolean; data?: { transcript?: string; turns?: Array<{ turnId?: number; transcript?: string; speaker?: string }> }; error?: string };
-        // Silent or unintelligible chunk: skip quietly, never error the UI.
+        // Chunks are best-effort: silence, unreadable bodies, and failed
+        // turns all skip quietly — the next chunk retries within seconds.
+        const voiceText = await response.text().catch(() => "");
+        if (!voiceText.trim()) return;
+        let result: { ok: boolean; data?: { transcript?: string; turns?: Array<{ turnId?: number; transcript?: string; speaker?: string }> } };
+        try {
+          result = JSON.parse(voiceText) as typeof result;
+        } catch {
+          return;
+        }
         if (!response.ok || !result.ok || !result.data?.transcript?.trim()) return;
         const turns = (result.data.turns ?? []).filter((turn) => turn.transcript?.trim());
         const sources = turns.length ? turns : [{ transcript: result.data.transcript }];
@@ -155,8 +162,7 @@ export function useCallTranscription({ callId, capture, localStream, remoteStrea
         });
         // 409 = the caller switched transcription off mid-flight: stop quietly.
         if (save.status === 409) return;
-        const saved = (await save.json()) as { ok: boolean; error?: string };
-        if (!save.ok || !saved.ok) throw new Error(saved.error ?? "The transcript could not be saved.");
+        await readApi(save);
       } catch (cause) {
         if (!disposed) setError(cause instanceof Error ? cause.message : "Call transcription failed.");
       }

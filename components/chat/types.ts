@@ -69,7 +69,22 @@ export interface ThreadData {
 export type ChatFilter = "all" | "individual" | "groups" | "providers" | "projects" | "unread" | "archived";
 
 export async function readApi<T>(res: Response): Promise<T> {
-  const body = (await res.json()) as { ok: boolean; data?: T; error?: string };
+  // Text-first: a crashed route may answer 500 with an empty body, and a
+  // bare res.json() turns that into "Unexpected end of JSON input".
+  const text = await res.text().catch(() => "");
+  if (!text.trim()) {
+    throw new Error(
+      res.ok
+        ? "The server returned an empty response. Please try again."
+        : `The request failed (HTTP ${res.status}). Please try again.`,
+    );
+  }
+  let body: { ok: boolean; data?: T; error?: string };
+  try {
+    body = JSON.parse(text) as { ok: boolean; data?: T; error?: string };
+  } catch {
+    throw new Error("The server returned an unreadable response. Please try again.");
+  }
   if (!res.ok || !body.ok || body.data === undefined) {
     throw new Error(body.error ?? "Something went wrong. Please try again.");
   }

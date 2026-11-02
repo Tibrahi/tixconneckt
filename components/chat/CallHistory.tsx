@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { formatCallDuration } from "@/lib/call-transcript";
 import { formatDateTime } from "@/lib/currency";
 import { DynamicValue } from "@/components/dynamic/DynamicValue";
+import { readApi } from "./types";
 import { Badge } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
@@ -101,9 +102,8 @@ export function CallHistory({
         `/api/calls?conversationId=${encodeURIComponent(conversationId)}${showHidden ? "&showHidden=1" : ""}`,
         { cache: "no-store" },
       );
-      const body = (await res.json()) as { ok: boolean; data?: { calls: HistoryCall[] }; error?: string };
-      if (!res.ok || !body.ok || !body.data) throw new Error(body.error ?? "Could not load call history.");
-      setCalls(body.data.calls);
+      const data = await readApi<{ calls: HistoryCall[] }>(res);
+      setCalls(data.calls);
     } catch (error) {
       setFailed(true);
       onError(error instanceof Error ? error.message : "Could not load call history.");
@@ -126,9 +126,7 @@ export function CallHistory({
     setDetailLoading(true);
     try {
       const res = await fetch(`/api/calls/${encodeURIComponent(callId)}/transcript`, { cache: "no-store" });
-      const body = (await res.json()) as { ok: boolean; data?: TranscriptDetail; error?: string };
-      if (!res.ok || !body.ok || !body.data) throw new Error(body.error ?? "Could not load the transcript.");
-      setDetail(body.data);
+      setDetail(await readApi<TranscriptDetail>(res));
     } catch (error) {
       onError(error instanceof Error ? error.message : "Could not load the transcript.");
       setExpanded(null);
@@ -145,8 +143,7 @@ export function CallHistory({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ consented }),
       });
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "Could not update consent.");
+      await readApi(res);
       await openDetailRefresh(callId);
       load();
     } catch (error) {
@@ -159,8 +156,7 @@ export function CallHistory({
   async function openDetailRefresh(callId: string) {
     try {
       const res = await fetch(`/api/calls/${encodeURIComponent(callId)}/transcript`, { cache: "no-store" });
-      const body = (await res.json()) as { ok: boolean; data?: TranscriptDetail };
-      if (res.ok && body.ok && body.data) setDetail(body.data);
+      setDetail(await readApi<TranscriptDetail>(res));
     } catch {
       /* refresh is best-effort; the last loaded state stays visible */
     }
@@ -182,8 +178,7 @@ export function CallHistory({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ hidden }),
       });
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "Could not update visibility.");
+      await readApi(res);
       load();
     } catch (error) {
       onError(error instanceof Error ? error.message : "Could not update visibility.");
@@ -199,8 +194,7 @@ export function CallHistory({
     }
     try {
       const res = await fetch(`/api/calls/${encodeURIComponent(callId)}/transcript`, { method: "DELETE" });
-      const body = (await res.json()) as { ok: boolean; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "Could not delete the transcript.");
+      await readApi(res);
       setDeleteArmed(false);
       await openDetailRefresh(callId);
       load();
@@ -341,10 +335,9 @@ function CallDetail({
     setInterpretNote(null);
     try {
       const res = await fetch(`/api/calls/${encodeURIComponent(call.id)}/transcript/interpret`, { method: "POST" });
-      const body = (await res.json()) as { ok: boolean; data?: { pending?: boolean; pendingReason?: string }; error?: string };
-      if (!res.ok || !body.ok) throw new Error(body.error ?? "The assistant is unavailable right now.");
-      if (body.data?.pending) {
-        setInterpretNote(body.data.pendingReason ?? "The assistant is unavailable right now.");
+      const data = await readApi<{ pending?: boolean; pendingReason?: string }>(res);
+      if (data.pending) {
+        setInterpretNote(data.pendingReason ?? "The assistant is unavailable right now.");
         return;
       }
       onInterpreted();

@@ -1,5 +1,6 @@
 import { count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
+import { isMissingTableError, withMigrationRetry } from "@/db/migrate-on-boot";
 import { callInterpretations, callTranscripts, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
@@ -29,41 +30,59 @@ export async function GET(_req: Request, { params }: RouteContext) {
   if (!call) return apiError("Call not found.", 404);
 
   const db = getDb();
-  const [consents, segments, participantIds] = await Promise.all([
-    loadCallConsents(id),
-    db
-      .select({
-        segmentIndex: callTranscripts.segmentIndex,
-        speaker: callTranscripts.speaker,
-        text: callTranscripts.text,
-        final: callTranscripts.final,
-        turnId: callTranscripts.turnId,
-      })
-      .from(callTranscripts)
-      .where(eq(callTranscripts.callId, id))
-      .orderBy(callTranscripts.segmentIndex)
-      .limit(MAX_SEGMENTS_PER_CALL),
-    getCallParticipantIds(id),
-  ]);
+  const [consents, segments, participantIds] = await withMigrationRetry(() =>
+    Promise.all([
+      loadCallConsents(id),
+      db
+        .select({
+          segmentIndex: callTranscripts.segmentIndex,
+          speaker: callTranscripts.speaker,
+          text: callTranscripts.text,
+          final: callTranscripts.final,
+          turnId: callTranscripts.turnId,
+        })
+        .from(callTranscripts)
+        .where(eq(callTranscripts.callId, id))
+        .orderBy(callTranscripts.segmentIndex)
+        .limit(MAX_SEGMENTS_PER_CALL),
+      getCallParticipantIds(id),
+    ]),
+  );
   const knownIds = [...new Set([...participantIds, call.callerId, call.calleeId].filter(Boolean))] as string[];
-  const [people, interpretations] = await Promise.all([
-    knownIds.length
-      ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, knownIds))
-      : [],
-    db
-      .select({
-        id: callInterpretations.id,
-        result: callInterpretations.result,
-        model: callInterpretations.model,
-        segmentCount: callInterpretations.segmentCount,
-        createdBy: callInterpretations.createdBy,
-        createdAt: callInterpretations.createdAt,
-      })
-      .from(callInterpretations)
-      .where(eq(callInterpretations.callId, id))
-      .orderBy(desc(callInterpretations.createdAt))
-      .limit(1),
-  ]);
+  const people = knownIds.length
+    ? await db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, knownIds))
+    : [];
+  // The interpretations table is newer than some databases: when it is
+  // missing even after the retry above, degrade to "none stored" instead
+  // of failing the whole transcript view. Anything else still throws.
+  let interpretations: Array<{
+    id: string;
+    result: unknown;
+    model: string;
+    segmentCount: number;
+    createdBy: string;
+    createdAt: Date;
+  }> = [];
+  try {
+    interpretations = await withMigrationRetry(() =>
+      db
+        .select({
+          id: callInterpretations.id,
+          result: callInterpretations.result,
+          model: callInterpretations.model,
+          segmentCount: callInterpretations.segmentCount,
+          createdBy: callInterpretations.createdBy,
+          createdAt: callInterpretations.createdAt,
+        })
+        .from(callInterpretations)
+        .where(eq(callInterpretations.callId, id))
+        .orderBy(desc(callInterpretations.createdAt))
+        .limit(1),
+    );
+  } catch (error) {
+    if (!isMissingTableError(error)) throw error;
+    console.error("[calls:transcript] call_interpretations missing; run `npm run db:migrate` to enable stored interpretations.");
+  }
   const nameBySpeaker: Record<string, string> = {};
   for (const person of people) nameBySpeaker[person.id] = person.name;
   return apiOk({
