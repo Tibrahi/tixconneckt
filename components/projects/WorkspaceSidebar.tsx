@@ -7,6 +7,7 @@ import type { WorkspaceData, WorkspaceFileItem } from "./types";
 
 interface SidebarProps {
   data: WorkspaceData;
+  navigationOnly?: boolean;
   folderId: string;
   recent: WorkspaceFileItem[];
   onFolder: (id: string) => void;
@@ -100,16 +101,16 @@ export function WorkspaceSidebar(props: SidebarProps) {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto">
-      <div>
+      {!props.navigationOnly ? <div>
         <h2 className="truncate text-sm font-semibold text-black" title={data.project.title}>
           {data.project.title}
         </h2>
         <p className="mt-0.5 text-xs text-neutral-600">
           {data.project.groupId ? "Group project" : "Individual project"} · {data.access.role}
         </p>
-      </div>
+      </div> : null}
 
-      {data.access.canEdit ? (
+      {!props.navigationOnly && data.access.canEdit ? (
         <div className="grid grid-cols-3 gap-1.5">
           <button
             type="button"
@@ -163,7 +164,7 @@ export function WorkspaceSidebar(props: SidebarProps) {
         </div>
       ) : null}
 
-      <div className="mt-auto flex flex-col gap-1 border-t border-neutral-200 pt-3">
+      {!props.navigationOnly ? <div className="mt-auto flex flex-col gap-1 border-t border-neutral-200 pt-3">
         {responsesFolder ? (
           <button
             type="button"
@@ -194,7 +195,7 @@ export function WorkspaceSidebar(props: SidebarProps) {
             Project settings
           </button>
         ) : null}
-      </div>
+      </div> : null}
     </div>
   );
 }

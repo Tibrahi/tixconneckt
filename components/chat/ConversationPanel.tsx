@@ -360,13 +360,11 @@ export function ConversationPanel({
             placeholder="People, groups, providers, messages…"
           />
         </div>
-        {!compact ? (
-          <div className="flex items-end">
-            <Button size="sm" icon="plus" onClick={openNew}>
-              New
-            </Button>
-          </div>
-        ) : null}
+        <div className="flex items-end">
+          <Button size="sm" icon="plus" onClick={openNew}>
+            New
+          </Button>
+        </div>
       </div>
 
       {query.trim().length >= 2 ? (

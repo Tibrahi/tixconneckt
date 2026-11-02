@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ADMIN_NAV, DASHBOARD_NAV, ROUTES, type NavItem } from "@/lib/routes";
 import { Icon } from "@/components/ui/Icon";
+import { ContextNavigationProvider, useContextNavigation } from "./ContextNavigation";
 
 function NavList({
   items,
@@ -67,6 +68,38 @@ function NavList({
   );
 }
 
+function ContextNavContent({
+  navigation,
+  collapsed,
+  onNavigate,
+}: {
+  navigation: NonNullable<ReturnType<typeof useContextNavigation>["navigation"]>;
+  collapsed: boolean;
+  onNavigate?: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-3">
+      <Link
+        href={navigation.backHref}
+        onClick={onNavigate}
+        title={collapsed ? navigation.backLabel : undefined}
+        className={`flex items-center gap-2 rounded-md px-2 py-2 text-sm font-medium text-neutral-700 hover:bg-neutral-100 hover:text-brand-800 ${collapsed ? "justify-center" : ""}`}
+      >
+        <Icon name="arrow-left" />
+        {!collapsed ? <span>{navigation.backLabel}</span> : null}
+      </Link>
+      {!collapsed ? (
+        <>
+          <h2 className="truncate px-3 text-sm font-semibold text-neutral-900" title={navigation.title}>
+            {navigation.title}
+          </h2>
+          {navigation.content}
+        </>
+      ) : null}
+    </div>
+  );
+}
+
 /**
  * Authenticated two-region layout: left navigation + right content area.
  * No global dashboard header or footer. Page titles live in page content.
@@ -82,11 +115,32 @@ export function DashboardShell({
   accountRole: string;
   category: string;
 }) {
+  return (
+    <ContextNavigationProvider>
+      <DashboardShellContent isAdmin={isAdmin} accountRole={accountRole} category={category}>
+        {children}
+      </DashboardShellContent>
+    </ContextNavigationProvider>
+  );
+}
+
+function DashboardShellContent({
+  children,
+  isAdmin,
+  accountRole,
+  category,
+}: {
+  children: ReactNode;
+  isAdmin: boolean;
+  accountRole: string;
+  category: string;
+}) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [counts, setCounts] = useState<Record<string, number>>({});
   const [countsError, setCountsError] = useState(false);
   const router = useRouter();
+  const { navigation: contextNavigation } = useContextNavigation();
   const countsAbortRef = useRef<AbortController | null>(null);
   const countsFailuresRef = useRef(0);
 
@@ -207,19 +261,25 @@ export function DashboardShell({
             </button>
           </div>
           <nav className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
-            <NavList items={roleNav} counts={counts} collapsed={collapsed} />
-            {isAdmin ? (
+            {contextNavigation ? (
+              <ContextNavContent navigation={contextNavigation} collapsed={collapsed} />
+            ) : (
               <>
-                {!collapsed ? (
-                  <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase text-neutral-500">
-                    Administration
-                  </p>
-                ) : (
-                  <hr className="mx-2 my-3 border-neutral-200" />
-                )}
-                <NavList items={ADMIN_NAV} counts={counts} collapsed={collapsed} />
+                <NavList items={roleNav} counts={counts} collapsed={collapsed} />
+                {isAdmin ? (
+                  <>
+                    {!collapsed ? (
+                      <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase text-neutral-500">
+                        Administration
+                      </p>
+                    ) : (
+                      <hr className="mx-2 my-3 border-neutral-200" />
+                    )}
+                    <NavList items={ADMIN_NAV} counts={counts} collapsed={collapsed} />
+                  </>
+                ) : null}
               </>
-            ) : null}
+            )}
           </nav>
           <button
             type="button"
@@ -255,25 +315,31 @@ export function DashboardShell({
                 </button>
               </div>
               <nav className="flex-1 overflow-y-auto" aria-label="Dashboard sections">
-                <NavList
-                  items={roleNav}
-                  counts={counts}
-                  collapsed={false}
-                  onNavigate={() => setDrawerOpen(false)}
-                />
-                {isAdmin ? (
+                {contextNavigation ? (
+                  <ContextNavContent navigation={contextNavigation} collapsed={false} onNavigate={() => setDrawerOpen(false)} />
+                ) : (
                   <>
-                    <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase text-neutral-500">
-                      Administration
-                    </p>
                     <NavList
-                      items={ADMIN_NAV}
+                      items={roleNav}
                       counts={counts}
                       collapsed={false}
                       onNavigate={() => setDrawerOpen(false)}
                     />
+                    {isAdmin ? (
+                      <>
+                        <p className="px-3 pb-1 pt-4 text-xs font-semibold uppercase text-neutral-500">
+                          Administration
+                        </p>
+                        <NavList
+                          items={ADMIN_NAV}
+                          counts={counts}
+                          collapsed={false}
+                          onNavigate={() => setDrawerOpen(false)}
+                        />
+                      </>
+                    ) : null}
                   </>
-                ) : null}
+                )}
               </nav>
               <button
                 type="button"
