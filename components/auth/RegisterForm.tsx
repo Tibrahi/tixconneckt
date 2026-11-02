@@ -12,11 +12,14 @@ import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { LegalModal } from "./LegalModal";
 import { OtpForm } from "./OtpForm";
+import { stripSelectedCallingCode } from "@/lib/phone";
+import { countryFlagForCode } from "@/lib/country-flag";
 
 interface CountryOption {
   name: string;
   cca2: string;
   callingCode: string;
+  flag: string;
 }
 
 export function RegisterForm() {
@@ -56,7 +59,7 @@ export function RegisterForm() {
     : ["Your account", "Contact and role", "Organization details", "Review and accept"];
 
   useEffect(() => {
-    fetch("/api/meta/countries")
+    fetch("/api/meta/countries", { cache: "no-store" })
       .then((r) => r.json())
       .then((data: { ok: boolean; data?: CountryOption[] }) => {
         if (data.ok && data.data) setCountries(data.data);
@@ -202,7 +205,7 @@ export function RegisterForm() {
             onChange={(e) => selectCountry(e.target.value)}
             options={[
               { value: "", label: "Select country" },
-              ...countries.map((c) => ({ value: c.cca2, label: `${c.name} (${c.callingCode})` })),
+              ...countries.map((c) => ({ value: c.cca2, label: `${c.flag || countryFlagForCode(c.cca2)} ${c.name}${c.callingCode ? ` (${c.callingCode})` : ""}` })),
             ]}
             error={form.formState.errors.country?.message}
           />
@@ -213,6 +216,10 @@ export function RegisterForm() {
             placeholder="788 123 456"
             required
             {...form.register("phone")}
+            onChange={(event) => {
+              const localPhone = stripSelectedCallingCode(event.target.value, callingCode);
+              form.setValue("phone", localPhone, { shouldDirty: true, shouldValidate: true });
+            }}
             error={form.formState.errors.phone?.message}
           />
         </div>

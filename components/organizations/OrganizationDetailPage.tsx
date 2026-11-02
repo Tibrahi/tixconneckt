@@ -10,6 +10,7 @@ import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { Icon } from "@/components/ui/Icon";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { api, formatDate } from "@/components/projects/types";
+import { CountryLabel, CountrySelectField } from "@/components/country/CountryFields";
 
 interface OrgDetail {
   organization: {
@@ -133,7 +134,7 @@ export function OrganizationDetailPage({ orgId }: { orgId: string }) {
     <>
       <PageHeader
         title={o.name}
-        description={[o.category, o.country, o.website].filter(Boolean).join(" · ") || "Organization profile"}
+        description={<>{o.category || "Organization profile"}{o.country ? <> · <CountryLabel country={o.country} /></> : null}{o.website ? <> · {o.website}</> : null}</>}
         actions={
           <span className="flex gap-1.5">
             {detail.viewer.canManage ? (
@@ -426,7 +427,7 @@ function EditForm({
         <TextAreaField label="Description" value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="Category" value={category} onChange={(e) => setCategory(e.target.value)} />
-          <TextField label="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
+          <CountrySelectField value={country} onCountryChange={(selected) => setCountry(selected?.name ?? "")} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="Website" value={website} onChange={(e) => setWebsite(e.target.value)} />

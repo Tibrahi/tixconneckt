@@ -12,6 +12,7 @@ import { Icon } from "@/components/ui/Icon";
 import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { ROUTES } from "@/lib/routes";
 import { api } from "@/components/projects/types";
+import { CountryLabel, CountrySelectField } from "@/components/country/CountryFields";
 
 interface OrgRow {
   id: string;
@@ -139,7 +140,7 @@ export function OrganizationsPage({ accountCategory = "individual" }: { accountC
                     {o.name}
                   </Link>
                   <p className="mt-0.5 line-clamp-2 text-sm text-neutral-600">
-                    {[o.category, o.country].filter(Boolean).join(" · ") || "No category yet"}
+                    <>{[o.category].filter(Boolean).join(" · ") || "No category yet"}{o.country ? <> · <CountryLabel country={o.country} /></> : null}</>
                   </p>
                   <div className="mt-1.5 flex flex-wrap gap-1">
                     <StatusBadge status={o.verificationStatus} />
@@ -230,7 +231,7 @@ export function OrganizationForm({ onClose, onDone, accountCategory = "individua
         <TextAreaField label={isUniversity ? "Institution profile" : isGovernment ? "Agency mandate" : "Description"} value={description} onChange={(e) => setDescription(e.target.value)} />
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label={isUniversity ? "Institution type" : isGovernment ? "Agency area" : "Category"} value={category} onChange={(e) => setCategory(e.target.value)} placeholder={isUniversity ? "e.g. University, college" : isGovernment ? "e.g. Ministry, district" : "e.g. Lender, NGO, Supplier"} />
-          <TextField label="Country" value={country} onChange={(e) => setCountry(e.target.value)} />
+          <CountrySelectField value={country} onCountryChange={(selected) => setCountry(selected?.name ?? "")} />
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <TextField label="Website" value={website} onChange={(e) => setWebsite(e.target.value)} placeholder="https://…" />

@@ -86,10 +86,19 @@ function ProjectList({ summary, title, emptyTitle, emptyMessage }: {
   );
 }
 
+function RoleDashboardActions({ refreshing }: { refreshing: boolean }) {
+  return (
+    <div className="flex items-center gap-3">
+      {refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : null}
+      <Link href={ROUTES.profile} className="text-sm font-medium text-brand-700 hover:underline">My profile</Link>
+    </div>
+  );
+}
+
 function UniversityDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader title="University research workspace" description="Coordinate research projects you own or have been added to, organize academic teams, and manage support cases assigned to your institution." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
+      <PageHeader title="University research workspace" description="Coordinate research projects you own or have been added to, organize academic teams, and manage support cases assigned to your institution." actions={<RoleDashboardActions refreshing={refreshing} />} />
       <div className="grid gap-5 xl:grid-cols-[1.6fr_0.9fr]">
         <ProjectList summary={summary} title="Research projects you own or joined" emptyTitle="No research projects yet" emptyMessage="Create a research workspace from your account or join a project when its owner invites you." />
         <div className="flex flex-col gap-5">
@@ -119,7 +128,7 @@ function UniversityDashboard({ summary, refreshing }: { summary: Summary; refres
 function GovernmentDashboard({ summary, refreshing }: { summary: Summary; refreshing: boolean }) {
   return (
     <>
-      <PageHeader title="Government program coordination" description="Coordinate projects created by you or your groups, track funding requests, and manage assistance cases assigned to your agency." actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
+      <PageHeader title="Government program coordination" description="Coordinate projects created by you or your groups, track funding requests, and manage assistance cases assigned to your agency." actions={<RoleDashboardActions refreshing={refreshing} />} />
       <section aria-label="Program coordination actions" className="grid gap-4 lg:grid-cols-[1.2fr_0.8fr]">
         <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Program coordination</p>
@@ -170,7 +179,7 @@ function ProviderDashboard({ summary, providerKind, refreshing }: { summary: Sum
   const queueCount = providerKind === "support" ? summary.supportQueue ?? 0 : summary.providerQueue ?? 0;
   return (
     <>
-      <PageHeader title={providerKind === "loan" ? "Funding provider workspace" : providerKind === "support" ? "Support provider workspace" : "Provider workspace"} description={`Review ${focus}, respond to eligible projects, and manage the provider connections assigned to your account.`} actions={refreshing ? <span className="text-xs text-neutral-500" role="status">Updating…</span> : undefined} />
+      <PageHeader title={providerKind === "loan" ? "Funding provider workspace" : providerKind === "support" ? "Support provider workspace" : "Provider workspace"} description={`Review ${focus}, respond to eligible projects, and manage the provider connections assigned to your account.`} actions={<RoleDashboardActions refreshing={refreshing} />} />
       <div className="grid gap-5 lg:grid-cols-[1.1fr_0.9fr]">
         <div className="rounded-2xl bg-brand-900 p-6 text-white sm:p-8">
           <p className="text-xs font-semibold uppercase tracking-[0.15em] text-brand-100">Assigned work queue</p>

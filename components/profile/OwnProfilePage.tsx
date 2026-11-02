@@ -12,6 +12,8 @@ import { ErrorDialog, Modal } from "@/components/ui/Modal";
 import { Icon } from "@/components/ui/Icon";
 import { VoiceRecorder } from "@/components/ai/VoiceRecorder";
 import { ProfilePhotos } from "@/components/profile/ProfilePhotos";
+import { CountryLabel, CountrySelectField, useCountries } from "@/components/country/CountryFields";
+import { stripSelectedCallingCode } from "@/lib/phone";
 
 interface OwnProfile {
   shortId: string;
@@ -69,6 +71,7 @@ function proposalText(value: unknown): string {
 }
 
 export function OwnProfilePage() {
+  const countries = useCountries();
   const [profile, setProfile] = useState<OwnProfile | null>(null);
   const [failed, setFailed] = useState(false);
   const [editing, setEditing] = useState(false);
@@ -94,7 +97,7 @@ export function OwnProfilePage() {
       setProfile(body.data);
       setDraft({
         name: body.data.name,
-        phone: body.data.phone ?? "",
+        phone: stripSelectedCallingCode(body.data.phone ?? "", body.data.countryCode ?? ""),
         country: body.data.country ?? "",
         countryCode: body.data.countryCode ?? "",
         educationLevel: body.data.educationLevel ?? "",
@@ -132,8 +135,8 @@ export function OwnProfilePage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: draft.name || undefined,
-          phone: draft.phone || undefined,
-          country: draft.country || undefined,
+          phone: draft.phone ?? "",
+          country: draft.country ?? "",
           countryCode: draft.countryCode ?? "",
           educationLevel: draft.educationLevel ?? "",
           objectives: draft.objectives ?? "",
@@ -168,7 +171,7 @@ export function OwnProfilePage() {
       const res = await fetch("/api/profile/voice-assist", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: assistText }),
+        body: JSON.stringify({ text: assistText, context: draft }),
       });
       const body = (await res.json()) as {
         ok: boolean;
@@ -197,7 +200,11 @@ export function OwnProfilePage() {
       const next = { ...d };
       for (const [key, value] of Object.entries(proposal)) {
         if (Array.isArray(value)) next[key] = value.join(", ");
-        else if (typeof value === "string") next[key] = value;
+        else if (typeof value === "string") {
+          next[key] = key === "phone"
+            ? stripSelectedCallingCode(value, countries.find((item) => item.name === (proposal.country as string | undefined) || item.name === d.country)?.callingCode ?? d.countryCode ?? "")
+            : value;
+        }
       }
       return next;
     });
@@ -269,9 +276,14 @@ export function OwnProfilePage() {
           {editing ? (
             <div className="flex flex-col gap-3">
               <TextField label="Full name" value={draft.name ?? ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} />
-              <TextField label="Phone" value={draft.phone ?? ""} onChange={(e) => setDraft({ ...draft, phone: e.target.value })} />
-              <TextField label="Country" value={draft.country ?? ""} onChange={(e) => setDraft({ ...draft, country: e.target.value })} />
-              <TextField label="Country code" value={draft.countryCode ?? ""} maxLength={6} onChange={(e) => setDraft({ ...draft, countryCode: e.target.value.trim().toUpperCase() })} placeholder="e.g. RW or +250" hint="ISO letters (RW) or calling code (+250)." />
+              <CountrySelectField
+                value={draft.country ?? ""}
+                onCountryChange={(country) => setDraft((current) => ({ ...current, country: country?.name ?? "", countryCode: country?.callingCode ?? "" }))}
+              />
+              <TextField label="Phone" type="tel" autoComplete="tel-national" value={draft.phone ?? ""} onChange={(e) => {
+                const callingCode = countries.find((item) => item.name === draft.country)?.callingCode ?? draft.countryCode ?? "";
+                setDraft((current) => ({ ...current, phone: stripSelectedCallingCode(e.target.value, callingCode) }));
+              }} hint={draft.countryCode ? `Enter the local number. ${draft.countryCode} is added when saved.` : undefined} />
               <TextField label="Location" value={draft.location ?? ""} onChange={(e) => setDraft({ ...draft, location: e.target.value })} />
               {profile.role === "provider" ? (
                 <SelectField
@@ -334,7 +346,7 @@ export function OwnProfilePage() {
             <dl className="flex flex-col gap-2 text-sm">
               <div><dt className="text-neutral-600">Name</dt><dd className="font-medium">{profile.name}</dd></div>
               <div><dt className="text-neutral-600">Phone</dt><dd className="font-mono">{profile.phone ?? "—"}</dd></div>
-              <div><dt className="text-neutral-600">Country</dt><dd>{profile.country ?? "—"}</dd></div>
+              <div><dt className="text-neutral-600">Country</dt><dd><CountryLabel country={profile.country} /></dd></div>
               <div><dt className="text-neutral-600">Country code</dt><dd className="font-mono">{profile.countryCode ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Location</dt><dd>{profile.location ?? "—"}</dd></div>
               <div><dt className="text-neutral-600">Category</dt><dd className="capitalize">{profile.category}</dd></div>
@@ -455,6 +467,7 @@ export function OwnProfilePage() {
             <VoiceRecorder
               endpoint="/api/profile/voice-assist"
               docModule="profile"
+              context={draft}
               onTranscript={(transcript, meta) => {
                 setAssistText(transcript);
                 setAudioNote(meta.audioNote ?? meta.pendingReason ?? null);

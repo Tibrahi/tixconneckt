@@ -9,6 +9,7 @@ import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { ProfilePhotos } from "@/components/profile/ProfilePhotos";
+import { CountryLabel } from "@/components/country/CountryFields";
 
 interface ViewableProfile {
   shortId: string;
@@ -107,7 +108,7 @@ export function UserProfilePage({ shortId }: { shortId: string }) {
           <>
             Identifier <span className="font-mono font-semibold">{profile.shortId}</span> ·{" "}
             <span className="capitalize">{profile.category}</span>
-            {profile.country ? ` · ${profile.country}` : ""}
+            {profile.country ? <> · <CountryLabel country={profile.country} /></> : ""}
           </>
         }
         actions={
@@ -137,7 +138,7 @@ export function UserProfilePage({ shortId }: { shortId: string }) {
           <dl className="flex flex-col gap-2 text-sm">
             <div><dt className="text-neutral-600">Education</dt><dd>{profile.educationLevel ?? "—"}</dd></div>
             <div><dt className="text-neutral-600">Major</dt><dd>{profile.major ?? "—"}</dd></div>
-            <div><dt className="text-neutral-600">Location</dt><dd>{profile.location ?? profile.country ?? "—"}</dd></div>
+            <div><dt className="text-neutral-600">Location</dt><dd>{profile.location ?? <CountryLabel country={profile.country} />}</dd></div>
             <div>
               <dt className="text-neutral-600">GitHub</dt>
               <dd>

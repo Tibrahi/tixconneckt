@@ -27,12 +27,14 @@ export function VoiceRecorder({
   endpoint,
   task = "transcribe",
   docModule = "profile",
+  context,
   onTranscript,
   disabled = false,
 }: {
   endpoint: string;
   task?: string;
   docModule?: string;
+  context?: Record<string, unknown>;
   onTranscript: (transcript: string, meta: VoiceResultMeta) => void;
   disabled?: boolean;
 }) {
@@ -58,6 +60,7 @@ export function VoiceRecorder({
       form.append("audio", wav, "recording.wav");
       form.append("task", task);
       form.append("module", docModule);
+      if (context) form.append("context", JSON.stringify(context));
       const res = await fetch(endpoint, { method: "POST", body: form });
       const body = (await res.json()) as {
         ok: boolean;

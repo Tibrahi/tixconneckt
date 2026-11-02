@@ -7,7 +7,25 @@ import { retainVoiceAudio } from "@/lib/voice-capture";
 import { rateLimit } from "@/lib/rate-limit";
 import { PROFILE_PROPOSAL_OUTPUT_SCHEMA } from "@/lib/validation";
 
-const textProposalSchema = z.object({ text: z.string().min(1).max(8000) });
+const textProposalSchema = z.object({ text: z.string().min(1).max(8000), context: z.record(z.string(), z.unknown()).optional() });
+const CONTEXT_FIELDS = new Set([
+  "name", "phone", "country", "countryCode", "educationLevel", "objectives", "major",
+  "skills", "strengths", "fields", "bio", "location", "githubUrl",
+]);
+
+function cleanProfileContext(value: unknown): Record<string, string | string[]> {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+  const context: Record<string, string | string[]> = {};
+  for (const [key, entry] of Object.entries(value)) {
+    if (!CONTEXT_FIELDS.has(key)) continue;
+    if (typeof entry === "string" && entry.trim()) context[key] = entry.slice(0, 2000);
+    else if (Array.isArray(entry)) {
+      const items = entry.filter((item): item is string => typeof item === "string").slice(0, 30).map((item) => item.slice(0, 100));
+      if (items.length) context[key] = items;
+    }
+  }
+  return context;
+}
 
 /**
  * Voice/text profile assistant: transcribes spoken input and proposes field
@@ -21,10 +39,15 @@ export async function POST(req: Request) {
 
   const contentType = req.headers.get("content-type") ?? "";
   let sourceText = "";
+  let currentProfile: Record<string, string | string[]> = {};
   let audioMeta: { audioRetained: boolean; audioNote?: string } | undefined;
 
   if (contentType.includes("multipart/form-data")) {
     const form = await req.formData();
+    const contextRaw = form.get("context");
+    if (typeof contextRaw === "string") {
+      try { currentProfile = cleanProfileContext(JSON.parse(contextRaw)); } catch { /* Context is optional; transcription remains usable. */ }
+    }
     const audio = form.get("audio");
     if (!(audio instanceof Blob)) return apiError("No audio provided.", 400);
     const file = new File([audio], (audio as File).name || (audio.type.includes("wav") ? "profile.wav" : "profile.webm"), {
@@ -54,6 +77,7 @@ export async function POST(req: Request) {
     const parsed = textProposalSchema.safeParse(body);
     if (!parsed.success) return apiError("Provide text to interpret.", 400);
     sourceText = parsed.data.text;
+    currentProfile = cleanProfileContext(parsed.data.context);
   }
 
   if (sourceText.length > 8000) {
@@ -62,8 +86,8 @@ export async function POST(req: Request) {
 
   const spark = await callMuseSpark({
     task: "profile_interpret",
-    input: { text: sourceText },
-    schemaHint: "Return only explicitly stated profile fields using canonical field names. Allowed fields: name, phone, country, countryCode, educationLevel, objectives, major, skills[], strengths[], fields[], bio, location, githubUrl. Do not guess any value.",
+    input: { text: sourceText, currentProfile },
+    schemaHint: "Map the user's new or corrected statements to canonical profile fields. Use currentProfile only to understand existing values; include a value only when the user explicitly states it or asks to change it. Never echo unchanged values or guess. Allowed fields: name, phone, country, countryCode, educationLevel, objectives, major, skills[], strengths[], fields[], bio, location, githubUrl.",
     outputSchema: PROFILE_PROPOSAL_OUTPUT_SCHEMA,
   });
   if (!spark.configured) {

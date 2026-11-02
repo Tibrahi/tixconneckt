@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/Card";
 import { SelectField, TextField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
 import { api, formatDate, type WorkspaceFolderItem } from "./types";
+import { useCountries } from "@/components/country/CountryFields";
+import { countryFlagForCode } from "@/lib/country-flag";
 
 interface Provider {
   id: string;
@@ -27,6 +29,12 @@ interface ShareRow {
   createdAt: string;
 }
 
+function flagForCountryName(countryName: string | null, countries: ReturnType<typeof useCountries>) {
+  if (!countryName) return "";
+  const country = countries.find((item) => item.name.toLowerCase() === countryName.toLowerCase());
+  return country ? country.flag || countryFlagForCode(country.cca2) : "";
+}
+
 export function ShareDialog({
   projectId,
   folders,
@@ -44,6 +52,7 @@ export function ShareDialog({
   onClose: () => void;
   onDone: () => void;
 }) {
+  const countries = useCountries();
   const [providers, setProviders] = useState<Provider[] | null>(null);
   const [shares, setShares] = useState<ShareRow[] | null>(null);
   const [providerId, setProviderId] = useState("");
@@ -124,7 +133,7 @@ export function ShareDialog({
               { value: "", label: providers ? "Choose a provider…" : "Loading…" },
               ...(providers ?? []).map((p) => ({
                 value: p.id,
-                label: `${p.name} (${p.shortId})${p.country ? ` · ${p.country}` : ""}`,
+                label: `${flagForCountryName(p.country, countries)}${p.country ? " " : ""}${p.name} (${p.shortId})${p.country ? ` · ${p.country}` : ""}`,
               })),
             ]}
           />

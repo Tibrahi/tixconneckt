@@ -6,6 +6,8 @@ import { audit } from "@/lib/audit";
 import { getOwnProfile } from "@/lib/profile";
 import { getSession } from "@/lib/session";
 import { profileUpdateSchema } from "@/lib/validation";
+import { findCountry } from "@/lib/countries";
+import { normalizePhone } from "@/lib/phone";
 
 export async function GET() {
   const session = await getSession();
@@ -37,6 +39,24 @@ export async function PATCH(req: Request) {
   const input = parsed.data;
   const db = getDb();
 
+  let normalizedPhone: string | null | undefined;
+  let selectedCallingCode: string | undefined;
+  if (input.phone !== undefined) {
+    if (!input.phone) normalizedPhone = null;
+    else {
+      const current = await getOwnProfile(session.user.id);
+      const country = findCountry(input.country || current?.country || "");
+      selectedCallingCode = country?.callingCode;
+      const phone = country ? normalizePhone(input.phone, country.cca2) : null;
+      if (!phone?.valid) {
+        return apiError("The phone number is not valid for the selected country.", 400, {
+          phone: ["Enter a valid local number for the selected country."],
+        });
+      }
+      normalizedPhone = phone.e164;
+    }
+  }
+
   if (input.providerKind !== undefined && input.providerKind !== null && session.user.role !== "provider") {
     return apiError("Only provider accounts set a provider category.", 403);
   }
@@ -60,9 +80,9 @@ export async function PATCH(req: Request) {
         .update(users)
         .set({
           ...(input.name ? { name: input.name } : {}),
-          ...(input.phone !== undefined ? { phone: input.phone || null } : {}),
+          ...(normalizedPhone !== undefined ? { phone: normalizedPhone } : {}),
           ...(input.country !== undefined ? { country: input.country || null } : {}),
-          ...(normalizedCountryCode !== undefined ? { countryCode: normalizedCountryCode } : {}),
+          ...(selectedCallingCode ? { countryCode: selectedCallingCode } : normalizedCountryCode !== undefined ? { countryCode: normalizedCountryCode } : {}),
           ...(input.providerKind && session.user.role === "provider" && !session.user.providerKind ? { providerKind: input.providerKind } : {}),
         })
         .where(eq(users.id, session.user.id));

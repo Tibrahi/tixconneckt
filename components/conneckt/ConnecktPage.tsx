@@ -10,6 +10,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Badge, Card } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
 import { Button } from "@/components/ui/Button";
+import { CountryLabel } from "@/components/country/CountryFields";
 import { Pagination, SearchInput } from "@/components/ui/Pagination";
 import { SelectField } from "@/components/ui/Fields";
 import { Modal } from "@/components/ui/Modal";
@@ -89,7 +90,7 @@ function PreviewRow({
             {item.name} <span className="font-mono text-xs">({item.shortId})</span>
           </Link>
           <p className="truncate text-sm text-neutral-600">
-            {[item.headline, item.country].filter(Boolean).join(" · ") || "Member"}
+            <>{item.headline || "Member"}{item.country ? <> · <CountryLabel country={item.country} /></> : null}</>
           </p>
           {item.skills.length > 0 ? (
             <p className="truncate text-xs text-neutral-500">{item.skills.join(", ")}</p>
