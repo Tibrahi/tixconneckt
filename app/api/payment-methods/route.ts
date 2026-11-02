@@ -2,7 +2,9 @@ import { desc, eq } from "drizzle-orm";
 import { getDb } from "@/db";
 import { paymentMethods } from "@/db/schema";
 import { apiError, apiOk } from "@/lib/api-response";
+import { notify } from "@/lib/notify";
 import { looksLikeCredential } from "@/lib/payment-methods";
+import { buildDisplayLabel, methodOption, validateMethodDetails } from "@/lib/payment-method-fields";
 import { rateLimit } from "@/lib/rate-limit";
 import { getSession } from "@/lib/session";
 import { paymentMethodBindSchema } from "@/lib/validation";
@@ -16,6 +18,8 @@ export async function GET() {
     .select({
       id: paymentMethods.id,
       type: paymentMethods.type,
+      methodOption: paymentMethods.methodOption,
+      details: paymentMethods.details,
       displayLabel: paymentMethods.displayLabel,
       providerRef: paymentMethods.providerRef,
       status: paymentMethods.status,
@@ -29,11 +33,13 @@ export async function GET() {
 }
 
 /**
- * Bind a payment method for later verification. Stores only the method
- * type, a masked display label, and an optional provider-issued reference.
- * Labels that look like full credentials are rejected. Every binding
- * starts `pending` — no provider integration is verified today, so nothing
- * activates here and TixlPay-dependent flows stay gated.
+ * Bind a payment method for later verification. Legacy label-only bindings
+ * stay valid; the listified flow sends `option` + `details`, which are
+ * validated per rail (card last4/expiry, MoMo phone/account, wallet
+ * address…) and stored as public details with a server-built label.
+ * Secrets are rejected everywhere. Every binding starts `pending` — the
+ * rails are under construction, so the owner is notified that these saved
+ * details will be used to proceed to the next step once processing opens.
  */
 export async function POST(req: Request) {
   const session = await getSession();
@@ -51,7 +57,23 @@ export async function POST(req: Request) {
   if (!parsed.success) {
     return apiError(parsed.error.issues[0]?.message ?? "Invalid payment method.", 400);
   }
-  if (looksLikeCredential(parsed.data.displayLabel)) {
+
+  let displayLabel = parsed.data.displayLabel;
+  let methodOptionValue: string | null = null;
+  let details: Record<string, unknown> = {};
+  if (parsed.data.option) {
+    const option = methodOption(parsed.data.option);
+    if (!option || option.type !== parsed.data.type) {
+      return apiError("That method option does not match its type.", 400);
+    }
+    const checked = validateMethodDetails(parsed.data.option, parsed.data.details);
+    if (!checked.ok) {
+      return apiError(checked.errors[0] ?? "Invalid payment details.", 400);
+    }
+    methodOptionValue = parsed.data.option;
+    details = checked.normalized;
+    displayLabel = buildDisplayLabel(parsed.data.option, checked.normalized);
+  } else if (looksLikeCredential(displayLabel)) {
     return apiError("Enter only a masked label (e.g. Visa •• 4242) — never a full card number.", 400);
   }
 
@@ -70,10 +92,26 @@ export async function POST(req: Request) {
     .values({
       userId: session.user.id,
       type: parsed.data.type,
-      displayLabel: parsed.data.displayLabel,
+      methodOption: methodOptionValue,
+      details,
+      displayLabel,
       providerRef: parsed.data.providerRef || null,
       status: "pending",
     })
     .returning({ id: paymentMethods.id });
-  return apiOk({ id: row.id, status: "pending" }, 201);
+
+  try {
+    await notify({
+      userId: session.user.id,
+      type: "payment_method",
+      title: "Payment method saved",
+      body: "Payment processing is still under construction — these details are saved and will be used to proceed to the next step.",
+      resourceType: "payment_method",
+      resourceId: row.id,
+    });
+  } catch (error) {
+    console.error("[payment-methods] saved but the notification failed:", error instanceof Error ? error.message : error);
+  }
+
+  return apiOk({ id: row.id, status: "pending", underConstruction: true }, 201);
 }

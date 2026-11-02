@@ -5,6 +5,7 @@ import { apiError, apiOk } from "@/lib/api-response";
 import { getSession } from "@/lib/session";
 import { paymentMethodBindSchema } from "@/lib/validation";
 import { looksLikeCredential } from "@/lib/payment-methods";
+import { buildDisplayLabel, methodOption, validateMethodDetails } from "@/lib/payment-method-fields";
 
 type RouteContext = { params: Promise<{ id: string }> };
 
@@ -32,12 +33,27 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   try { body = await req.json(); } catch { return apiError("Invalid request body."); }
   const parsed = paymentMethodBindSchema.safeParse(body);
   if (!parsed.success) return apiError(parsed.error.issues[0]?.message ?? "Invalid payment method.", 400);
-  if (looksLikeCredential(parsed.data.displayLabel)) return apiError("Enter only a masked label — never a full card number.", 400);
+  let displayLabel = parsed.data.displayLabel;
+  let methodOptionValue: string | null = null;
+  let details: Record<string, unknown> = {};
+  if (parsed.data.option) {
+    const option = methodOption(parsed.data.option);
+    if (!option || option.type !== parsed.data.type) {
+      return apiError("That method option does not match its type.", 400);
+    }
+    const checked = validateMethodDetails(parsed.data.option, parsed.data.details);
+    if (!checked.ok) return apiError(checked.errors[0] ?? "Invalid payment details.", 400);
+    methodOptionValue = parsed.data.option;
+    details = checked.normalized;
+    displayLabel = buildDisplayLabel(parsed.data.option, checked.normalized);
+  } else if (looksLikeCredential(displayLabel)) {
+    return apiError("Enter only a masked label — never a full card number.", 400);
+  }
   const { id } = await params;
   const db = getDb();
   const [row] = await db.select({ id: paymentMethods.id }).from(paymentMethods)
     .where(and(eq(paymentMethods.id, id), eq(paymentMethods.userId, session.user.id))).limit(1);
   if (!row) return apiError("Payment method not found.", 404);
-  await db.update(paymentMethods).set({ type: parsed.data.type, displayLabel: parsed.data.displayLabel, providerRef: parsed.data.providerRef || null, status: "pending" }).where(eq(paymentMethods.id, id));
-  return apiOk({ updated: true, status: "pending" });
+  await db.update(paymentMethods).set({ type: parsed.data.type, methodOption: methodOptionValue, details, displayLabel, providerRef: parsed.data.providerRef || null, status: "pending" }).where(eq(paymentMethods.id, id));
+  return apiOk({ updated: true, status: "pending", underConstruction: true });
 }

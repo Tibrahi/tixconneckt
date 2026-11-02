@@ -120,6 +120,13 @@
       "when": 1793618564015,
       "tag": "0017_call_interpretations",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1793621384716,
+      "tag": "0018_payment_method_details",
+      "breakpoints": true
     }
   ]
 }

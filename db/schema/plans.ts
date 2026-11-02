@@ -107,6 +107,10 @@ export const paymentMethods = pgTable(
     displayLabel: text("display_label").notNull(),
     /** Provider-issued token/reference, never raw credentials. */
     providerRef: text("provider_ref"),
+    /** Listified method option: visa | mastercard | mtn | airtel | crypto | bank. */
+    methodOption: text("method_option"),
+    /** Validated public details (last4, E.164 phone, wallet address…) — never secrets. */
+    details: jsonb("details").notNull().default({}),
     /** pending | verified | failed | unavailable */
     status: text("status").notNull().default("pending"),
     createdAt: timestamp("created_at", { withTimezone: true })

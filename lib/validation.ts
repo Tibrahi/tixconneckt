@@ -610,6 +610,10 @@ export const paymentMethodBindSchema = z.object({
     .max(60)
     .refine((v) => !/^(?:pin|cvv|cvc|password)\s*[:=]?\s*\S+/i.test(v), "Never enter PINs, CVVs, or passwords."),
   providerRef: z.string().trim().max(120).optional(),
+  // Listified flow: a concrete option plus its validated public details.
+  // When present the server validates them per rail and rebuilds the label.
+  option: z.enum(["visa", "mastercard", "mtn", "airtel", "crypto", "bank"]).optional(),
+  details: z.record(z.string(), z.unknown()).optional(),
 });
 
 export type PaymentMethodBindInput = z.infer<typeof paymentMethodBindSchema>;
