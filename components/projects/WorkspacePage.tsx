@@ -4,7 +4,6 @@ import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Card";
 import { EmptyState, LoadError, SkeletonList } from "@/components/ui/Feedback";
@@ -92,8 +91,9 @@ export function WorkspacePage({ projectId }: { projectId: string }) {
   const [shareFileIds, setShareFileIds] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(true);
+  const [openSectionGroups, setOpenSectionGroups] = useState<Record<string, boolean>>({ Project: true });
+  const [projectContextOpen, setProjectContextOpen] = useState(true);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -198,19 +198,11 @@ export function WorkspacePage({ projectId }: { projectId: string }) {
 
   if (failed) {
     return (
-      <>
-        <PageHeader title="Project workspace" />
-        <LoadError message="We couldn't open this project. It may be private or removed." onRetry={load} />
-      </>
+      <LoadError message="We couldn't open this project. It may be private or removed." onRetry={load} />
     );
   }
   if (!data) {
-    return (
-      <>
-        <PageHeader title="Project workspace" />
-        <SkeletonList rows={5} />
-      </>
-    );
+    return <SkeletonList rows={5} />;
   }
 
   const isProvider = data.access.role === "provider";
@@ -272,195 +264,297 @@ export function WorkspacePage({ projectId }: { projectId: string }) {
         ]),
   ];
 
+  const sectionGroups: Array<{ label: string; icon: string; items: Array<{ id: TabId; label: string; icon: string }> }> = [
+    {
+      label: "Project",
+      icon: "diagram-project",
+      items: [
+        { id: "workspace", label: "Documents and files", icon: "folder" },
+        { id: "overview", label: "Project overview", icon: "circle-info" },
+      ],
+    },
+    ...(!isProvider
+      ? [
+          {
+            label: "Funding workflow",
+            icon: "funding",
+            items: [{ id: "requests" as TabId, label: "Requests", icon: "funding" }],
+          },
+          {
+            label: "Communication and decisions",
+            icon: "comments",
+            items: [
+              { id: "conversations" as TabId, label: "Conversations", icon: "comments" },
+              { id: "agreements" as TabId, label: "Agreements", icon: "file-signature" },
+            ],
+          },
+        ]
+      : []),
+  ];
+
+  const quickLinks = [
+    { id: "folder", label: "Open project folder", icon: "folder", onClick: () => goFolder(data.rootFolderId) },
+    { id: "create", label: "Create document", icon: "file-plus", disabled: !data.access.canEdit, onClick: () => setDialog("file") },
+    { id: "upload", label: "Upload document", icon: "upload", disabled: !data.access.canEdit, onClick: () => setDialog("upload") },
+    {
+      id: "playground",
+      label: "Open playground",
+      icon: "pen",
+      disabled: data.files.length === 0,
+      onClick: () => {
+        if (data.files.length > 0) openFile(data.files[0].id);
+      },
+    },
+    { id: "invite", label: "Invite collaborator", icon: "user-plus", disabled: !data.access.canManage, onClick: () => setDialog("members") },
+    { id: "permissions", label: "Manage permissions", icon: "users-gear", disabled: !data.access.canManage, onClick: () => setDialog("members") },
+    {
+      id: "share",
+      label: "Share with provider",
+      icon: "share",
+      disabled: !data.access.canManage,
+      onClick: () => {
+        setShareFileIds([]);
+        setDialog("share");
+      },
+    },
+    { id: "loan", label: "Request a loan", icon: "funding", disabled: isProvider, onClick: () => setDialog("request-loan") },
+    { id: "support", label: "Request support", icon: "funding", disabled: isProvider, onClick: () => setDialog("request-support") },
+    {
+      id: "responses",
+      label: "Provider responses",
+      icon: "inbox",
+      disabled: !responsesFolder,
+      onClick: () => {
+        if (responsesFolder) goFolder(responsesFolder.id);
+      },
+    },
+    { id: "conversations", label: "Project conversations", icon: "comments", disabled: isProvider, onClick: () => setTab("conversations") },
+    { id: "agreements", label: "Agreements", icon: "file-signature", disabled: isProvider, onClick: () => setTab("agreements") },
+    {
+      id: "history",
+      label: "Document history",
+      icon: "history",
+      onClick: () => {
+        setTab("workspace");
+        setOpenFileId(null);
+        setHistoryOpen(true);
+      },
+    },
+  ];
+
+  const sectionTitle = openFileId && tab === "workspace"
+    ? data.files.find((file) => file.id === openFileId)?.title ?? "Document playground"
+    : tabs.find((item) => item.id === tab)?.label ?? "Workspace";
+
   return (
     <>
-      <PageHeader
-        title={data.project.title}
-        description={`${data.project.groupId ? "Group" : "Individual"} project · ${data.access.role} access via ${data.access.via}`}
-        actions={
-          <div className="flex gap-1.5">
-            <Button size="sm" variant="secondary" icon="bars" onClick={() => setSidebarOpen((v) => !v)}>
-              <span className="lg:hidden">Folders</span>
-              <span className="hidden lg:inline">Toggle folders</span>
-            </Button>
-            <Button size="sm" variant="secondary" icon="circle-info" onClick={() => setInfoOpen((v) => !v)}>
-              <span className="lg:hidden">Info</span>
-              <span className="hidden lg:inline">Toggle info</span>
-            </Button>
-          </div>
-        }
-      />
-
-      <div className="mb-3">
-        <QuickLinks
-          links={[
-            { id: "folder", label: "Open Project Folder", icon: "folder", onClick: () => goFolder(data.rootFolderId) },
-            { id: "create", label: "Create Document", icon: "file-plus", disabled: !data.access.canEdit, onClick: () => setDialog("file") },
-            { id: "upload", label: "Upload Document", icon: "upload", disabled: !data.access.canEdit, onClick: () => setDialog("upload") },
-            {
-              id: "playground",
-              label: "Open Project Playground",
-              icon: "pen",
-              disabled: data.files.length === 0,
-              onClick: () => {
-                if (data.files.length > 0) openFile(data.files[0].id);
-              },
-            },
-            { id: "invite", label: "Invite Collaborator", icon: "user-plus", disabled: !data.access.canManage, onClick: () => setDialog("members") },
-            { id: "permissions", label: "Manage Permissions", icon: "users-gear", disabled: !data.access.canManage, onClick: () => setDialog("members") },
-            {
-              id: "share",
-              label: "Share with Provider",
-              icon: "share",
-              disabled: !data.access.canManage,
-              onClick: () => {
-                setShareFileIds([]);
-                setDialog("share");
-              },
-            },
-            { id: "loan", label: "Request Loan", icon: "funding", disabled: isProvider, onClick: () => setDialog("request-loan") },
-            { id: "support", label: "Request Support", icon: "funding", disabled: isProvider, onClick: () => setDialog("request-support") },
-            {
-              id: "responses",
-              label: "Provider Responses",
-              icon: "inbox",
-              disabled: !responsesFolder,
-              onClick: () => {
-                if (responsesFolder) goFolder(responsesFolder.id);
-              },
-            },
-            { id: "conversations", label: "Project Conversations", icon: "comments", disabled: isProvider, onClick: () => setTab("conversations") },
-            { id: "agreements", label: "Agreements", icon: "file-signature", disabled: isProvider, onClick: () => setTab("agreements") },
-            {
-              id: "history",
-              label: "Document History",
-              icon: "history",
-              onClick: () => {
-                setTab("workspace");
-                setInfoOpen(true);
-                setHistoryOpen(true);
-              },
-            },
-          ]}
-        />
-      </div>
-
-      <div role="tablist" aria-label="Project sections" className="mb-3 flex flex-wrap gap-1 border-b border-neutral-200">
-        {tabs.map((t) => (
-          <button
-            key={t.id}
-            role="tab"
-            aria-selected={tab === t.id}
-            onClick={() => setTab(t.id)}
-            className={`inline-flex items-center gap-2 border-b-2 px-3 py-2 text-sm font-medium ${
-              tab === t.id ? "border-brand-600 text-brand-700" : "border-transparent text-black hover:border-neutral-300"
-            }`}
-          >
-            <Icon name={t.icon} className={tab === t.id ? "text-brand-600" : ""} />
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      {tab === "overview" ? (
-        <ProjectOverview projectId={projectId} />
-      ) : tab === "requests" ? (
-        <RequestsTab
-          threads={threads}
-          onRetry={loadThreads}
-          onNewLoan={() => setDialog("request-loan")}
-          onNewSupport={() => setDialog("request-support")}
-        />
-      ) : tab === "conversations" ? (
-        <ConversationsTab threads={threads} onRetry={loadThreads} onOpen={openThread} />
-      ) : tab === "agreements" ? (
-        <AgreementsTab agreements={agreements} onRetry={loadThreads} />
-      ) : openFileId ? (
-        <DocEditor
-          key={openFileId}
-          projectId={projectId}
-          fileId={openFileId}
-          contextFiles={data.files.map((f) => ({ id: f.id, title: f.title }))}
-          onClose={() => setOpenFileId(null)}
-          onShare={(fid) => {
-            setShareFileIds([fid]);
-            setDialog("share");
-          }}
-          onChanged={refreshAll}
-        />
-      ) : (
-        <div className="flex gap-4">
-          <aside
-            className={`${sidebarOpen ? "block" : "hidden"} w-64 shrink-0 lg:block`}
-            aria-label="Project sidebar"
-          >
-            <div className="rounded-lg border border-neutral-200 bg-white p-3 lg:sticky lg:top-4 lg:max-h-[80vh]">
-              <WorkspaceSidebar
-                data={data}
-                folderId={activeFolder}
-                recent={recent}
-                onFolder={goFolder}
-                onOpenFile={openFile}
-                onNewFolder={() => setDialog("folder")}
-                onNewFile={() => setDialog("file")}
-                onUpload={() => setDialog("upload")}
-                onRenameFolder={(id, name) => {
-                  setRenameTarget({ id, name });
-                  setDialog("rename");
-                }}
-                onDeleteFolder={(id, name) => setDeleteTarget({ id, name })}
-                onProviderResponses={() => {
-                  if (responsesFolder) goFolder(responsesFolder.id);
-                }}
-                onAgreements={() => setTab("agreements")}
-                onSettings={() => setDialog("settings")}
-              />
-            </div>
-          </aside>
-
-          <div className="min-w-0 flex-1 rounded-lg border border-neutral-200 bg-white p-3">
-            <WorkspaceListing
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(13rem,0.95fr)_minmax(0,2.2fr)_minmax(17rem,1fr)]">
+        <aside
+          className={`${sidebarOpen ? "block" : "hidden"} min-w-0 xl:block`}
+          aria-label="Project folders and recent files"
+        >
+          <div className="rounded-xl border border-neutral-200 bg-white p-3 shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+            <WorkspaceSidebar
               data={data}
-              q={qInput}
-              type={type}
-              owner={owner}
-              sort={sort}
-              onQ={(v) => setQInput(v)}
-              onType={(v) => {
-                setType(v);
-                setPage(1);
-              }}
-              onOwner={(v) => {
-                setOwner(v);
-                setPage(1);
-              }}
-              onSort={(v) => {
-                setSort(v);
-                setPage(1);
-              }}
+              folderId={activeFolder}
+              recent={recent}
               onFolder={goFolder}
               onOpenFile={openFile}
-              onNextPage={() => setPage((p) => p + 1)}
+              onNewFolder={() => setDialog("folder")}
+              onNewFile={() => setDialog("file")}
+              onUpload={() => setDialog("upload")}
+              onRenameFolder={(id, name) => {
+                setRenameTarget({ id, name });
+                setDialog("rename");
+              }}
+              onDeleteFolder={(id, name) => setDeleteTarget({ id, name })}
+              onProviderResponses={() => {
+                if (responsesFolder) goFolder(responsesFolder.id);
+              }}
+              onAgreements={() => setTab("agreements")}
+              onSettings={() => setDialog("settings")}
             />
           </div>
+        </aside>
 
-          <aside
-            className={`${infoOpen ? "block" : "hidden"} w-72 shrink-0 xl:block`}
-            aria-label="Project information"
-          >
-            <div className="rounded-lg border border-neutral-200 bg-white p-3 xl:sticky xl:top-4 xl:max-h-[80vh]">
+        <main className="min-w-0 overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm" aria-label="Project playground">
+          <div className="flex min-h-16 items-center justify-between gap-3 border-b border-neutral-200 bg-neutral-50 px-4 py-3">
+            <div className="min-w-0">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-700">Project playground</p>
+              <h2 className="truncate text-base font-semibold text-neutral-950">{sectionTitle}</h2>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                icon="bars"
+                className="xl:hidden"
+                onClick={() => setSidebarOpen((value) => !value)}
+              >
+                Folders
+              </Button>
+              {openFileId && tab === "workspace" ? (
+                <Button size="sm" variant="secondary" icon="arrow-left" onClick={() => setOpenFileId(null)}>
+                  Files
+                </Button>
+              ) : null}
+            </div>
+          </div>
+          <div className="min-w-0 p-3 sm:p-4">
+            {tab === "overview" ? (
+              <ProjectOverview projectId={projectId} />
+            ) : tab === "requests" ? (
+              <RequestsTab
+                threads={threads}
+                onRetry={loadThreads}
+                onNewLoan={() => setDialog("request-loan")}
+                onNewSupport={() => setDialog("request-support")}
+              />
+            ) : tab === "conversations" ? (
+              <ConversationsTab threads={threads} onRetry={loadThreads} onOpen={openThread} />
+            ) : tab === "agreements" ? (
+              <AgreementsTab agreements={agreements} onRetry={loadThreads} />
+            ) : openFileId ? (
+              <DocEditor
+                key={openFileId}
+                projectId={projectId}
+                fileId={openFileId}
+                contextFiles={data.files.map((file) => ({ id: file.id, title: file.title }))}
+                onClose={() => setOpenFileId(null)}
+                onShare={(fileId) => {
+                  setShareFileIds([fileId]);
+                  setDialog("share");
+                }}
+                onChanged={refreshAll}
+              />
+            ) : (
+              <WorkspaceListing
+                data={data}
+                q={qInput}
+                type={type}
+                owner={owner}
+                sort={sort}
+                onQ={(value) => setQInput(value)}
+                onType={(value) => {
+                  setType(value);
+                  setPage(1);
+                }}
+                onOwner={(value) => {
+                  setOwner(value);
+                  setPage(1);
+                }}
+                onSort={(value) => {
+                  setSort(value);
+                  setPage(1);
+                }}
+                onFolder={goFolder}
+                onOpenFile={openFile}
+                onNextPage={() => setPage((value) => value + 1)}
+              />
+            )}
+          </div>
+        </main>
+
+        <aside aria-label="Project navigation and information" className="min-w-0">
+          <div className="overflow-hidden rounded-xl border border-neutral-200 bg-white shadow-sm xl:sticky xl:top-4 xl:max-h-[calc(100vh-2rem)] xl:overflow-y-auto">
+            <section className="border-b border-neutral-200 bg-gradient-to-br from-brand-50 via-white to-white p-4">
+              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-brand-700">Project workspace</p>
+              <h1 className="mt-1 line-clamp-2 text-lg font-semibold leading-snug text-neutral-950" title={data.project.title}>
+                {data.project.title}
+              </h1>
+              <p className="mt-1 text-xs text-neutral-600">
+                {data.project.groupId ? "Group project" : "Individual project"} · {data.access.role} access via {data.access.via}
+              </p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Button size="sm" variant="secondary" icon="bars" onClick={() => setSidebarOpen((value) => !value)}>
+                  {sidebarOpen ? "Hide folders" : "Show folders"}
+                </Button>
+                {data.access.canManage ? (
+                  <Button size="sm" variant="secondary" icon="gear" onClick={() => setDialog("settings")}>
+                    Settings
+                  </Button>
+                ) : null}
+              </div>
+            </section>
+
+            <section className="border-b border-neutral-200 p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">Quick actions</h2>
+                <span className="text-[10px] text-neutral-400">Available by access</span>
+              </div>
+              <QuickLinks links={quickLinks} />
+            </section>
+
+            <nav aria-label="Project section hierarchy" className="border-b border-neutral-200 p-3">
+              <h2 className="mb-2 px-1 text-xs font-semibold uppercase tracking-wide text-neutral-500">Project sections</h2>
+              <div className="flex flex-col gap-1.5">
+                {sectionGroups.map((group, index) => (
+                  <details
+                    key={group.label}
+                    className="group rounded-lg border border-neutral-200 bg-white"
+                    open={openSectionGroups[group.label] ?? index === 0}
+                    onToggle={(event) => {
+                      const isOpen = event.currentTarget.open;
+                      setOpenSectionGroups((current) =>
+                        current[group.label] === isOpen ? current : { ...current, [group.label]: isOpen },
+                      );
+                    }}
+                  >
+                    <summary className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-semibold text-neutral-800 hover:bg-neutral-50 [&::-webkit-details-marker]:hidden">
+                      <Icon name={group.icon} className="text-brand-600" />
+                      <span className="flex-1">{group.label}</span>
+                      <Icon name="chevron-down" className="text-xs text-neutral-400 transition-transform group-open:rotate-180" />
+                    </summary>
+                    <ul className="mb-1 ml-3 mr-2 flex flex-col gap-0.5 border-l border-neutral-200 pl-2">
+                      {group.items.map((item) => {
+                        const selected = tab === item.id;
+                        return (
+                          <li key={item.id}>
+                            <button
+                              type="button"
+                              aria-current={selected ? "page" : undefined}
+                              onClick={() => {
+                                setTab(item.id);
+                                setOpenFileId(null);
+                              }}
+                              className={`flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-xs transition-colors ${
+                                selected ? "bg-brand-50 font-semibold text-brand-800" : "text-neutral-700 hover:bg-neutral-50 hover:text-brand-800"
+                              }`}
+                            >
+                              <Icon name={item.icon} className={selected ? "text-brand-600" : "text-neutral-400"} />
+                              <span className="flex-1">{item.label}</span>
+                              {selected ? <Icon name="chevron-right" className="text-brand-600" /> : null}
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </details>
+                ))}
+              </div>
+            </nav>
+
+            <details
+              className="group p-3"
+              open={projectContextOpen}
+              onToggle={(event) => setProjectContextOpen(event.currentTarget.open)}
+            >
+              <summary className="mb-3 flex cursor-pointer list-none items-center justify-between text-xs font-semibold uppercase tracking-wide text-neutral-500 [&::-webkit-details-marker]:hidden">
+                Project context
+                <Icon name="chevron-down" className="transition-transform group-open:rotate-180" />
+              </summary>
               <WorkspaceInfo
                 data={data}
                 ownerName={ownerName}
                 groupName={groupName}
                 onMembers={() => setDialog("members")}
-                onHistory={() => setHistoryOpen((v) => !v)}
+                onHistory={() => setHistoryOpen((value) => !value)}
                 historyOpen={historyOpen}
               />
-            </div>
-          </aside>
-        </div>
-      )}
+            </details>
+          </div>
+        </aside>
+      </div>
 
       {dialog === "folder" ? (
         <FolderDialog
