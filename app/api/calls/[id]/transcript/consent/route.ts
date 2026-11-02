@@ -13,11 +13,12 @@ import { loadCallConsents } from "../_lib";
 type RouteContext = { params: Promise<{ id: string }> };
 
 /**
- * Toggle this participant's transcription consent. Transcription runs only
- * while BOTH participants consent; disabling stops further persistence at
- * once. Already-saved segments stay visible until either participant
- * deletes the transcript. Every change is audited and signaled to the
- * other participant so consent state is never one-sided or silent.
+ * Toggle call transcription. ONLY the caller (whoever started the call) can
+ * change this — other participants see the state but receive 403 here.
+ * Transcription runs only while the caller's switch is on; turning it off
+ * stops further persistence at once. Already-saved segments stay visible
+ * until someone deletes the transcript. Every change is audited and
+ * signaled to the other participants so the state is never silent.
  */
 export async function PATCH(req: Request, { params }: RouteContext) {
   const session = await getSession();
@@ -28,6 +29,9 @@ export async function PATCH(req: Request, { params }: RouteContext) {
   const { id } = await params;
   const call = await loadParticipantCall(id, session.user.id);
   if (!call) return apiError("Call not found.", 404);
+  if (call.callerId !== session.user.id) {
+    return apiError("Only the caller can turn transcription on or off for this call.", 403);
+  }
 
   let body: unknown;
   try {
@@ -49,7 +53,7 @@ export async function PATCH(req: Request, { params }: RouteContext) {
 
   const consents = await loadCallConsents(id);
   const participantIds = await getCallParticipantIds(id);
-  const active = transcriptionActive(consents, participantIds.length ? participantIds : [call.callerId, call.calleeId]);
+  const active = transcriptionActive(consents, call.callerId);
 
   await audit({
     actorId: session.user.id,

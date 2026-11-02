@@ -226,7 +226,7 @@ export function actorMatrix(): MatrixRow[] {
     "project.edit": "Owner/editor or admin",
     "request.create": "Member or institution who owns the project / group",
     "request.decide": "Requester side or admin",
-    "call.transcript.manage": "Call participants only",
+    "call.transcript.manage": "Transcript switch: caller only; viewing: participants",
     "wallet.review": "Independent reviewer (admin)",
     "payment.bind": "Own methods, pending until verified",
   };

@@ -340,6 +340,33 @@ export const callTranscripts = pgTable(
   ],
 );
 
+/**
+ * Collective AI interpretations of one call's transcript. Each run reads the
+ * full saved dialogue (every speaker together), produces a structured
+ * summary via Muse Spark, and stores it here — so the interpretation lives
+ * with the call and is retrieved alongside the dialogue, never recomputed
+ * from scratch on every view.
+ */
+export const callInterpretations = pgTable(
+  "call_interpretations",
+  {
+    id: text("id")
+      .primaryKey()
+      .$defaultFn(() => crypto.randomUUID()),
+    callId: text("call_id")
+      .notNull()
+      .references(() => calls.id, { onDelete: "cascade" }),
+    result: jsonb("result").notNull(),
+    model: text("model").notNull(),
+    segmentCount: integer("segment_count").notNull(),
+    createdBy: text("created_by")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("call_interpretation_call_idx").on(t.callId)],
+);
+
 /** Per-user hide state for ended/accepted calls (the history toggle). */
 export const callHides = pgTable(
   "call_hides",

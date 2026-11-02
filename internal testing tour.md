@@ -135,11 +135,13 @@ Requires two browsers; TURN configured for realistic NAT behavior.
 |---|---|---|
 | 7.1 | Start a call from a thread | Callee notified; `/api/calls/ice` returns server-side TURN credentials (never in page source) |
 | 7.2 | Join, speak, hang up | Media flows; call history entry appears for both; hide works per user |
-| 7.3 | Transcript consent OFF → try viewing transcript | Blocked with a clear message |
-| 7.4 | Grant consent (both sides as required) → transcribe (Voice ON) | Transcript appears; DELETE removes per policy |
-| 7.5 | Voice OFF run | Explicit pending/unavailable state, no fabricated transcript |
+| 7.3 | As callee: look for the transcription switch | No toggle — status text only ("only the caller can turn it on"); PATCH via curl → 403 |
+| 7.4 | As caller: turn transcription ON, both speak 60s+ | Segments auto-save per voice; history detail "What everyone said" shows C1/C2 dialogue with names, refreshing live |
+| 7.5 | Click "Interpret conversation" (Voice + Spark ON) | Structured summary stored; re-open shows it instantly (from DB, not recomputed) |
+| 7.6 | Caller turns switch OFF mid-call | Saving stops at once; saved dialogue retained; DELETE removes per policy |
+| 7.7 | Voice OFF run | Explicit pending/unavailable state, no fabricated transcript |
 
-Cross-check: `calls`, `call_participants`, `call_transcript_consents`, `call_transcripts` rows match; consent API rejects unauthorized users.
+Cross-check: `calls`, `call_participants`, `call_transcript_consents` (caller row), `call_transcripts` (speaker-tagged), `call_interpretations` rows match; consent API 403s non-callers.
 
 ## Stop 8 — Project workspace
 

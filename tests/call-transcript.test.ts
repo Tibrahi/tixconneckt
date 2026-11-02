@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  buildDialogue,
   callDurationMs,
   callOutcome,
   formatCallDuration,
@@ -9,31 +10,62 @@ import { resolveCallDecision } from "@/lib/calls";
 import { callHideSchema, callTranscriptConsentSchema, callTranscriptSegmentsSchema } from "@/lib/validation";
 
 describe("transcriptionActive", () => {
-  it("requires every participant to consent", () => {
-    expect(transcriptionActive([], ["a", "b"])).toBe(false);
-    expect(transcriptionActive([{ userId: "a", consented: true }], ["a", "b"])).toBe(false);
-    expect(
-      transcriptionActive(
-        [
-          { userId: "a", consented: true },
-          { userId: "b", consented: true },
-        ],
-        ["a", "b"],
-      ),
-    ).toBe(true);
-  });
-
-  it("goes inactive when either participant opts out", () => {
+  it("follows only the caller's switch", () => {
+    expect(transcriptionActive([], "a")).toBe(false);
+    expect(transcriptionActive([{ userId: "b", consented: true }], "a")).toBe(false);
     expect(
       transcriptionActive(
         [
           { userId: "a", consented: true },
           { userId: "b", consented: false },
         ],
-        ["a", "b"],
+        "a",
+      ),
+    ).toBe(true);
+  });
+
+  it("goes inactive when the caller opts out", () => {
+    expect(
+      transcriptionActive(
+        [
+          { userId: "a", consented: false },
+          { userId: "b", consented: true },
+        ],
+        "a",
       ),
     ).toBe(false);
-    expect(transcriptionActive([], [])).toBe(false);
+    expect(transcriptionActive([], "")).toBe(false);
+  });
+});
+
+describe("buildDialogue", () => {
+  it("labels distinct voices C1/C2/… in order of first appearance", () => {
+    const lines = buildDialogue(
+      [
+        { segmentIndex: 0, speaker: "u1", text: "Hello", final: true },
+        { segmentIndex: 1, speaker: "u2", text: "Hi there", final: true },
+        { segmentIndex: 2, speaker: "u1", text: "How are you", final: true },
+      ],
+      { u1: "Ama", u2: "Ben" },
+    );
+    expect(lines.map((l) => [l.who, l.name, l.text])).toEqual([
+      ["C1", "Ama", "Hello"],
+      ["C2", "Ben", "Hi there"],
+      ["C1", "Ama", "How are you"],
+    ]);
+  });
+
+  it("sorts by segment index and groups unattributed speech as one voice", () => {
+    const lines = buildDialogue([
+      { segmentIndex: 2, speaker: null, text: "third", final: true },
+      { segmentIndex: 0, speaker: null, text: "first", final: true },
+      { segmentIndex: 1, speaker: "u9", text: "second", final: true },
+    ]);
+    expect(lines.map((l) => [l.segmentIndex, l.who, l.name])).toEqual([
+      [0, "C1", null],
+      [1, "C2", null],
+      [2, "C1", null],
+    ]);
   });
 });
 

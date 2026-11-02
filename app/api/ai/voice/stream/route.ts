@@ -18,8 +18,6 @@ import { validateAudioUpload } from "@/lib/storage";
 export async function POST(req: Request) {
   const session = await getSession();
   if (!session) return apiError("Sign in required.", 401);
-  const rl = await rateLimit("ai-voice-stream", session.user.id, 10, "10 m");
-  if (!rl.allowed) return apiError("Too many transcription requests. Please try again shortly.", 429);
   if (!aiVoiceConfigured()) {
     return apiError("Muse Voice is not configured, so transcription is unavailable.", 503);
   }
@@ -29,6 +27,14 @@ export async function POST(req: Request) {
   if (!(audio instanceof Blob) || audio.size === 0) {
     return apiError("No audio provided.", 400);
   }
+  // Live call capture sends dual-channel chunks on a steady cadence — its
+  // own generous bucket so calls never 429 mid-conversation, while manual
+  // uploads keep the tighter abuse limit.
+  const isCallCapture = String(form?.get("context") ?? "") === "call";
+  const rl = isCallCapture
+    ? await rateLimit("ai-voice-call", session.user.id, 120, "10 m")
+    : await rateLimit("ai-voice-stream", session.user.id, 10, "10 m");
+  if (!rl.allowed) return apiError("Too many transcription requests. Please try again shortly.", 429);
   const typeProblem = validateAudioUpload(audio.type || "audio/wav", audio.size);
   if (typeProblem) return apiError(typeProblem, 400);
   if (audio.size > 32 * 1024 * 1024) {

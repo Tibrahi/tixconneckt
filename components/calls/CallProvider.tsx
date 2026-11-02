@@ -122,11 +122,13 @@ export function CallProvider({ children }: { children: ReactNode }) {
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [remoteParticipants, setRemoteParticipants] = useState<Array<{ id: string; name: string; stream: MediaStream }>>([]);
   const [now, setNow] = useState(() => Date.now());
+  const callPeers = active?.participants ?? incoming?.participants ?? [];
   const transcription = useCallTranscription({
     callId: active?.callId ?? incoming?.callId ?? null,
     capture: active?.role === "caller" && active.phase === "active",
     localStream,
     remoteStream,
+    peerUserId: callPeers.length === 1 ? callPeers[0].id : null,
   });
 
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -814,19 +816,14 @@ export function CallProvider({ children }: { children: ReactNode }) {
             <span className="font-semibold text-black">{incoming.callerName}</span> is calling you.
             Your camera and microphone turn on only if you accept.
           </p>
-          <label className="mt-4 flex items-start gap-2 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={transcription.mineConsented}
-              disabled={transcription.savingConsent}
-              onChange={(event) => void transcription.setConsent(event.currentTarget.checked)}
-              className="mt-0.5 h-4 w-4 accent-[#1447e6]"
-            />
-            <span>
-              <span className="font-medium text-black">Allow call transcription</span>
-              <span className="mt-0.5 block text-xs text-neutral-600">Optional. It starts only if both people agree. Only transcript text is saved; call audio is processed and discarded.</span>
+          <p className="mt-4 rounded-md border border-neutral-200 bg-neutral-50 p-3 text-sm">
+            <span className="font-medium text-black">Call transcription</span>
+            <span className="mt-0.5 block text-xs text-neutral-600">
+              {transcription.active
+                ? "The caller has transcription ON: each voice is automatically transcribed to text and saved with the call. Only transcript text is saved; call audio is processed and discarded."
+                : "The caller controls transcription for this call. If they turn it on, each voice is automatically transcribed to text. Only transcript text is ever saved — never audio."}
             </span>
-          </label>
+          </p>
           {transcription.error ? <p role="alert" className="mt-2 text-xs text-red-700">{transcription.error}</p> : null}
           <div className="mt-4 flex justify-end gap-2">
             <Button variant="secondary" icon="phone-slash" onClick={() => void declineCall()}>
@@ -909,18 +906,24 @@ export function CallProvider({ children }: { children: ReactNode }) {
             )}
 
             <div className="flex flex-wrap items-center gap-2">
-              <label className="flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 px-3 text-xs">
-                <input
-                  type="checkbox"
-                  checked={transcription.mineConsented}
-                  disabled={transcription.savingConsent}
-                  onChange={(event) => void transcription.setConsent(event.currentTarget.checked)}
-                  className="h-4 w-4 accent-[#1447e6]"
-                />
-                Allow transcription
-              </label>
+              {transcription.canControl ? (
+                <label className="flex min-h-9 items-center gap-2 rounded-md border border-neutral-200 px-3 text-xs">
+                  <input
+                    type="checkbox"
+                    checked={transcription.mineConsented}
+                    disabled={transcription.savingConsent}
+                    onChange={(event) => void transcription.setConsent(event.currentTarget.checked)}
+                    className="h-4 w-4 accent-[#1447e6]"
+                  />
+                  Transcribe this call
+                </label>
+              ) : null}
               <span className="text-xs text-neutral-600" role="status" aria-live="polite">
-                {transcription.active ? "Transcription is on" : transcription.peerConsented ? "Waiting for your consent" : "Both people must agree"}
+                {transcription.active
+                  ? "Transcription is on — every voice is saved as text"
+                  : transcription.canControl
+                    ? "Transcription is off"
+                    : "Transcription is off (only the caller can turn it on)"}
               </span>
               <IconButton
                 label={muted ? "Unmute microphone" : "Mute microphone"}

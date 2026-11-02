@@ -226,7 +226,7 @@ export async function GET(req: Request) {
       ...row,
       durationMs: callDurationMs(row.answeredAt, row.endedAt),
       transcriptSegments: segmentsByCall.get(row.id) ?? 0,
-      transcriptActive: transcriptionActive(consentsByCall.get(row.id) ?? [], participantIdsByCall.get(row.id) ?? [row.callerId, row.calleeId]),
+      transcriptActive: transcriptionActive(consentsByCall.get(row.id) ?? [], row.callerId),
       hidden: hiddenIds.has(row.id),
     }));
 

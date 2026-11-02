@@ -1,9 +1,9 @@
-import { count, eq } from "drizzle-orm";
+import { count, desc, eq, inArray } from "drizzle-orm";
 import { getDb } from "@/db";
-import { callTranscripts } from "@/db/schema";
+import { callInterpretations, callTranscripts, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { audit } from "@/lib/audit";
-import { transcriptionActive } from "@/lib/call-transcript";
+import { buildDialogue, transcriptionActive } from "@/lib/call-transcript";
 import { emitToRoom } from "@/lib/realtime";
 import { getSession } from "@/lib/session";
 import { callTranscriptSegmentsSchema } from "@/lib/validation";
@@ -16,8 +16,10 @@ type RouteContext = { params: Promise<{ id: string }> };
 const MAX_SEGMENTS_PER_CALL = 2000;
 
 /**
- * Read a call transcript. Participants only; segments are text-only and
- * carry speaker attribution solely when the diarization path supplied it.
+ * Read a call transcript. Participants only; segments are text-only with
+ * speaker attribution from the dual-channel capture path. Returns the raw
+ * segments plus the normalized C1/C2/… dialogue with resolved names and
+ * the latest collective interpretation, when one was stored.
  */
 export async function GET(_req: Request, { params }: RouteContext) {
   const session = await getSession();
@@ -43,9 +45,34 @@ export async function GET(_req: Request, { params }: RouteContext) {
       .limit(MAX_SEGMENTS_PER_CALL),
     getCallParticipantIds(id),
   ]);
+  const knownIds = [...new Set([...participantIds, call.callerId, call.calleeId].filter(Boolean))] as string[];
+  const [people, interpretations] = await Promise.all([
+    knownIds.length
+      ? db.select({ id: users.id, name: users.name }).from(users).where(inArray(users.id, knownIds))
+      : [],
+    db
+      .select({
+        id: callInterpretations.id,
+        result: callInterpretations.result,
+        model: callInterpretations.model,
+        segmentCount: callInterpretations.segmentCount,
+        createdBy: callInterpretations.createdBy,
+        createdAt: callInterpretations.createdAt,
+      })
+      .from(callInterpretations)
+      .where(eq(callInterpretations.callId, id))
+      .orderBy(desc(callInterpretations.createdAt))
+      .limit(1),
+  ]);
+  const nameBySpeaker: Record<string, string> = {};
+  for (const person of people) nameBySpeaker[person.id] = person.name;
   return apiOk({
     segments,
-    active: transcriptionActive(consents, participantIds.length ? participantIds : [call.callerId, call.calleeId]),
+    dialogue: buildDialogue(segments, nameBySpeaker),
+    interpretation: interpretations[0] ?? null,
+    active: transcriptionActive(consents, call.callerId),
+    controlledBy: call.callerId,
+    canControl: call.callerId === session.user.id,
     mineConsented: consents.find((consent) => consent.userId === session.user.id)?.consented ?? false,
     peerConsented: consents.some((consent) => consent.userId !== session.user.id && consent.consented),
     consents: consents.map((c) => ({ userId: c.userId, consented: c.consented, updatedAt: c.updatedAt })),
@@ -53,10 +80,10 @@ export async function GET(_req: Request, { params }: RouteContext) {
 }
 
 /**
- * Persist transcript segments. Requires active two-party consent — when
- * either participant has disabled transcription this returns 409 and stores
- * nothing. segmentIndex is the idempotency key: reconnects and duplicate
- * deliveries overwrite the same index instead of duplicating history.
+ * Persist transcript segments. Requires the caller's transcription switch to
+ * be on — otherwise this returns 409 and stores nothing. segmentIndex is
+ * the idempotency key: reconnects and duplicate deliveries overwrite the
+ * same index instead of duplicating history.
  */
 export async function POST(req: Request, { params }: RouteContext) {
   const session = await getSession();
@@ -76,8 +103,8 @@ export async function POST(req: Request, { params }: RouteContext) {
 
   const consents = await loadCallConsents(id);
   const participantIds = await getCallParticipantIds(id);
-  if (!transcriptionActive(consents, participantIds.length ? participantIds : [call.callerId, call.calleeId])) {
-    return apiError("Transcription is off for this call. Every participant must consent before segments can be saved.", 409);
+  if (!transcriptionActive(consents, call.callerId)) {
+    return apiError("Transcription is off for this call. Only the caller can turn it on.", 409);
   }
 
   const db = getDb();

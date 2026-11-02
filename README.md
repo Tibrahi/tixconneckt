@@ -127,7 +127,7 @@
 - **Discovery & matching**: people/organization search plus match suggestions with AI-generated compatibility explanations.
 - **Connections (Conneckt)**: connection requests, accept/decline, badge counts.
 - **Realtime chat**: threads, message editing, reactions, read/delivery receipts, typing indicators, presence, file attachments, message forwarding, full-text search, per-conversation settings.
-- **Voice/video calls**: WebRTC calls with TURN/STUN NAT traversal, server-mediated signaling, consent-gated transcription.
+- **Voice/video calls**: WebRTC calls with TURN/STUN NAT traversal, server-mediated signaling, caller-controlled auto-transcription (dual-channel voices → C1/C2 dialogue → stored collective AI interpretation).
 - **Project workspaces**: folders, TipTap rich-text documents, file uploads, version history, exports (PDF/DOCX), shares, member management, activity feed, AI document assistance.
 - **Groups & organizations**: membership, roles, approvals, shared conversations, group wallets, organization verification workflows.
 - **Requests & support cases**: funding/support requests, provider responses, request conversations, attached files, decisions, agreements.
@@ -160,7 +160,7 @@
 - Role/capability matrix (`user` / `provider` / `admin`, categories, provider kinds) with deny-by-default.
 - Route guards (`proxy.ts` + server-side session validation on every protected page), Zod validation on all API inputs, DOMPurify sanitization for rich text.
 - Audit logs + security events, Upstash rate limiting, signed Ably tokens scoped per user, per-session TURN credentials.
-- Consent-gated call transcripts; legal-consent records at registration.
+- Caller-controlled call transcription (others see state, cannot toggle); legal-consent records at registration.
 
 ### Integrations
 
@@ -445,7 +445,7 @@ AI is **verified as actively implemented** — not merely imported. All transpor
 | Decision summary | Member requests in thread | Spark | Recent messages | Organized decisions | Chat/group UI |
 | Action items | Member requests in thread | Spark | Recent messages | Follow-up list | Chat UI |
 | Voice transcription | User records/uploads audio | Voice | Mono 16-bit WAV @16/24 kHz | Transcript (+ turns) | Chat/profile/call transcript UI |
-| Call transcription | Consented call recording | Voice | Converted call audio | Transcript | `call_transcripts` (consent-gated) |
+| Call transcription | Caller switch ON + active call | Voice | Dual-channel call audio (30s chunks) | Speaker-tagged segments | `call_transcripts` + `call_interpretations` |
 
 ### When AI Is Activated
 
@@ -495,7 +495,7 @@ Only the task payload (user input + relevant context such as profile/project fie
 
 ### AI Security and Privacy
 
-Server-side keys only; per-request auth + rate limits; output validation before persistence; consent-gated call transcripts; no secrets in prompts. No compliance certification is claimed.
+Server-side keys only; per-request auth + rate limits; output validation before persistence; caller-controlled call transcripts (403 for non-callers); no secrets in prompts. No compliance certification is claimed.
 
 ### Error Handling and Limitations
 
@@ -757,7 +757,7 @@ Real end-to-end paths assembled from the inventory (each step names the actual r
 
 1. **Join & verify** — `/` → `/register` (read 3 legal docs → checkboxes unlock → submit) → `/verify-email` (OTP) → `/login` (credentials + verification) → `/dashboard`.
 2. **Become visible & connect** — `/dashboard/profile` (complete objectives/skills, avatar) → `/dashboard/conneckt` (discover, send request) → other member accepts → `/dashboard/profile/[shortId]` cross-links.
-3. **Message & meet** — `/dashboard/chat` (new thread) → `/dashboard/chat/[id]` (send, react, attach, forward, AI summary) → start call → consent → transcript.
+3. **Message & meet** — `/dashboard/chat` (new thread) → `/dashboard/chat/[id]` (send, react, attach, forward, AI summary) → start call → caller enables transcription → auto C1/C2 dialogue + stored interpretation.
 4. **Shape the work** — `/dashboard/projects` (create) → `/dashboard/projects/[id]` (folders, TipTap docs, uploads, versions, shares, members, activity) → AI assist / analysis / export.
 5. **Team up** — `/dashboard/groups` (create/join) → `/dashboard/groups/[id]` (members, approvals, media, group wallet) → linked `/dashboard/chat/[id]` thread.
 6. **Get support** — project → `/dashboard/requests` (create, attach) → `/dashboard/requests/[id]` (provider responds, conversation, decision) → `/dashboard/support` for non-financial cases.
@@ -870,7 +870,8 @@ Base: same origin as the app. Auth: session cookie unless noted. Envelope: `{ ok
 | GET | `/api/calls/ice` | Session | ICE/TURN credentials |
 | PATCH | `/api/calls/[id]/hide` | Participant | Hide call |
 | GET,POST,DELETE | `/api/calls/[id]/transcript` | Consented | Transcripts |
-| PATCH | `/api/calls/[id]/transcript/consent` | Participant | Transcript consent |
+| PATCH | `/api/calls/[id]/transcript/consent` | Caller only | Transcription switch (403 for others) |
+| POST | `/api/calls/[id]/transcript/interpret` | Participant | Collective AI interpretation (stored) |
 | GET | `/api/ably/token` | Session | Scoped Ably token |
 | GET,POST | `/api/projects` | Session | Projects |
 | GET,POST,PATCH | `/api/projects/[id]` | Member | Single project |
@@ -957,7 +958,7 @@ Methods verified from exported handlers in each `route.ts`. Capability-gated row
 - OTP verification, recovery flow, per-request session validation, `proxy.ts` redirect guard.
 - Deny-by-default capability matrix; resource-ownership checks in owning routes.
 - Zod input validation, DOMPurify rich-text sanitization, prototype-pollution guards on AI/flexible JSON.
-- Audit logs, security events, rate limiting, scoped Ably tokens, per-session TURN credentials, webhook-secret verification, consent-gated transcripts.
+- Audit logs, security events, rate limiting, scoped Ably tokens, per-session TURN credentials, webhook-secret verification, caller-gated transcripts.
 
 **Deployment precautions.**
 

@@ -44,6 +44,8 @@ const TASK_INSTRUCTIONS: Record<string, string> = {
   project_support_request: "Prepare a support request draft from project context. Do not invent needs or commitments; return editable nodes and gaps.",
   project_analyze_responses: "Compare supplied provider responses against the request. Keep each provider's statements attributed and identify unanswered items.",
   project_ask: "Answer the question using only supplied project files. Cite which supplied file supports each point and state when the answer is unavailable.",
+  call_interpret:
+    "Interpret this call dialogue collectively: key points, decisions, action items with owners, and open questions. Ground every point in the supplied turns, attribute statements to their speaker labels (C1, C2, …), and flag anything uncertain. Never invent content that was not said.",
 };
 
 /** Shared task instructions — also reused by the open-weights transport. */
