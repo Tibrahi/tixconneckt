@@ -9,6 +9,7 @@
 [![Drizzle ORM](https://img.shields.io/badge/Drizzle-0.45.4-C5F74F)](https://orm.drizzle.team/)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Neon-4169E1)](https://neon.tech/)
 [![Muse Spark](https://img.shields.io/badge/AI-Muse_Spark-7C3AED)](https://dev.meta.ai/)
+[![Muse Voice Transcribe](https://img.shields.io/badge/AI-Muse_Voice_Transcribe-7C3AED)](https://dev.meta.ai/models/muse-voice-transcribe)
 [![PWA](https://img.shields.io/badge/PWA-Serwist-5A0FC8)](https://serwist.serwist.dev/)
 
 **Status:** Active development · `v0.1.0` · Hackathon evaluation build (see [Intellectual Property, Ownership & Usage Restrictions](#intellectual-property-ownership--usage-restrictions))
