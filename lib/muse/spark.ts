@@ -46,7 +46,8 @@ const TASK_INSTRUCTIONS: Record<string, string> = {
   project_ask: "Answer the question using only supplied project files. Cite which supplied file supports each point and state when the answer is unavailable.",
 };
 
-function instructionFor(task: string): string | null {
+/** Shared task instructions — also reused by the open-weights transport. */
+export function instructionFor(task: string): string | null {
   return TASK_INSTRUCTIONS[task] ?? null;
 }
 

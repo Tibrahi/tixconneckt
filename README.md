@@ -14,6 +14,16 @@
 
 **Status:** Active development · `v0.1.0` · Hackathon evaluation build (see [Intellectual Property, Ownership & Usage Restrictions](#intellectual-property-ownership--usage-restrictions))
 
+## Hackathon Submission
+
+> **Meta Global AI Developer Hackathon (Cerebral Valley) — Indie Developer track — Problem statement #1: Build for Your World.**
+
+- **Built 100% during the event** (Oct 28–Nov 2, 2026): every commit falls inside the Oct 27–Nov 4 building window — verify with `git log --date=short --format='%h %ad %s'`. "Copy" in commit messages is the author's daily snapshot-phase label, not copied code (see [Commit History & Originality](#commit-history--originality)).
+- **What is new:** full collaboration platform + Meta AI integration: 8 Muse Spark structured tasks, Muse Voice transcription across chat/profile/calls/actions, and a verifiable voice-to-action agent (propose → validate → human approves → cron executes → notify + audit).
+- **Meta models (exact):** `muse-spark-1.3` and `muse-voice-transcribe-1.0` via Meta Model API (`dev.meta.ai`); open-weights path supported when `MUSE_OPEN_*` is configured.
+- **Hero in one line:** a community organizer speaks a need → transcribed → structured into a project + support request → a provider responds → money and work stay linked. Voice-to-funded-work in minutes.
+- **Demo video:** _URL added before submission_ · **Live product:** _URL added before submission_ · **Judge path:** [Usage Guide — Judge path](#judge-path-5-clicks).
+
 <p align="center">
   <img src="public/logo.png" alt="TIXCONNECKT logo" width="120" />
 </p>
@@ -22,6 +32,7 @@
 
 ## Table of Contents
 
+- [Hackathon Submission](#hackathon-submission)
 - [About the Project](#about-the-project)
 - [Key Features](#key-features)
   - [Core Features](#core-features)
@@ -61,10 +72,12 @@
 - [Installation and Setup](#installation-and-setup)
 - [Environment Variables](#environment-variables)
 - [Usage Guide](#usage-guide)
+  - [Judge path (5 clicks)](#judge-path-5-clicks)
 - [System Tour](#system-tour)
   - [Page Inventory](#page-inventory)
   - [Core User Workflows](#core-user-workflows)
   - [Cross-Page Relationships](#cross-page-relationships)
+  - [Commit History & Originality](#commit-history--originality)
 - [Screenshots and Demonstrations](#screenshots-and-demonstrations)
 - [API Documentation](#api-documentation)
 - [Security](#security)
@@ -82,16 +95,18 @@
 
 ## About the Project
 
+**Hackathon hero (problem statement #1 — Build for Your World).** A community organizer **speaks a need** → **Muse Voice transcribes it** → **Muse Spark structures it** into a project plus a funding/support request → **a provider responds** → money, documents, decisions, and work stay linked in one trail. This answers the statement directly: Meta's models in a real domain (grassroots collaboration), freeing organizers from forms and tool-hopping, making **voice-to-funded-work in minutes** possible — something that was not possible for them before.
+
 **What it is.** TIXCONNECKT (`tixconneckt`, v0.1.0) is a full-stack Next.js collaboration platform. Members build skill-based profiles, discover collaborators through search and AI-assisted matching, form groups and organizations, run realtime conversations and voice/video calls, manage documents in project workspaces, submit and review funding/support requests, and track wallet, ledger, and contribution records — with administration, moderation, and audit tooling built in.
 
 **The problem it solves.** Independent contributors, institutions, and support providers typically coordinate across disconnected tools: profiles in one place, conversations in another, documents, decisions, funding requests, and payment records scattered everywhere. TIXCONNECKT keeps the whole journey — discover → shape the work → work as a team → coordinate support — connected to the people and projects involved.
 
 **Target audience.**
 
-- Independent contributors with a skill, idea, or time to contribute.
-- Universities and public/government organizations.
-- Funding (`loan`) and non-financial (`support`) providers.
-- Groups and project teams coordinating shared work.
+- Independent contributors with a skill, idea, or time to contribute (`/dashboard/profile`, `/dashboard/conneckt`).
+- Universities and public/government organizations (`/dashboard/organizations`).
+- Funding (`loan`) and non-financial (`support`) providers (`/dashboard/requests`).
+- Groups and project teams coordinating shared work (`/dashboard/groups`, `/dashboard/projects/[id]`).
 
 **Core value proposition.** One account, one workspace model: profile visibility, matching, chat, calls, documents, requests, agreements, decisions, wallets, and audit trails stay linked instead of living in separate silos.
 
@@ -408,11 +423,14 @@ flowchart TB
 
 AI is **verified as actively implemented** — not merely imported. All transport lives in `lib/muse/` (`spark.ts`, `voice.ts`, `realtime.ts`, `endpoints.ts`, `wav.ts`), facades in `lib/ai.ts`, task definitions in `lib/ai-tasks.ts`, and execution routes under `/api/ai/*`, `/api/actions/interpret`, `/api/chat/[id]/summarize`, `/api/chat/[id]/messages/[messageId]/analyze`, `/api/profile/voice-assist`, and `/api/projects/[id]/files/[fileId]/assist`.
 
+**The agentic centerpiece is a verifiable voice-to-action agent** (multimodal input, verifiable execution): a user speaks or types an instruction → Muse Voice/Spark proposes a structured action → the server validates it → the human reviews and approves → the cron worker executes → notification + `action_attempts`/audit rows record the outcome. Every step is inspectable; nothing executes without approval and nothing fabricates results when AI is unconfigured.
+
 ### AI Technologies Used
 
 - **Muse Spark** — structured text tasks over the Meta Model API (`POST …/v1/chat/completions`, OpenAI-compatible). Default model `muse-spark-1.3`, overridable via `MUSE_SPARK_MODEL`.
 - **Muse Voice** — transcription over `…/v1/asr/transcribe` (file) and `wss://…/v1/asr/realtime` (streaming). Default model `muse-voice-transcribe-1.0`, overridable via `MUSE_VOICE_MODEL`. **Transcription only** — audio summarization/extraction tasks are explicitly marked unsupported.
 - Endpoint base URLs self-normalize (bare host, versioned root, or full operation URL) to prevent path doubling (`lib/muse/endpoints.ts`, covered by `tests/muse-endpoints.test.ts`).
+- **Open weights (opt-in):** matching tasks (`match_explain`, `match_score`) can run on Meta open-weights models (default `meta-models/muse-spark-open-1026`) via OpenAI-compatible partner inference (`lib/muse/openweights.ts`, covered by `tests/muse-openweights.test.ts`). Active only when `MUSE_OPEN_API_URL` + `MUSE_OPEN_API_KEY` are set and `MUSE_OPEN_MATCH=1`; any failure falls back to Spark, and the actual model id is recorded in record provenance (`model`) and match rationales (`AI note [model]: …`). Requires partner credits/keys — without them the path stays off and behavior is identical to Spark-only.
 
 ### AI-Powered Features
 
@@ -635,6 +653,9 @@ Every name below is referenced in code. Values shown are placeholders/shapes onl
 | `MUSE_SPARK_MODEL` | Spark model override | No | Default `muse-spark-1.3` |
 | `MUSE_VOICE_API_URL` / `MUSE_VOICE_API_KEY` | AI voice endpoint + key | For transcription | Meta Model API (`dev.meta.ai`) |
 | `MUSE_VOICE_MODEL` | Voice model override | No | Default `muse-voice-transcribe-1.0` |
+| `MUSE_OPEN_API_URL` / `MUSE_OPEN_API_KEY` | Open-weights endpoint + key | For open-weights matching | Partner base, e.g. Baseten `https://inference.baseten.co/v1` |
+| `MUSE_OPEN_MODEL` | Open-weights model override | No | Default `meta-models/muse-spark-open-1026` |
+| `MUSE_OPEN_MATCH` | `1` routes matching tasks to open weights | No | Off unless `1`; falls back to Spark on failure |
 | `DB_POOL_MAX` | pg pool size per instance | No | Default `10` |
 | `DB_CONNECT_TIMEOUT_MS` | Pool connect timeout | No | Default `10000` |
 | `DB_IDLE_TIMEOUT_MS` | Pool idle timeout | No | Default `30000` |
@@ -654,6 +675,16 @@ Every name below is referenced in code. Values shown are placeholders/shapes onl
 5. **Providers** register with `category=provider` and a kind (`loan`/`support`) determining their queue and response workflow.
 6. **Admins** use `/admin/*` (Overview, Users, Groups, Projects, Requests, Audit log, Settings).
 7. **Key flows**: connect → chat/call → create or join a project → invite groups/orgs → submit requests → providers respond → track wallet/contributions; use Actions for reminders/automation and Matching + AI explanations to find collaborators.
+
+### Judge path (5 clicks)
+
+For hackathon evaluators on the live product (test accounts supplied in the submission):
+
+1. Sign in as the demo organizer → open `/dashboard/actions`.
+2. Record (or paste) the voice note: "Remind the team to review Ada's request tomorrow at 9am" → review the AI-interpreted draft → confirm.
+3. Watch it execute on the next worker tick → check the confirmation in `/dashboard/notifications`.
+4. Open `/dashboard/projects/[id]` → run project analysis → attach the result to `/dashboard/requests/[id]`.
+5. As the demo provider, respond to the request → verify the trail in `/dashboard/wallet` and `/admin/audit`.
 
 ---
 
@@ -782,6 +813,10 @@ flowchart LR
 ```
 
 Test-evidence status: automated suites (`tests/`, `e2e/`) cover the flows they cover (see [Testing](#testing)); manual page-by-page results are recorded by whoever runs the [Internal Testing Tour](internal%20testing%20tour.md) — no manual PASS/FAIL is claimed here without execution.
+
+### Commit History & Originality
+
+A note for evaluators reading the git history: commit messages in this repository follow the author's daily snapshot-phase convention — "First Copy", "Second Copy", … "sixth Copy" mean **that day's file snapshot** (e.g. "sixth Copy" = sixth-day files), plus labels such as "README.MD" for documentation passes. **"Copy" does not mean copied code.** All commits are dated **Oct 28–Nov 2, 2026**, inside the hackathon building window, and represent original event work (AI-assisted via coding agents, as the event encourages). Verify with `git log --date=short --format='%h %ad %s'`.
 
 ---
 
@@ -1025,6 +1060,10 @@ The repository may be made accessible publicly and temporarily for a specific ha
 8. Any permission to use the project outside evaluation must be obtained explicitly from the project owner in writing.
 
 **Important:** This statement does not override mandatory hackathon rules, previously granted licenses, applicable open-source licenses, or rights established by law. It is a notice of the owner's intended usage conditions, not a technical access-control mechanism.
+
+### Hackathon evaluation grant (November 2026)
+
+For the Meta Global AI Developer Hackathon (Cerebral Valley, October–November 2026) judging period, through the close of the community vote, the owner permits judges, organizers, and platform visitors to access this public repository, run and demo the live product, and display the demo video and gallery entry for evaluation purposes. All other rights remain reserved; no commercial license is granted. (If a `LICENSE` file is added, its terms apply alongside this grant.)
 
 ---
 

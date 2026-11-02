@@ -135,6 +135,7 @@ export async function POST(req: Request) {
   // Optional AI-assisted comparison — structured score stays authoritative.
   let aiNotes: Record<string, string> = {};
   let aiPending = false;
+  let aiModel: string | undefined;
   if (ranked.length > 0) {
     const spark = await callMuseSpark({
       task: "match_score",
@@ -151,7 +152,10 @@ export async function POST(req: Request) {
       aiPending = true;
     } else if (spark.data && typeof spark.data === "object") {
       const notes = (spark.data as { notes?: Record<string, string> }).notes;
-      if (notes) aiNotes = notes;
+      if (notes) {
+        aiNotes = notes;
+        aiModel = spark.model;
+      }
     }
   }
 
@@ -170,7 +174,7 @@ export async function POST(req: Request) {
   for (const r of ranked) {
     if (suggestedIds.has(r.userId)) continue;
     const rationale = [...r.rationale];
-    if (aiNotes[r.userId]) rationale.push(`AI note: ${aiNotes[r.userId]}`);
+    if (aiNotes[r.userId]) rationale.push(`AI note${aiModel ? ` [${aiModel}]` : ""}: ${aiNotes[r.userId]}`);
     if (aiPending) rationale.push("Compatibility from structured rules (AI assist pending).");
     await db.insert(matchResults).values({
       userId,

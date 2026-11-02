@@ -138,7 +138,11 @@ export const HOMEPAGE_FOOTER_GROUPS: Array<{ heading: string; links: HomepageLin
   },
   {
     heading: "Policies",
-    links: [],
+    links: [
+      { label: "Privacy", href: ROUTES.legalPrivacy },
+      { label: "Terms", href: ROUTES.legalTerms },
+      { label: "Agreement", href: ROUTES.legalAgreement },
+    ],
   },
 ];
 

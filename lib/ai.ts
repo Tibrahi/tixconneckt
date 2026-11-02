@@ -1,5 +1,6 @@
 import { aiSparkConfigured, aiVoiceConfigured } from "./config";
 import { sparkModel } from "./muse/endpoints";
+import { openWeightsModel, runOpenTask, shouldUseOpenWeights } from "./muse/openweights";
 import { runSparkTask } from "./muse/spark";
 import { transcribeFile, type VoiceMode, type VoiceTurn } from "./muse/voice";
 import { parseWavHeader, transcribableWavProblem } from "./muse/wav";
@@ -31,10 +32,25 @@ export interface SparkResponse {
   data?: unknown;
   error?: string;
   model?: string;
+  /** Open-weights reasoning trace, when the endpoint returned one. */
+  reasoning?: string;
 }
 
 export async function callMuseSpark(request: SparkRequest): Promise<SparkResponse> {
-  if (!aiSparkConfigured()) {
+  // Gated open-weights path (matching tasks only): on success the actual
+  // model id is reported; on failure we fall through to Muse Spark so a
+  // partner outage never breaks the feature.
+  if (shouldUseOpenWeights(request.task)) {
+    const open = await runOpenTask(request);
+    if (!open.error && open.data !== undefined) {
+      return { configured: true, data: open.data, model: open.model, ...(open.reasoning ? { reasoning: open.reasoning } : {}) };
+    }
+    const openError = open.error ?? "Open-weights request failed";
+    console.error("[muse:openweights] falling back to Spark:", openError);
+    if (!aiSparkConfigured()) {
+      return { configured: true, error: openError, model: openWeightsModel() };
+    }
+  } else if (!aiSparkConfigured()) {
     return { configured: false, pendingReason: "Muse Spark is not configured" };
   }
   const result = await runSparkTask(request);

@@ -95,6 +95,7 @@ export async function POST(req: Request) {
       provenance: {
         source: "muse_spark",
         task: task.id,
+        model: spark.model,
         projectId: parsed.data.projectId,
         inputKeys: Object.keys(parsed.data.values),
         producedAt: new Date().toISOString(),
@@ -102,5 +103,8 @@ export async function POST(req: Request) {
     })
     .returning();
 
-  return apiOk({ pending: false, record }, 201);
+  return apiOk(
+    { pending: false, record, model: spark.model, ...(spark.reasoning ? { reasoning: spark.reasoning } : {}) },
+    201,
+  );
 }
