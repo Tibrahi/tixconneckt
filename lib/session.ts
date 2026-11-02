@@ -1,5 +1,6 @@
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { connection } from "next/server";
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { and, eq, gt } from "drizzle-orm";
 import { getDb, isDatabaseUnavailable, withDbRead } from "@/db";
@@ -25,6 +26,12 @@ export async function getSession(options: { throwOnDatabaseUnavailable?: boolean
   user: SessionUser;
   session: { id: string; expiresAt: Date };
 } | null> {
+  // Session validation reads cookies and compares against the current time,
+  // so it must run at request time. Runtime prerenders resolve cookies()
+  // with real request data, which would otherwise reach `new Date()` below
+  // and fail the route ("unstable value while prerendering"). connection()
+  // stalls prerenders here without throwing, so this stays outside the try.
+  await connection();
   try {
     const store = await cookies();
     const cookie = [sessionCookieName(), SESSION_COOKIE, ...LEGACY_SESSION_COOKIES]
