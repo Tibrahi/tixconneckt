@@ -36,6 +36,8 @@ export const ROUTES = {
   groupById: (id: string) => `/dashboard/groups/${id}`,
   settings: "/dashboard/settings",
   admin: "/admin",
+  adminLogin: "/admin/login",
+  adminRegister: "/admin/register",
   adminUsers: "/admin/users",
   adminGroups: "/admin/groups",
   adminProjects: "/admin/projects",
@@ -92,11 +94,28 @@ export const ADMIN_NAV: NavItem[] = [
 /** Routes that require an authenticated session. */
 export const PROTECTED_PREFIXES = ["/dashboard", "/admin"];
 
+/**
+ * Dedicated admin auth pages. They live under /admin so the gate is reached
+ * as-is, but they stay public: signing in (or bootstrapping the first owner)
+ * must work before any session exists.
+ */
+export function isPublicAdminAuthPath(pathname: string): boolean {
+  return pathname === ROUTES.adminLogin || pathname === ROUTES.adminRegister;
+}
+
+/** True when the proxy must see a session cookie for this path. */
+export function requiresSessionCookie(pathname: string): boolean {
+  if (isPublicAdminAuthPath(pathname)) return false;
+  return PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
+}
+
 /** Public routes reachable without a session. */
 export const PUBLIC_ROUTES = new Set([
   ROUTES.root,
   ROUTES.login,
   ROUTES.register,
+  ROUTES.adminLogin,
+  ROUTES.adminRegister,
   ROUTES.verifyEmail,
   ROUTES.forgotPassword,
   ROUTES.resetPassword,

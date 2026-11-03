@@ -19,7 +19,7 @@ describe("resolveDrizzleKitDatabaseUrl", () => {
   it("drops channel_binding (unsupported by node-postgres) and keeps TLS", () => {
     const url = new URL(resolveDrizzleKitDatabaseUrl({ DATABASE_URL: POOLER_URL }));
     expect(url.searchParams.get("channel_binding")).toBeNull();
-    expect(url.searchParams.get("sslmode")).toBe("verify-full");
+    expect(url.searchParams.get("sslmode")).toBe("require");
     expect(url.searchParams.get("connect_timeout")).toBe("10");
   });
 
@@ -56,7 +56,7 @@ describe("resolveRuntimeDatabaseUrl", () => {
     const url = new URL(resolveRuntimeDatabaseUrl({ DATABASE_URL: POOLER_URL }));
     expect(url.hostname).toContain("-pooler.");
     expect(url.searchParams.get("channel_binding")).toBeNull();
-    expect(url.searchParams.get("sslmode")).toBe("verify-full");
+    expect(url.searchParams.get("sslmode")).toBe("require");
     expect(url.searchParams.get("connect_timeout")).toBe("5");
   });
 

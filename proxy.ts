@@ -1,15 +1,15 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
-import { PROTECTED_PREFIXES, ROUTES } from "@/lib/routes";
+import { ROUTES, requiresSessionCookie } from "@/lib/routes";
 
 /**
  * Lightweight routing guard. Cookie presence only gates the redirect;
  * every protected page still validates the session server-side.
+ * The dedicated admin auth pages stay public so the gate is reachable as-is.
  */
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const isProtected = PROTECTED_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`));
-  if (!isProtected) return NextResponse.next();
+  if (!requiresSessionCookie(pathname)) return NextResponse.next();
 
   const hasSession = [
     "tixconneckt.session_token",

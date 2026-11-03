@@ -1,7 +1,7 @@
-import { hashPassword } from "@/lib/password";
+import { hashPassword } from "better-auth/crypto";
 import { eq, inArray } from "drizzle-orm";
 import { getDb, isDatabaseUnavailable } from "@/db";
-import { accounts, legalConsents, legalDocuments, organizationMembers, organizations, profiles, users } from "@/db/schema";
+import { accounts, legalConsents, legalDocuments, profiles, users } from "@/db/schema";
 import { apiError, apiOk, clientIp } from "@/lib/api-response";
 import { findCountry } from "@/lib/countries";
 import { LEGAL_DOCUMENTS } from "@/lib/legal-content";
@@ -17,9 +17,7 @@ export async function POST(req: Request) {
     return await register(req);
   } catch (error) {
     if (!isDatabaseUnavailable(error)) throw error;
-    return apiError("Service temporarily unavailable. Please try again shortly.", 503, undefined, {
-      "Retry-After": "5",
-    });
+    return apiError("Service temporarily unavailable. Please try again shortly.", 503);
   }
 }
 
@@ -94,71 +92,42 @@ async function register(req: Request) {
     hashPassword(input.password),
   ]);
 
+  const inserted = await db
+    .insert(users)
+    .values({
+      name: input.name,
+      email: input.email,
+      emailVerified: false,
+      shortId,
+      phone: phone.e164,
+      country: input.country,
+      countryCode: input.countryCode,
+      timezone: input.timezone ?? "UTC",
+      category: input.category,
+      role: input.category === "provider" ? "provider" : "user",
+      status: "pending_verification",
+    })
+    .returning({ id: users.id });
+  const userId = inserted[0].id;
+
   const consents = currentDocs
     .filter((currentDoc) => LEGAL_DOCUMENTS.some((doc) => doc.type === currentDoc.type && doc.version === currentDoc.version))
     .map((doc) => ({
+      userId,
       documentId: doc.id,
       version: doc.version,
       ipAddress: clientIp(req),
     }));
-  const userId = await db.transaction(async (tx) => {
-    const [inserted] = await tx
-      .insert(users)
-      .values({
-        name: input.name,
-        email: input.email,
-        emailVerified: false,
-        shortId,
-        phone: phone.e164,
-        country: input.country,
-        countryCode: input.countryCode,
-        timezone: input.timezone ?? "UTC",
-        category: input.category,
-        providerKind: input.category === "provider" ? input.providerKind : null,
-        role: input.category === "provider" ? "provider" : "user",
-        status: "pending_verification",
-      })
-      .returning({ id: users.id });
-    const userId = inserted.id;
-
-    await tx.insert(profiles).values({ userId });
-    await tx.insert(accounts).values({
+  await Promise.all([
+    db.insert(profiles).values({ userId }),
+    db.insert(accounts).values({
       accountId: input.email,
       providerId: "credential",
       userId,
       password: passwordHash,
-    });
-    if (consents.length > 0) await tx.insert(legalConsents).values(consents.map((consent) => ({ ...consent, userId })));
-
-    if (input.category !== "individual") {
-      const [org] = await tx.insert(organizations).values({
-        ownerId: userId,
-        name: input.organizationName!,
-        kind: input.category,
-        category: input.category === "university" ? input.organizationType : input.category === "provider" ? input.providerKind : input.jurisdiction,
-        description: input.category === "provider" ? input.serviceDescription : input.mandate ?? null,
-        website: input.website || null,
-        country: input.country,
-        contactJson: {
-          jobTitle: input.jobTitle ?? "Account owner",
-          department: input.department ?? null,
-          officialEmail: input.officialEmail || null,
-          jurisdiction: input.jurisdiction ?? null,
-          serviceAreas: input.serviceAreas ?? [],
-        },
-        visibility: "private",
-        verificationStatus: "unverified",
-      }).returning({ id: organizations.id });
-      await tx.insert(organizationMembers).values({
-        organizationId: org.id,
-        userId,
-        role: "owner",
-        status: "active",
-        jobTitle: input.jobTitle ?? "Account owner",
-      });
-    }
-    return userId;
-  });
+    }),
+    ...(consents.length > 0 ? [db.insert(legalConsents).values(consents)] : []),
+  ]);
 
   const otp = await issueOtp(input.email, "register", userId);
   if (!otp.ok) {

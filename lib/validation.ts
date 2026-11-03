@@ -62,6 +62,43 @@ export const registerSchema = z
 
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+/**
+ * Owner bootstrap form: same identity bar as registration (name, email,
+ * strong password, valid phone, legal acceptance), but no category or
+ * organization fields — the first admin is always an individual account.
+ * The API forces role=admin and refuses once any admin exists.
+ */
+export const adminBootstrapSchema = z
+  .object({
+    name: z.string().trim().min(2, "Full name is required").max(120),
+    email: z.string().trim().toLowerCase().email("Valid email is required"),
+    password: z
+      .string()
+      .min(8, "Password must be at least 8 characters")
+      .max(128)
+      .regex(/[A-Z]/, "Password needs an uppercase letter")
+      .regex(/[a-z]/, "Password needs a lowercase letter")
+      .regex(/[0-9]/, "Password needs a digit"),
+    confirmPassword: z.string(),
+    phone: z.string().trim().min(4, "Phone number is required").max(32),
+    country: z.string().trim().min(2, "Country is required").max(120),
+    countryCode: z
+      .string()
+      .trim()
+      .regex(/^\+[0-9]{1,5}$/, "Country calling code like +250 is required"),
+    timezone: z.string().trim().max(80).optional(),
+    acceptPrivacy: z.literal(true, "Privacy Policy acceptance is required"),
+    acceptTerms: z.literal(true, "Terms acceptance is required"),
+    acceptAgreement: z.literal(true, "Agreement acceptance is required"),
+  })
+  .superRefine((v, ctx) => {
+    if (v.password !== v.confirmPassword) {
+      ctx.addIssue({ code: "custom", message: "Passwords do not match", path: ["confirmPassword"] });
+    }
+  });
+
+export type AdminBootstrapInput = z.infer<typeof adminBootstrapSchema>;
+
 export const loginSchema = z.object({
   email: z.string().trim().toLowerCase().email("Valid email is required"),
   password: z.string().min(1, "Password is required"),

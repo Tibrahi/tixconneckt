@@ -45,5 +45,6 @@ export async function POST(req: Request) {
   const { subject, text, html } = activationEmail(user.name);
   await sendEmail({ to: email, subject, text, html });
 
-  return apiOk({ activated: true });
+  // Role is the caller's own and lets the owner setup route without another request.
+  return apiOk({ activated: true, role: user.role });
 }

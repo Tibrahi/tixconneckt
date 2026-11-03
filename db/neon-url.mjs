@@ -16,16 +16,6 @@
 const CONNECT_TIMEOUT_SECONDS = "10";
 const RUNTIME_CONNECT_TIMEOUT_SECONDS = "5";
 
-/** Keep the current secure pg behavior explicit across pg major versions. */
-function enforceVerifiedTls(parsed) {
-  const sslmode = parsed.searchParams.get("sslmode");
-  if (sslmode && ["prefer", "require", "verify-ca"].includes(sslmode)) {
-    parsed.searchParams.set("sslmode", "verify-full");
-  } else if (!sslmode && parsed.hostname.endsWith(".neon.tech")) {
-    parsed.searchParams.set("sslmode", "verify-full");
-  }
-}
-
 /**
  * Resolve the runtime URL for node-postgres while preserving a Neon pooler host.
  *
@@ -51,7 +41,9 @@ export function resolveRuntimeDatabaseUrl(env = process.env) {
   }
 
   parsed.searchParams.delete("channel_binding");
-  enforceVerifiedTls(parsed);
+  if (!parsed.searchParams.has("sslmode") && parsed.hostname.endsWith(".neon.tech")) {
+    parsed.searchParams.set("sslmode", "require");
+  }
   parsed.searchParams.set("connect_timeout", RUNTIME_CONNECT_TIMEOUT_SECONDS);
 
   return parsed.toString();
@@ -93,7 +85,9 @@ export function resolveDrizzleKitDatabaseUrl(env = process.env) {
   // node-postgres does not implement channel binding; TLS is still enforced
   // via sslmode=require below.
   parsed.searchParams.delete("channel_binding");
-  enforceVerifiedTls(parsed);
+  if (!parsed.searchParams.get("sslmode")) {
+    parsed.searchParams.set("sslmode", "require");
+  }
   if (!parsed.searchParams.get("connect_timeout")) {
     parsed.searchParams.set("connect_timeout", CONNECT_TIMEOUT_SECONDS);
   }

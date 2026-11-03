@@ -68,5 +68,6 @@ export async function POST(req: Request) {
     await sendEmail({ to: user.email, subject, text, html });
   }
 
-  return apiOk({ authenticated: true });
+  // Role is the caller's own and lets the admin gate route without another request.
+  return apiOk({ authenticated: true, role: user.role });
 }

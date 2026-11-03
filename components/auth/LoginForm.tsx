@@ -93,6 +93,12 @@ export function LoginForm() {
           Create account
         </Link>
       </div>
+      <p className="mt-3 text-center text-sm text-neutral-600">
+        System owner?{" "}
+        <Link href={ROUTES.adminLogin} className="font-medium text-[#1447e6] hover:underline">
+          Administrator sign in
+        </Link>
+      </p>
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} onRetry={() => setError(null)} /> : null}
     </section>
   );

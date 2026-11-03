@@ -78,6 +78,26 @@ test("registration inputs keep focus through fast typing, edits, validation, and
 test("protected routes redirect to login", async ({ page }) => {
   await page.goto("/dashboard");
   await expect(page).toHaveURL(/\/login$/);
+  await page.goto("/admin");
+  await expect(page).toHaveURL(/\/login$/);
+  await page.goto("/admin/users");
+  await expect(page).toHaveURL(/\/login$/);
+});
+
+test("admin gate exposes dedicated sign-in as-is", async ({ page }) => {
+  await page.goto("/admin/login");
+  await expect(page).toHaveURL(/\/admin\/login$/);
+  await expect(page.getByRole("heading", { name: /administrator sign in/i })).toBeVisible();
+});
+
+test("admin gate exposes owner setup without crashing", async ({ page }) => {
+  // Rendered state depends on database reachability and whether an admin
+  // exists; every branch must be a real page, never a crash or redirect loop.
+  await page.goto("/admin/register");
+  await expect(page).toHaveURL(/\/admin\/register$/);
+  await expect(
+    page.getByRole("heading", { name: /set up the owner account|already set up|temporarily unavailable/i }),
+  ).toBeVisible();
 });
 
 test("legal documents render", async ({ page }) => {
