@@ -61,6 +61,7 @@
 - [Installation and Setup](#installation-and-setup)
 - [Environment Variables](#environment-variables)
 - [Usage Guide](#usage-guide)
+- [Open Demo Mode](#open-demo-mode)
 - [System Tour](#system-tour)
   - [Page Inventory](#page-inventory)
   - [Core User Workflows](#core-user-workflows)
@@ -640,6 +641,7 @@ Every name below is referenced in code. Values shown are placeholders/shapes onl
 | `DB_IDLE_TIMEOUT_MS` | Pool idle timeout | No | Default `30000` |
 | `DB_STATEMENT_TIMEOUT_MS` | Statement timeout | No | Default `30000` |
 | `SKIP_AUTO_MIGRATE` | `1` disables boot migration | No | Only if migrating manually |
+| `DEMO_MODE` | Enables or disables public open-demo entry | No | Enabled by default; set `false` to disable |
 
 `.gitignore` excludes `.env*` (including `.env.local`). `NODE_ENV=production` is set by the host — do not add it manually.
 
@@ -650,10 +652,44 @@ Every name below is referenced in code. Values shown are placeholders/shapes onl
 1. **Start**: `npm run dev` → open the app URL → check `GET /api/health`.
 2. **Visitors** land on `/` (landing page). Sign-in and registration live behind its buttons; legacy `/welcome` redirects here.
 3. **Register**: read each legal document to unlock its checkbox, submit, then verify the emailed OTP. Login follows with its own verification step; `resend-otp` and password recovery are available.
-4. **Members** land on `/dashboard`. The sidebar covers Profile, Conneckt, Chat, Matching, Wallet, Plan, Action, Notifications, Project, Organizations, Request, Support cases, Groups, Settings.
-5. **Providers** register with `category=provider` and a kind (`loan`/`support`) determining their queue and response workflow.
-6. **Admins** use `/admin/*` (Overview, Users, Groups, Projects, Requests, Audit log, Settings).
-7. **Key flows**: connect → chat/call → create or join a project → invite groups/orgs → submit requests → providers respond → track wallet/contributions; use Actions for reminders/automation and Matching + AI explanations to find collaborators.
+4. **Open demo mode**: use `/demo` or choose a role button below the sign-in or registration form. See [Open Demo Mode](#open-demo-mode) for the judge walkthrough.
+5. **Members** land on `/dashboard`. The sidebar covers Profile, Conneckt, Chat, Matching, Wallet, Plan, Action, Notifications, Project, Organizations, Request, Support cases, Groups, Settings.
+6. **Providers** register with `category=provider` and a kind (`loan`/`support`) determining their queue and response workflow.
+7. **Admins** use `/admin/*` (Overview, Users, Groups, Projects, Requests, Audit log, Settings).
+8. **Key flows**: connect → chat/call → create or join a project → invite groups/orgs → submit requests → providers respond → track wallet/contributions; use Actions for reminders/automation and Matching + AI explanations to find collaborators.
+
+## Open Demo Mode
+
+Open demo mode is for judges and evaluators who need to inspect role-specific
+workspaces without creating an account or completing password and email-code
+verification.
+
+### Evaluator steps
+
+1. Open `/demo`, or use the role buttons below **Sign in** or **Create account**.
+2. Choose **Individual**, **University**, **Government**, **Loan Provider**, or
+   **Support Provider**.
+3. The app opens the selected role's dashboard directly. No password or OTP is
+   requested.
+4. Use the **Open demo mode** banner to **Switch role** or **Exit demo**. Exit
+   ends the demo session and returns to the role picker.
+
+### What happens behind the button
+
+Each role has a dedicated demo identity with an `@tixconneckt.demo` email. The
+demo endpoint creates or reuses that identity, creates a standard application
+session, and redirects to `/dashboard`. The dashboard and API continue to use
+the role's normal authorization checks. Open mode has no administrator persona;
+admin pages still require a real administrator account. Actions performed in a
+demo workspace are saved under that role's demo identity and may remain there
+for later visits.
+
+### Disable open mode
+
+Open mode is enabled by default. Set `DEMO_MODE=false` in the runtime
+environment to hide the role picker and reject requests to start demo sessions.
+The setting is checked at request time, so changing it does not require a
+rebuild.
 
 ---
 
