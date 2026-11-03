@@ -11,8 +11,9 @@ import { Button } from "@/components/ui/Button";
 import { TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { OtpForm } from "./OtpForm";
+import { DemoPersonaList } from "@/components/demo/DemoPersonaList";
 
-export function LoginForm() {
+export function LoginForm({ showDemo = false }: { showDemo?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState<"credentials" | "otp">("credentials");
   const [email, setEmail] = useState("");
@@ -93,12 +94,7 @@ export function LoginForm() {
           Create account
         </Link>
       </div>
-      <p className="mt-3 text-center text-sm text-neutral-600">
-        System owner?{" "}
-        <Link href={ROUTES.adminLogin} className="font-medium text-[#1447e6] hover:underline">
-          Administrator sign in
-        </Link>
-      </p>
+      {showDemo ? <DemoPersonaList compact /> : null}
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} onRetry={() => setError(null)} /> : null}
     </section>
   );

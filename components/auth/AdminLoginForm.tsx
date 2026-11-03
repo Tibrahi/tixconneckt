@@ -148,16 +148,7 @@ export function AdminLoginForm() {
         <Link href={ROUTES.forgotPassword} className="font-medium text-[#1447e6] hover:underline">
           Forgot password?
         </Link>
-        <Link href={ROUTES.login} className="font-medium text-[#1447e6] hover:underline">
-          Standard sign in
-        </Link>
       </div>
-      <p className="mt-3 text-center text-sm text-neutral-600">
-        Setting up the system for the first time?{" "}
-        <Link href={ROUTES.adminRegister} className="font-medium text-[#1447e6] hover:underline">
-          Create the owner account
-        </Link>
-      </p>
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} onRetry={() => setError(null)} /> : null}
     </section>
   );

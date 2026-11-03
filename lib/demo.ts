@@ -5,8 +5,7 @@ export type DemoPersonaKey =
   | "university"
   | "government"
   | "provider-loan"
-  | "provider-support"
-  | "admin";
+  | "provider-support";
 
 export interface DemoPersona {
   key: DemoPersonaKey;
@@ -22,13 +21,11 @@ export interface DemoPersona {
   redirectTo: string;
 }
 
-/** Pseudo-domain: demo addresses are clearly fake and can never receive real mail. */
+/** Demo addresses are fake and cannot receive real mail. */
 const DEMO_DOMAIN = "@tixconneckt.demo";
 
 /**
- * One-click personas for open evaluation. Each maps to a REAL role/
- * category/kind combination, so judges exercise the genuine authorization
- * matrix — demo entry only mints the session, it weakens no guard.
+ * One-click, non-administrator personas for public evaluation.
  */
 export const DEMO_PERSONAS: DemoPersona[] = [
   {
@@ -66,7 +63,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   },
   {
     key: "provider-loan",
-    label: "Provider – Funding",
+    label: "Loan Provider",
     description: "Funding queue: requests assigned to this lender.",
     name: "Demo Funding Provider",
     email: `demo-provider-loan${DEMO_DOMAIN}`,
@@ -77,7 +74,7 @@ export const DEMO_PERSONAS: DemoPersona[] = [
   },
   {
     key: "provider-support",
-    label: "Provider – Support",
+    label: "Support Provider",
     description: "Support queue: cases assigned to this provider.",
     name: "Demo Support Provider",
     email: `demo-provider-support${DEMO_DOMAIN}`,
@@ -85,17 +82,6 @@ export const DEMO_PERSONAS: DemoPersona[] = [
     category: "provider",
     providerKind: "support",
     redirectTo: ROUTES.dashboard,
-  },
-  {
-    key: "admin",
-    label: "Administrator",
-    description: "Full system view: users, audit, settings.",
-    name: "Demo Admin",
-    email: `demo-admin${DEMO_DOMAIN}`,
-    role: "admin",
-    category: "individual",
-    providerKind: null,
-    redirectTo: ROUTES.admin,
   },
 ];
 
@@ -116,8 +102,7 @@ export function demoModeEnabled(): boolean {
 }
 
 function roleLabel(role: string, category: string, providerKind: string | null): string {
-  if (role === "admin") return "Administrator";
-  if (role === "provider") return providerKind === "support" ? "Provider – Support" : "Provider – Funding";
+  if (role === "provider") return providerKind === "support" ? "Support Provider" : "Loan Provider";
   if (category === "university") return "University";
   if (category === "government") return "Government";
   return "Individual";

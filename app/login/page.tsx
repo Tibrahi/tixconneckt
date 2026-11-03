@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { ROUTES } from "@/lib/routes";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { LoginForm } from "@/components/auth/LoginForm";
+import { demoModeEnabled } from "@/lib/demo";
 
 export const instant = false;
 
@@ -17,7 +18,7 @@ export default async function LoginPage() {
   }
   return (
     <AuthLayout variant="login">
-      <LoginForm />
+      <LoginForm showDemo={demoModeEnabled()} />
     </AuthLayout>
   );
 }

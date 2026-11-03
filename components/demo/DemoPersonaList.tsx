@@ -10,7 +10,7 @@ import { ErrorDialog } from "@/components/ui/Modal";
  * Open demo role list: one button per role, each signing straight in and
  * redirecting to that role's start page. No password, OTP, or email step.
  */
-export function DemoPersonaList() {
+export function DemoPersonaList({ compact = false }: { compact?: boolean }) {
   const router = useRouter();
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +41,30 @@ export function DemoPersonaList() {
     } finally {
       setPending(null);
     }
+  }
+
+  if (compact) {
+    return (
+      <section className="mt-6 border-t border-neutral-200 pt-5" aria-label="Open demo mode">
+        <h2 className="text-sm font-semibold text-black">Continue in open mode</h2>
+        <p className="mb-3 mt-1 text-xs text-neutral-600">Choose a role to open its demo workspace. No account or verification is needed.</p>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          {DEMO_PERSONAS.map((persona) => (
+            <Button
+              key={persona.key}
+              variant="secondary"
+              className="w-full justify-center"
+              loading={pending === persona.key}
+              disabled={pending !== null}
+              onClick={() => enter(persona.key)}
+            >
+              {pending === persona.key ? "Opening…" : `Continue as ${persona.label}`}
+            </Button>
+          ))}
+        </div>
+        {error ? <p role="alert" className="mt-2 text-sm text-blue-800">{error}</p> : null}
+      </section>
+    );
   }
 
   return (

@@ -4,6 +4,7 @@ import { getSession } from "@/lib/session";
 import { ROUTES } from "@/lib/routes";
 import { AuthLayout } from "@/components/auth/AuthLayout";
 import { RegisterForm } from "@/components/auth/RegisterForm";
+import { demoModeEnabled } from "@/lib/demo";
 
 export const instant = false;
 
@@ -17,7 +18,7 @@ export default async function RegisterPage() {
   }
   return (
     <AuthLayout variant="register">
-      <RegisterForm />
+      <RegisterForm showDemo={demoModeEnabled()} />
     </AuthLayout>
   );
 }

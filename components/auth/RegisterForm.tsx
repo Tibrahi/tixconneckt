@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/Button";
 import { SelectField, TextAreaField, TextField } from "@/components/ui/Fields";
 import { ErrorDialog } from "@/components/ui/Modal";
 import { OtpForm } from "./OtpForm";
+import { DemoPersonaList } from "@/components/demo/DemoPersonaList";
 import { stripSelectedCallingCode } from "@/lib/phone";
 import { countryFlagForCode } from "@/lib/country-flag";
 
@@ -21,7 +22,7 @@ interface CountryOption {
   flag: string;
 }
 
-export function RegisterForm() {
+export function RegisterForm({ showDemo = false }: { showDemo?: boolean }) {
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [countries, setCountries] = useState<CountryOption[]>([]);
@@ -318,6 +319,7 @@ export function RegisterForm() {
           Sign in
         </Link>
       </p>
+      {showDemo ? <DemoPersonaList compact /> : null}
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} onRetry={() => setError(null)} /> : null}
     </section>
   );

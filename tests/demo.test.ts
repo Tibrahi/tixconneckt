@@ -12,7 +12,7 @@ describe("open demo mode", () => {
   it("offers one persona per role", () => {
     const keys = DEMO_PERSONAS.map((p) => p.key).sort();
     expect(keys).toEqual(
-      ["admin", "government", "individual", "provider-loan", "provider-support", "university"].sort(),
+      ["government", "individual", "provider-loan", "provider-support", "university"].sort(),
     );
   });
 
@@ -23,7 +23,6 @@ describe("open demo mode", () => {
       government: { role: "user", category: "government", providerKind: null, redirectTo: "/dashboard" },
       "provider-loan": { role: "provider", category: "provider", providerKind: "loan", redirectTo: "/dashboard" },
       "provider-support": { role: "provider", category: "provider", providerKind: "support", redirectTo: "/dashboard" },
-      admin: { role: "admin", category: "individual", providerKind: null, redirectTo: "/admin" },
     };
     for (const persona of DEMO_PERSONAS) {
       expect(getDemoPersona(persona.key)).toBeDefined();
@@ -45,8 +44,7 @@ describe("open demo mode", () => {
   });
 
   it("labels demo sessions per role and ignores real accounts", () => {
-    expect(demoLabelForUser({ email: "demo-admin@tixconneckt.demo", name: "Demo Admin", role: "admin", category: "individual", providerKind: null })).toBe("Demo Admin · Administrator");
-    expect(demoLabelForUser({ email: "demo-provider-loan@tixconneckt.demo", name: "Demo Provider", role: "provider", category: "provider", providerKind: "loan" })).toBe("Demo Provider · Provider – Funding");
+    expect(demoLabelForUser({ email: "demo-provider-loan@tixconneckt.demo", name: "Demo Provider", role: "provider", category: "provider", providerKind: "loan" })).toBe("Demo Provider · Loan Provider");
     expect(demoLabelForUser({ email: "demo-university@tixconneckt.demo", name: "Demo University", role: "user", category: "university", providerKind: null })).toBe("Demo University · University");
     expect(demoLabelForUser({ email: "owner@example.com", name: "Owner", role: "admin", category: "individual", providerKind: null })).toBeNull();
   });

@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -115,11 +114,8 @@ export function AdminBootstrapForm() {
         <h1 className="text-lg font-semibold text-black">Already registered</h1>
         <p className="mb-4 mt-1 text-sm text-neutral-600">
           <span className="font-mono">{registeredEmail}</span> already has an account, so
-          it was not changed. If it is an administrator account, sign in below.
+          it was not changed.
         </p>
-        <Link href={ROUTES.adminLogin} className="text-sm font-medium text-[#1447e6] hover:underline">
-          Go to administrator sign in
-        </Link>
       </section>
     );
   }
@@ -242,12 +238,6 @@ export function AdminBootstrapForm() {
           Create owner account
         </Button>
       </form>
-      <p className="mt-4 text-center text-sm text-neutral-600">
-        Administration already set up?{" "}
-        <Link href={ROUTES.adminLogin} className="font-medium text-[#1447e6] hover:underline">
-          Administrator sign in
-        </Link>
-      </p>
       {error ? <ErrorDialog message={error} onClose={() => setError(null)} onRetry={() => setError(null)} /> : null}
     </section>
   );
