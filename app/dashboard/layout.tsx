@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
 import { requireUser } from "@/lib/session";
+import { demoLabelForUser } from "@/lib/demo";
 import { DashboardShell } from "@/components/layout/DashboardShell";
 import { DashboardLoading } from "@/components/layout/DashboardLoading";
 import { AblyProvider } from "@/components/realtime/AblyProvider";
@@ -14,7 +15,7 @@ async function AuthenticatedDashboard({ children }: { children: React.ReactNode 
   return (
     <AblyProvider>
       <CallProvider>
-        <DashboardShell isAdmin={user.role === "admin"} accountRole={user.role} category={user.category}>{children}</DashboardShell>
+        <DashboardShell isAdmin={user.role === "admin"} accountRole={user.role} category={user.category} demoLabel={demoLabelForUser(user)}>{children}</DashboardShell>
       </CallProvider>
     </AblyProvider>
   );

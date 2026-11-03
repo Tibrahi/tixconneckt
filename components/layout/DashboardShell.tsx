@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { ADMIN_NAV, DASHBOARD_NAV, ROUTES, type NavItem } from "@/lib/routes";
 import { Icon } from "@/components/ui/Icon";
+import { DemoBanner } from "@/components/demo/DemoBanner";
 import { ContextNavigationProvider, useContextNavigation } from "./ContextNavigation";
 
 function NavList({
@@ -109,15 +110,17 @@ export function DashboardShell({
   isAdmin,
   accountRole,
   category,
+  demoLabel = null,
 }: {
   children: ReactNode;
   isAdmin: boolean;
   accountRole: string;
   category: string;
+  demoLabel?: string | null;
 }) {
   return (
     <ContextNavigationProvider>
-      <DashboardShellContent isAdmin={isAdmin} accountRole={accountRole} category={category}>
+      <DashboardShellContent isAdmin={isAdmin} accountRole={accountRole} category={category} demoLabel={demoLabel}>
         {children}
       </DashboardShellContent>
     </ContextNavigationProvider>
@@ -129,11 +132,13 @@ function DashboardShellContent({
   isAdmin,
   accountRole,
   category,
+  demoLabel,
 }: {
   children: ReactNode;
   isAdmin: boolean;
   accountRole: string;
   category: string;
+  demoLabel: string | null;
 }) {
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -355,6 +360,7 @@ function DashboardShellContent({
 
         {/* Right content area */}
         <main className="min-w-0 flex-1 px-4 py-4 sm:px-6 sm:py-6 lg:px-8">
+          {demoLabel ? <DemoBanner label={demoLabel} /> : null}
           {countsError ? (
             <div className="mx-auto mb-4 flex max-w-6xl items-center justify-between gap-3 rounded-md border border-blue-300 bg-blue-50 px-4 py-3 text-sm text-blue-950" role="status">
               <span>Some dashboard counts could not load. Please retry.</span>

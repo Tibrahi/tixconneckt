@@ -41,6 +41,7 @@
     "@tiptap/starter-kit": "^3.32.1",
     "@upstash/ratelimit": "^2.2.0",
     "@upstash/redis": "^1.40.0",
+    "ably": "^2.30.0",
     "better-auth": "^1.7.14",
     "date-fns": "^4.4.0",
     "date-fns-tz": "^3.2.0",

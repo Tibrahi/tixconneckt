@@ -3,6 +3,7 @@ import Link from "next/link";
 import { Icon } from "@/components/ui/Icon";
 import { LegalLinks } from "@/components/legal/LegalLinks";
 import { ROUTES } from "@/lib/routes";
+import { demoModeEnabled } from "@/lib/demo";
 import {
   HOMEPAGE_CAPABILITIES,
   HOMEPAGE_FOOTER_GROUPS,
@@ -92,6 +93,11 @@ export function LandingPage() {
                 <Link href="#platform" className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-white px-6 py-3.5 text-sm font-semibold text-slate-800 transition hover:border-blue-400 hover:text-blue-800">
                   Explore the platform <span aria-hidden="true">↓</span>
                 </Link>
+                {demoModeEnabled() ? (
+                  <Link href={ROUTES.demo} className="inline-flex items-center justify-center gap-2 rounded-lg border border-dashed border-blue-400 bg-blue-50/60 px-6 py-3.5 text-sm font-semibold text-blue-900 transition hover:border-blue-600 hover:bg-blue-50">
+                    Test open demo mode <span aria-hidden="true">→</span>
+                  </Link>
+                ) : null}
               </div>
               <p className="mt-5 text-xs leading-5 text-slate-500">For individual contributors, organizations, project teams, and funding or support providers.</p>
             </div>

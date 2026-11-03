@@ -90,6 +90,19 @@ test("admin gate exposes dedicated sign-in as-is", async ({ page }) => {
   await expect(page.getByRole("heading", { name: /administrator sign in/i })).toBeVisible();
 });
 
+test("landing offers open demo mode", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("link", { name: /test open demo mode/i })).toBeVisible();
+});
+
+test("open demo mode lists every role", async ({ page }) => {
+  await page.goto("/demo");
+  await expect(page.getByRole("heading", { name: /test the system as any role/i })).toBeVisible();
+  for (const role of ["Individual", "University", "Government", "Provider – Funding", "Provider – Support", "Administrator"]) {
+    await expect(page.getByRole("button", { name: new RegExp(`test ${role}`, "i") })).toBeVisible();
+  }
+});
+
 test("admin gate exposes owner setup without crashing", async ({ page }) => {
   // Rendered state depends on database reachability and whether an admin
   // exists; every branch must be a real page, never a crash or redirect loop.
